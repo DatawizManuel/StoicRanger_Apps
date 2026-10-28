@@ -1,16 +1,12 @@
 #!/usr/bin/env node
-/* Checks the web build (dist/, run tools/build-web.mjs first) in a headless browser at iPhone size:
-   1. every app starts without script errors and shows its first screen,
-   2. data saved in an app survives a restart (IndexedDB), with the previous copy kept as db.bak.json,
-   3. Gun Database data in the old schema-1 format migrates without losing entries, with a pre-migration backup,
-   4. a damaged db.json falls back to the previous copy; data from a newer app version opens read-only and is
-      never overwritten,
-   5. the localStorage mirror is used when it is newer than IndexedDB (a write iOS cut short),
-   6. linking: nothing is shared until switched on in both apps; then Training Log gets the Gun Database's
-      shooters/guns and its rounds land in the Gun Database's rounds log; Shooting Drills gets the Training
-      Log's shooters/guns and the trainings of a day,
-   7. after one online start the apps open offline (service worker),
-   0. the one-time password: app locked until it is entered, wrong one refused (right one with SR_PASSWORD=…).
+/* Checks the Stoic Ranger web build (dist/, run tools/build-web.mjs first) in a headless browser at iPhone size:
+   0. the one-time password: the app is locked until it is entered, a wrong one is refused (right one with SR_PASSWORD=…),
+   1. home and every part start without script errors and share one database in IndexedDB,
+   2. an entry saved in one part is there after a restart and in the other parts; the previous copy is kept,
+   3. a damaged db.json falls back to the previous copy; data from a newer version opens read-only, never overwritten,
+   4. the localStorage mirror is used when it is newer than IndexedDB (a write iOS cut short),
+   5. after one online start every page opens offline (service worker).
+   The Android path (conversion of SR_Database data, imports, cross-part links) is checked by stoic-ranger/tools/test-one-app.mjs.
    Usage: node tools/test-web.mjs [--shots]   (--shots saves iPhone-size screenshots to dist-shots/) */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -25,7 +21,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const DIST = path.join(ROOT, 'dist');
 const SHOTS = process.argv.includes('--shots') ? path.join(ROOT, 'dist-shots') : null;
 const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
-  '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
+  '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.txt': 'text/plain', '.jpg': 'image/jpeg' };
 const srv = http.createServer((q, r) => {
   let p = decodeURIComponent(q.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html';
   const f = path.join(DIST, p);
@@ -40,8 +36,8 @@ const BASE = `http://localhost:${srv.address().port}`;
 const browser = await chromium.launch();
 const IPHONE = { viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' };
+const PAGES = [['', 'SR', 'home'], ['gun/', 'RB', 'gundb'], ['training/', 'TL', 'tl'], ['drills/', 'SD', 'sd'], ['thoughts/', 'DT', 'dt']];
 
-// IndexedDB helpers that run in the page (same origin as the apps)
 const idbPut = (p, obj) => p.evaluate(o => new Promise((res, rej) => {
   const r = indexedDB.open('stoic-ranger', 1);
   r.onupgradeneeded = () => r.result.createObjectStore('files');
@@ -54,11 +50,11 @@ const idbAll = p => p.evaluate(() => new Promise(res => {
     c.onsuccess = () => { const x = c.result; if (x) { out[x.key] = x.value; x.continue(); } else { r.result.close(); res(out); } }; };
 }));
 
-const LOCK_HASH = (fs.readFileSync(path.join(DIST, 'database/index.html'), 'utf8').match(/"lock":\{[^}]*"hash":"([0-9a-f]+)"/) || [])[1];
+const LOCK_HASH = (fs.readFileSync(path.join(DIST, 'index.html'), 'utf8').match(/"lock":\{[^}]*"hash":"([0-9a-f]+)"/) || [])[1];
 async function fresh(unlock = true) {
   const ctx = await browser.newContext(IPHONE);
   const p = await ctx.newPage();
-  await p.goto(BASE + '/favicon.png');
+  await p.goto(BASE + '/icon-32.png');
   if (unlock) await p.evaluate(h => localStorage.setItem('sr.unlock', h), LOCK_HASH);   // as after the one-time password
   return { ctx, p };
 }
@@ -67,168 +63,109 @@ async function open(p, dir, hash = '') {
   const onErr = e => errs.push(e.message || String(e));
   const onCon = m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text()); };
   p.on('pageerror', onErr); p.on('console', onCon);
-  await p.goto(`${BASE}/${dir}/index.html${hash}`);
-  await p.waitForFunction(() => window.SR_WEB && document.querySelector('#view') && document.querySelector('#view').children.length > 0, null, { timeout: 15000 });
-  await p.waitForTimeout(900);   // link syncs run 400-500 ms after start
+  await p.goto(`${BASE}/${dir}index.html${hash}`);
+  await p.waitForFunction(() => window.SR && document.querySelector('#view') && document.querySelector('#view').children.length > 0, null, { timeout: 15000 });
+  await p.waitForTimeout(700);
   p.off('pageerror', onErr); p.off('console', onCon);
   return errs;
 }
-const leave = async p => { await p.goto(BASE + '/favicon.png'); await p.waitForTimeout(300); };   // pagehide flushes, like closing the app
+const leave = async p => { await p.goto(BASE + '/icon-32.png'); await p.waitForTimeout(300); };   // pagehide flushes, like closing the app
+const dbOf = async p => JSON.parse((await idbAll(p))['sr/db.json'] || 'null');
 
 /* 0: one-time password */
 {
   ok(!!LOCK_HASH, 'password hash is in the build');
   const { ctx, p } = await fresh(false);
-  await p.goto(`${BASE}/database/index.html`);
+  await p.goto(`${BASE}/index.html`);
   await p.waitForSelector('#srLock input[type=password]');
-  ok(await p.evaluate(() => !window.RB), 'locked: the app does not start before the password');
+  ok(await p.evaluate(() => !window.SR), 'locked: the app does not start before the password');
+  ok(await p.evaluate(() => document.querySelector('#srLock img').naturalWidth > 0), 'lock screen shows the icon');
   await p.fill('#srLock input', 'wrong password'); await p.click('#srLock button');
   await p.waitForFunction(() => /Wrong password/.test(document.querySelector('#srLock [data-msg]').textContent));
-  ok(await p.evaluate(() => !window.RB && !localStorage.getItem('sr.unlock')), 'wrong password is refused');
+  ok(await p.evaluate(() => !window.SR && !localStorage.getItem('sr.unlock')), 'wrong password is refused');
   if (process.env.SR_PASSWORD) {
     await p.fill('#srLock input', process.env.SR_PASSWORD); await p.click('#srLock button');
-    await p.waitForFunction(() => window.RB && !document.querySelector('#srLock'), null, { timeout: 15000 });
+    await p.waitForFunction(() => window.SR && !document.querySelector('#srLock'), null, { timeout: 15000 });
     ok(true, 'right password unlocks');
-    await p.goto(`${BASE}/training-log/index.html`); await p.waitForFunction(() => window.TL, null, { timeout: 15000 });
-    ok(await p.evaluate(() => !document.querySelector('#srLock')), 'asked only once per device (other apps of the same address too)');
+    await p.goto(`${BASE}/training/index.html`); await p.waitForFunction(() => window.TL, null, { timeout: 15000 });
+    ok(await p.evaluate(() => !document.querySelector('#srLock')), 'asked only once per device (every part)');
   } else console.log('SKIP right password (set SR_PASSWORD to test it)');
   await ctx.close();
 }
 
-/* 1 + 2: start, save, restart */
-for (const [dir, P, id] of [['database', 'RB', 'gundb'], ['training-log', 'TL', 'training-log'], ['shooting-drills', 'SD', 'shooting-drills']]) {
-  const { ctx, p } = await fresh();
-  const errs = await open(p, dir);
-  ok(!errs.length, `${dir}: starts without errors ${errs.length ? JSON.stringify(errs.slice(0, 3)) : ''}`);
-  ok(await p.evaluate(P => !!window[P + 'Native'] && window[P].native === true, P), `${dir}: web bridge in place`);
-  if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await p.screenshot({ path: path.join(SHOTS, `${dir}-start.png`) }); }
-  await p.evaluate(P => { const T = window[P]; T.db.shooters.push({ id: 'S-901', uid: 'u-test-901', name: 'Web Test' }); T.save(true); }, P);
-  await leave(p);
-  const files = await idbAll(p);
-  ok(files[id + '/db.json'] && files[id + '/db.json'].includes('u-test-901'), `${dir}: saved to IndexedDB`);
-  ok(!!files[id + '/info.json'], `${dir}: version info published for linking`);
-  await open(p, dir);
-  ok(await p.evaluate(P => window[P].db.shooters.some(s => s.uid === 'u-test-901'), P), `${dir}: entry still there after restart`);
-  await p.evaluate(P => { window[P].db.shooters.push({ id: 'S-902', uid: 'u-test-902', name: 'Second' }); window[P].save(true); }, P);
-  await leave(p);
-  const f2 = await idbAll(p);
-  ok(f2[id + '/db.bak.json'] && f2[id + '/db.bak.json'].includes('u-test-901') && !f2[id + '/db.bak.json'].includes('u-test-902'), `${dir}: previous copy kept as db.bak.json`);
-  if (SHOTS) for (const h of dir === 'database' ? ['#/more', '#/db/weapons'] : ['#/more']) { await open(p, dir, h); await p.screenshot({ path: path.join(SHOTS, `${dir}-${h.replace(/\W+/g, '-')}.png`) }); }
-  await ctx.close();
-}
-
-/* 3: Gun Database schema-1 data (0.1.0 format) → schema 5 */
+/* 1 + 2: start, one database, restart */
 {
   const { ctx, p } = await fresh();
-  const old = JSON.parse(fs.readFileSync(path.join(DIST, 'database/data/demo.json'), 'utf8'));
-  old.schema = 1; delete old.history; delete old.targets; if (old.settings) { delete old.settings.dashFilter; delete old.settings.units; }
-  old.weapons.forEach(w => delete w.type);
-  const counts = o => Object.fromEntries(['weapons', 'barrels', 'munitions', 'roundsLog', 'sheets'].map(k => [k, (o[k] || []).length]));
-  const before = counts(old);
-  await idbPut(p, { 'gundb/db.json': JSON.stringify(old) });
-  const errs = await open(p, 'database', '#/dash');
-  ok(!errs.length, 'gundb schema 1: opens without errors ' + (errs.length ? JSON.stringify(errs.slice(0, 2)) : ''));
+  for (const [dir, G] of PAGES) {
+    const errs = await open(p, dir);
+    ok(!errs.length && await p.evaluate(G => !!window[G], G), `${dir || 'home'}: starts without errors ${errs.length ? JSON.stringify(errs.slice(0, 3)) : ''}`);
+    if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await p.screenshot({ path: path.join(SHOTS, `${(dir || 'home').replace('/', '')}.png`) }); }
+  }
+  await open(p, 'training/');
+  await p.evaluate(() => { TL.db.shooters.push({ id: 'S-901', uid: 'u-test-901', name: 'Web Test' }); TL.save(true); });
   await leave(p);
-  const files = await idbAll(p), d = JSON.parse(files['gundb/db.json']);
-  ok(d.schema === 5, 'gundb schema 1 → 5');
-  ok(JSON.stringify(counts(d)) === JSON.stringify(before), 'gundb migration keeps every weapon, barrel, ammo, rounds-log entry and sheet');
-  ok(Object.keys(files).some(k => /^gundb\/backups\/db-schema1-/.test(k)), 'gundb pre-migration backup saved');
+  let d = await dbOf(p);
+  ok(d && d.app === 'stoic-ranger' && d.shooters.some(s => s.uid === 'u-test-901'), 'saved to the one database in IndexedDB');
+  await open(p, 'drills/');
+  ok(await p.evaluate(() => SD.db.shooters.some(s => s.uid === 'u-test-901')), 'a shooter added in the Training Log is in Shooting Drills');
+  await open(p, 'gun/');
+  ok(await p.evaluate(() => RB.db.shooters.some(s => s.uid === 'u-test-901')), 'and in the Gun Database');
+  await open(p, 'thoughts/');
+  await p.evaluate(() => { DT.toggleFav(DT.quoteOfDay().id); DT.flush(); });
+  await leave(p);
+  d = await dbOf(p);
+  const bak = JSON.parse((await idbAll(p))['sr/db.bak.json'] || '{}');
+  ok(d.thoughtFavs.length === 1 && d.shooters.some(s => s.uid === 'u-test-901'), 'a favourite quote is saved next to everything else');
+  ok(bak.app === 'stoic-ranger' && bak.shooters.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
+  await open(p, '');
+  ok(await p.evaluate(() => /Daily Thoughts/i.test(document.body.innerText) && !!document.querySelector('.srwis')), "home shows today's thought and the parts");
   await ctx.close();
 }
+function arr(a) { return Array.isArray(a) ? a : []; }
 
-/* 4: damaged file, newer data */
+/* 3: damaged file, newer data */
 {
   const { ctx, p } = await fresh();
-  const good = JSON.stringify({ schema: 3, settings: { link: {} }, shooters: [{ id: 'S-001', uid: 'u1', name: 'A' }], weapons: [], trainers: [], trainings: [{ id: 'TR-0001', uid: 't1', date: '2026-01-01', shooterId: 'S-001', weapons: [] }] });
-  await idbPut(p, { 'training-log/db.json': '{"trainings":[', 'training-log/db.bak.json': good });
-  await open(p, 'training-log');
-  ok(await p.evaluate(() => TL.recovered && TL.db.trainings.length === 1), 'damaged db.json falls back to the previous copy');
+  const good = JSON.stringify({ app: 'stoic-ranger', format: 1, schemas: { tl: 3 }, settings: { common: {} }, history: [],
+    shooters: [{ id: 'S-001', uid: 'u1', name: 'A' }], weapons: [], trainers: [], trainings: [{ id: 'TR-0001', uid: 't1', date: '2026-01-01', fire: 'live', shooterId: 'S-001', weapons: [] }] });
+  await idbPut(p, { 'sr/db.json': '{"trainings":[', 'sr/db.bak.json': good });
+  await open(p, 'training/');
+  ok(await p.evaluate(() => TL.db.trainings.length === 1), 'damaged db.json falls back to the previous copy');
   await leave(p);
-  ok(Object.keys(await idbAll(p)).some(k => k.startsWith('training-log/backups/db-damaged-')), 'damaged file kept as a backup');
-  const newer = JSON.parse(good); newer.schema = 99;
-  await idbPut(p, { 'training-log/db.json': JSON.stringify(newer) });
-  await open(p, 'training-log');
-  ok(await p.evaluate(() => TL.readOnly), 'newer data opens read-only');
+  ok(Object.keys(await idbAll(p)).some(k => k.startsWith('sr/backups/db-damaged-')), 'damaged file kept as a backup');
+  const newer = JSON.parse(good); newer.format = 99;
+  await idbPut(p, { 'sr/db.json': JSON.stringify(newer) });
+  await open(p, 'training/');
+  ok(await p.evaluate(() => TL.readOnly || SR.readOnly), 'newer data opens read-only');
   await p.evaluate(() => { TL.db.trainings.push({ id: 'X' }); TL.save(true); });
   await leave(p);
-  ok(JSON.parse((await idbAll(p))['training-log/db.json']).trainings.length === 1, 'newer data never overwritten');
+  ok((await dbOf(p)).trainings.length === 1, 'newer data never overwritten');
   await ctx.close();
 }
 
-/* 5: localStorage mirror newer than IndexedDB */
+/* 4: localStorage mirror newer than IndexedDB */
 {
   const { ctx, p } = await fresh();
-  const a = { schema: 1, updated: '2026-10-01T10:00:00.000Z', results: [], favs: [], shooters: [{ id: 'S-001', uid: 'a', name: 'Old' }], weapons: [] };
+  const a = { app: 'stoic-ranger', format: 1, updated: '2026-10-01T10:00:00.000Z', schemas: { sd: 1 }, settings: { common: {} }, history: [], results: [], favs: [], shooters: [{ id: 'S-001', uid: 'a', name: 'Old' }], weapons: [] };
   const b = Object.assign({}, a, { updated: '2026-10-02T10:00:00.000Z', shooters: [{ id: 'S-001', uid: 'a', name: 'Old' }, { id: 'S-002', uid: 'b', name: 'New' }] });
-  await idbPut(p, { 'shooting-drills/db.json': JSON.stringify(a) });
-  await p.evaluate(t => localStorage.setItem('sr.shooting-drills.db', t), JSON.stringify(b));
-  await open(p, 'shooting-drills');
+  await idbPut(p, { 'sr/db.json': JSON.stringify(a) });
+  await p.evaluate(t => localStorage.setItem('sr.db', t), JSON.stringify(b));
+  await open(p, 'drills/');
   ok(await p.evaluate(() => SD.db.shooters.length === 2), 'newer localStorage copy wins over an older IndexedDB copy');
   await ctx.close();
 }
 
-/* 6: linking */
+/* 5: offline */
 {
   const { ctx, p } = await fresh();
-  await open(p, 'training-log');
-  ok(await p.evaluate(() => TL.linkCall('status').error === 'not-installed'), 'link: Gun Database not opened yet → not installed');
-  // Gun Database with one shooter and one gun, linking off
-  await open(p, 'database');
-  await p.evaluate(() => { RB.db.shooters.push({ id: 'S-050', name: 'Manuel Test' }); RB.db.weapons.push({ id: 'W-050', name: 'Tikka T3x TAC A1', caliber: '6.5 Creedmoor', type: 'Rifle' }); RB.save(true); });
-  await leave(p);
-  await open(p, 'training-log');
-  ok(await p.evaluate(() => TL.linkCall('status').enabled === false && TL.linkCall('shared').error === 'disabled'), 'link: nothing shared while off in the Gun Database');
-  await p.evaluate(() => { TL.db.settings.link = Object.assign(TL.db.settings.link || {}, { enabled: true }); TL.save(true); });
-  await leave(p);
-  await open(p, 'database');
-  await p.evaluate(() => { RB.db.settings.link = Object.assign(RB.db.settings.link || {}, { enabled: true }); RB.save(true); });
-  await leave(p);
-  await open(p, 'training-log');
-  const st = await p.evaluate(() => { const s = TL.linkSync(); return { s, sh: TL.db.shooters.map(x => x.name), w: TL.db.weapons.map(x => x.name) }; });
-  ok(st.s && st.s.state === 'ok' && st.sh.includes('Manuel Test') && st.w.includes('Tikka T3x TAC A1'), 'link: Training Log pulls shooters and guns from the Gun Database ' + JSON.stringify(st.s));
-  // a training with rounds → Gun Database rounds log
-  await p.evaluate(() => {
-    const sh = TL.db.shooters.find(x => x.name === 'Manuel Test'), w = TL.db.weapons.find(x => x.name === 'Tikka T3x TAC A1');
-    TL.db.trainings.push({ id: 'TR-0050', uid: TL.uuid(), date: '2026-10-20', fire: 'live', shooterId: sh.id, desc: 'web link test', weapons: [{ uid: TL.uuid(), weaponId: w.id, rounds: 37 }] });
-    TL.save(true); TL.linkSync();
-  });
-  await leave(p);
-  await open(p, 'database');
-  const rl = await p.evaluate(() => RB.db.roundsLog.filter(r => r.link && r.link.app === 'training-log').map(r => [r.weaponId, r.rounds]));
-  ok(rl.length === 1 && rl[0][0] === 'W-050' && rl[0][1] === 37, 'link: Training Log rounds land in the Gun Database rounds log ' + JSON.stringify(rl));
-  // Shooting Drills ↔ Training Log
-  await open(p, 'shooting-drills');
-  await p.evaluate(() => { SD.db.settings.link = Object.assign(SD.db.settings.link || {}, { enabled: true }); SD.save(true); });
-  ok(await p.evaluate(() => SD.linkSync().state === 'off-there'), 'link: Shooting Drills waits until switched on in the Training Log');
-  await leave(p);
-  await open(p, 'training-log');
-  await p.evaluate(() => { const L = TL.db.settings.link; L.apps = L.apps || {}; L.apps.shootingDrills = { enabled: true }; TL.save(true); });
-  ok(await p.evaluate(() => TL.sdInstalled()), 'link: Training Log sees Shooting Drills');
-  await leave(p);
-  await open(p, 'shooting-drills');
-  const sd = await p.evaluate(() => ({ s: SD.linkSync(), sh: SD.db.shooters.map(x => x.name), tr: SD.linkTrainings('2026-10-20') }));
-  ok(sd.s.state === 'ok' && sd.sh.includes('Manuel Test'), 'link: Shooting Drills pulls shooters and guns from the Training Log');
-  ok(sd.tr.length === 1 && sd.tr[0].desc === 'web link test' && sd.tr[0].weapons[0].rounds === 37, 'link: Shooting Drills sees the trainings of a day');
-  await p.evaluate(() => SDNative.linkCall('putResults', JSON.stringify({ results: [{ uid: 'r1', trainingUid: 'x', date: '2026-10-20', drill: 'Test drill', result: '10/10' }] })));
-  await leave(p);
-  await open(p, 'training-log');
-  ok(await p.evaluate(() => ((TL.db.linked || {}).drillResults || []).some(r => r.uid === 'r1')), 'link: drill results reach the Training Log inbox');
-  await ctx.close();
-}
-
-/* 7: offline */
-{
-  const { ctx, p } = await fresh();
-  for (const dir of ['database', 'training-log', 'shooting-drills']) {
-    await open(p, dir);
-    await p.evaluate(() => navigator.serviceWorker.ready);
-    await p.waitForTimeout(500);
-  }
+  await open(p, '');
+  await p.evaluate(() => navigator.serviceWorker.ready);
+  await p.waitForTimeout(1500);
   await ctx.setOffline(true);
-  for (const dir of ['database', 'training-log', 'shooting-drills']) {
+  for (const [dir] of PAGES) {
     let errs = ['did not load'];
     try { errs = await open(p, dir); } catch (e) { errs = [e.message]; }
-    ok(!errs.length, `${dir}: opens offline after the first start ${errs.length ? JSON.stringify(errs.slice(0, 2)) : ''}`);
+    ok(!errs.length, `${dir || 'home'}: opens offline after the first start ${errs.length ? JSON.stringify(errs.slice(0, 2)) : ''}`);
   }
   await ctx.close();
 }

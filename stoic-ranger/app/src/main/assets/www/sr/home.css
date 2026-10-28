@@ -1,0 +1,26 @@
+/* Stoic Ranger home page (on top of gun/css/app.css, which every part shares in look). */
+@font-face{font-family:"Barlow Condensed";font-weight:600;src:url(../gun/fonts/barlow-condensed-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:700;src:url(../gun/fonts/barlow-condensed-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-weight:400;src:url(../gun/fonts/barlow-semi-condensed-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-weight:500;src:url(../gun/fonts/barlow-semi-condensed-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-weight:600;src:url(../gun/fonts/barlow-semi-condensed-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400;src:url(../gun/fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:600;src:url(../gun/fonts/jetbrains-mono-latin-600-normal.woff2) format("woff2")}
+body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+#toast{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+.srhome{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:4px;background:none;border:0;color:inherit;flex:none}
+.srhome svg{width:32px;height:32px}
+#hActions .ib{font-size:24px}
+.srnew{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.srnew .btn{padding:12px 6px;font-size:13px;letter-spacing:.06em}
+.srpart{border-left:6px solid var(--fg)}
+.srpart.tl{border-left-color:#4B5320}
+.srpart.sd{border-left-color:#5C462A}
+.srpart p.mono{font:13px/1.35 var(--f-mono);color:var(--fg);margin-top:4px}
+.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:600px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.srpart.dt{border-left-color:#b08d3c}
+.srwis{display:block;margin:14px 0 4px;padding:14px 16px;border:1px solid var(--line,#8886);border-left:6px solid #b08d3c;color:inherit;text-decoration:none;background:var(--card,transparent)}
+.srwis .k{font:600 12px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.srwis blockquote{margin:8px 0 6px;font:500 18px/1.35 "Barlow Semi Condensed",sans-serif}
+.srwis .r{font-size:13px;opacity:.75}

@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'at.rangebook.app'      // = Play package name. It can never change after the first upload.
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'at.rangebook.app'
+        minSdk 26
+        targetSdk 35                  // Google Play's current minimum for new apps and updates
+        versionCode 8
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        // Upload key for Google Play. Keep upload.jks and its passwords outside the repository.
+        release {
+            if (project.hasProperty('RB_UPLOAD_STORE')) {
+                storeFile file(RB_UPLOAD_STORE)
+                storePassword RB_UPLOAD_STORE_PASSWORD
+                keyAlias RB_UPLOAD_KEY_ALIAS
+                keyPassword RB_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (project.hasProperty('RB_UPLOAD_STORE')) signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix '.debug'   // debug and Play builds can sit side by side on one phone
+            versionNameSuffix '-debug'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    androidResources {
+        noCompress 'woff2'
+    }
+}

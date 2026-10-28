@@ -1,5 +1,5 @@
-# Builds the web apps from the Android sources, runs the data-safety tests and publishes dist/ on GitHub Pages.
-name: Web apps
+# Builds the web app from the Android sources, runs the data-safety tests and publishes dist/ on GitHub Pages.
+name: Web app
 
 on:
   push:
@@ -31,6 +31,7 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.48.2
           npx playwright install --with-deps chromium
           node tools/test-web.mjs
+          node stoic-ranger/tools/test-one-app.mjs
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with:
