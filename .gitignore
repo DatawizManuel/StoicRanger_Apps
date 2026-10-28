@@ -1,0 +1,9 @@
+# build output
+dist/
+dist-shots/
+node_modules/
+build/
+node_tmp/
+# Android signing keys never go into this repository (it is public): keep debug.keystore on the PC only
+*.keystore
+*.jks
