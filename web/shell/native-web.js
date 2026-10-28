@@ -61,7 +61,56 @@ async function load(withOwn) {
   const got = await idbGet(keys);
   keys.forEach(key => { if (got[key] != null) mem.set(key, got[key]); else if (!withOwn || !key.startsWith(APP + '/db')) mem.delete(key); });
 }
+/* ---------- one-time password (Manuel 2026-10-28): asked once per device, then remembered ----------
+   Only a PBKDF2 hash is in the code (CFG.lock, from tools/build-web.mjs). The unlock is kept in localStorage and
+   IndexedDB under the hash, so a new password asks again. It keeps strangers out of the app, not a hacker out of the code. */
+const UNLOCK_KEY = 'sr.unlock';
+async function derive(pw) {
+  const L = CFG.lock, enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const salt = new Uint8Array(L.salt.match(/../g).map(h => parseInt(h, 16)));
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: L.iterations }, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function unlocked() {
+  if (!CFG.lock) return true;
+  try { if (localStorage.getItem(UNLOCK_KEY) === CFG.lock.hash) return true; } catch (e) { }
+  const got = await idbGet([UNLOCK_KEY]);
+  if (got[UNLOCK_KEY] === CFG.lock.hash) { try { localStorage.setItem(UNLOCK_KEY, CFG.lock.hash); } catch (e) { } return true; }
+  return false;
+}
+function lockScreen() {
+  const d = document.createElement('div');
+  d.id = 'srLock';
+  d.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg,#f4f2ec);color:var(--fg,#1b1b18);font:16px/1.45 var(--f-body,system-ui)';
+  d.innerHTML = `<form style="width:100%;max-width:360px;text-align:center" autocomplete="off">
+    <img src="icon-180.png" alt="" width="96" height="96" style="border-radius:20px">
+    <h2 style="margin:14px 0 4px;padding:0;border:0;font:700 22px var(--f-disp,system-ui);letter-spacing:.03em;text-transform:uppercase">${document.title.replace(/[<>&]/g, '')}</h2>
+    <p style="margin:0 0 18px;color:var(--muted,#5d5b52)">Enter the password once to use the app on this device.</p>
+    <input type="password" name="pw" placeholder="Password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"
+      style="width:100%;box-sizing:border-box;padding:12px;font:inherit;font-size:17px;border:1px solid var(--hair,#ccc);background:var(--card,#fff);color:inherit;border-radius:0">
+    <button class="btn pri" style="width:100%;margin-top:10px">Unlock</button>
+    <p data-msg role="alert" style="min-height:1.4em;margin:12px 0 0;color:var(--bad,#b3261e)"></p></form>`;
+  document.body.appendChild(d);
+  const f = d.querySelector('form'), msg = d.querySelector('[data-msg]'), btn = d.querySelector('button');
+  return new Promise(res => {
+    f.onsubmit = async e => {
+      e.preventDefault();
+      btn.disabled = true; msg.textContent = '';
+      let h = '';
+      try { h = await derive(f.pw.value); } catch (err) { msg.textContent = 'This browser cannot check the password (open the app via https).'; btn.disabled = false; return; }
+      if (h !== CFG.lock.hash) { msg.textContent = 'Wrong password.'; f.pw.value = ''; f.pw.focus(); btn.disabled = false; return; }
+      try { localStorage.setItem(UNLOCK_KEY, h); } catch (err) { }
+      await idbPut({ [UNLOCK_KEY]: h });
+      d.remove(); res();
+    };
+    setTimeout(() => f.pw.focus(), 50);
+  });
+}
+
 async function boot() {
+  if (navigator.serviceWorker && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
+  if (!(await unlocked())) await lockScreen();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
   await load(true);
   // The localStorage mirror wins only if it is newer (a save whose IndexedDB write did not finish) or IndexedDB holds a damaged copy.
@@ -77,7 +126,6 @@ async function boot() {
     s.onload = s.onerror = res; document.body.appendChild(s);
   });
   document.dispatchEvent(new Event('DOMContentLoaded'));
-  if (navigator.serviceWorker && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
 }
 
 /* ---------- back from the background: the Android onResume / onPause ---------- */

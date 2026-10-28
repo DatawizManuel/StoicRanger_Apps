@@ -9,7 +9,8 @@
    6. linking: nothing is shared until switched on in both apps; then Training Log gets the Gun Database's
       shooters/guns and its rounds land in the Gun Database's rounds log; Shooting Drills gets the Training
       Log's shooters/guns and the trainings of a day,
-   7. after one online start the apps open offline (service worker).
+   7. after one online start the apps open offline (service worker),
+   0. the one-time password: app locked until it is entered, wrong one refused (right one with SR_PASSWORD=…).
    Usage: node tools/test-web.mjs [--shots]   (--shots saves iPhone-size screenshots to dist-shots/) */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -53,10 +54,12 @@ const idbAll = p => p.evaluate(() => new Promise(res => {
     c.onsuccess = () => { const x = c.result; if (x) { out[x.key] = x.value; x.continue(); } else { r.result.close(); res(out); } }; };
 }));
 
-async function fresh() {
+const LOCK_HASH = (fs.readFileSync(path.join(DIST, 'database/index.html'), 'utf8').match(/"lock":\{[^}]*"hash":"([0-9a-f]+)"/) || [])[1];
+async function fresh(unlock = true) {
   const ctx = await browser.newContext(IPHONE);
   const p = await ctx.newPage();
   await p.goto(BASE + '/favicon.png');
+  if (unlock) await p.evaluate(h => localStorage.setItem('sr.unlock', h), LOCK_HASH);   // as after the one-time password
   return { ctx, p };
 }
 async function open(p, dir, hash = '') {
@@ -71,6 +74,26 @@ async function open(p, dir, hash = '') {
   return errs;
 }
 const leave = async p => { await p.goto(BASE + '/favicon.png'); await p.waitForTimeout(300); };   // pagehide flushes, like closing the app
+
+/* 0: one-time password */
+{
+  ok(!!LOCK_HASH, 'password hash is in the build');
+  const { ctx, p } = await fresh(false);
+  await p.goto(`${BASE}/database/index.html`);
+  await p.waitForSelector('#srLock input[type=password]');
+  ok(await p.evaluate(() => !window.RB), 'locked: the app does not start before the password');
+  await p.fill('#srLock input', 'wrong password'); await p.click('#srLock button');
+  await p.waitForFunction(() => /Wrong password/.test(document.querySelector('#srLock [data-msg]').textContent));
+  ok(await p.evaluate(() => !window.RB && !localStorage.getItem('sr.unlock')), 'wrong password is refused');
+  if (process.env.SR_PASSWORD) {
+    await p.fill('#srLock input', process.env.SR_PASSWORD); await p.click('#srLock button');
+    await p.waitForFunction(() => window.RB && !document.querySelector('#srLock'), null, { timeout: 15000 });
+    ok(true, 'right password unlocks');
+    await p.goto(`${BASE}/training-log/index.html`); await p.waitForFunction(() => window.TL, null, { timeout: 15000 });
+    ok(await p.evaluate(() => !document.querySelector('#srLock')), 'asked only once per device (other apps of the same address too)');
+  } else console.log('SKIP right password (set SR_PASSWORD to test it)');
+  await ctx.close();
+}
 
 /* 1 + 2: start, save, restart */
 for (const [dir, P, id] of [['database', 'RB', 'gundb'], ['training-log', 'TL', 'training-log'], ['shooting-drills', 'SD', 'shooting-drills']]) {

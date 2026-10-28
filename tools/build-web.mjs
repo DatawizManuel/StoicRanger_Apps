@@ -19,6 +19,11 @@ export const APPS = [
     desc: 'Pistol and rifle drills, results, printable targets.' },
 ];
 
+/* One-time password asked on the first start on a device (Manuel 2026-10-28). Only the PBKDF2-SHA-256 hash is
+   stored here; the password itself is never written into this repository. To change it, put a new salt and
+   hash here (node -e "…pbkdf2Sync(pw, Buffer.from(saltHex, 'hex'), 310000, 32, 'sha256')"): every device then asks once more. */
+const LOCK = { salt: '21fbdf046e21e67ad88b40be9843df02', iterations: 310000, hash: 'bccf652dd654cb634c30bb28ecb9b372be39e65209e98f74efc80b8b8882f8c0' };
+
 const NOT_HERE = 'is not set up on this device yet (open it once from the same Stoic Ranger web address). Your data here stays as it is.';
 const PATCHES = {
   gundb: {
@@ -79,7 +84,7 @@ function buildApp(app) {
   if (!scripts.length) throw new Error(app.id + ': no scripts in index.html');
   html = html.replace(/<script src="[^"]+"><\/script>\s*/g, '');
   const { version, code } = versionOf(app);
-  const cfg = { app: app.id, prefix: app.prefix, version: version + '-web', code, scripts };
+  const cfg = { app: app.id, prefix: app.prefix, version: version + '-web', code, scripts, lock: LOCK };
   html = html.replace('</head>', `<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-32.png">
 <link rel="apple-touch-icon" href="icon-180.png">
