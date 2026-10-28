@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Stoic Ranger - Shooting Drills</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="appbar">
+  <button class="ib" id="hBack" aria-label="Back" hidden>‹</button>
+  <h1 id="hTitle">Shooting Drills</h1>
+  <div id="hActions"></div>
+</header>
+<main id="view"></main>
+<nav id="nav">
+  <a href="#/home" data-v="home"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/></svg><span>Home</span></a>
+  <a href="#/drills" data-v="drills"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/><path d="M17 15l2 2 3-4"/></svg><span>Drills</span></a>
+  <button type="button" id="navAdd" class="navadd" aria-label="New"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
+  <a href="#/printables" data-v="printables"><svg viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H4V9h16v8h-3"/><rect x="7" y="14" width="10" height="7"/></svg><span>Printables</span></a>
+  <a href="#/more" data-v="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></a>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="js/core.js"></script>
+<script src="js/logo.js"></script>
+<script src="js/drills-data.js"></script>
+<script src="js/printables.js"></script>
+<script src="js/diagram.js"></script>
+<script src="js/paper.js"></script>
+<script src="js/app.js"></script>
+<script src="js/link.js"></script>
+<script src="js/views-home.js"></script>
+<script src="js/views-drills.js"></script>
+<script src="js/views-db.js"></script>
+<script src="js/views-more.js"></script>
+</body>
+</html>

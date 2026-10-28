@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'at.stoicranger.traininglog'      // = Play package name. It can never change after the first upload.
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'at.stoicranger.traininglog'
+        minSdk 26
+        targetSdk 35                  // Google Play's current minimum for new apps and updates
+        versionCode 4
+        versionName '0.4.0'
+    }
+
+    signingConfigs {
+        // Upload key for Google Play. Keep upload.jks and its passwords outside the repository.
+        release {
+            if (project.hasProperty('SR_UPLOAD_STORE')) {
+                storeFile file(SR_UPLOAD_STORE)
+                storePassword SR_UPLOAD_STORE_PASSWORD
+                keyAlias SR_UPLOAD_KEY_ALIAS
+                keyPassword SR_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (project.hasProperty('SR_UPLOAD_STORE')) signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix '.debug'   // debug and Play builds can sit side by side on one phone
+            versionNameSuffix '-debug'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    androidResources {
+        noCompress 'woff2'
+    }
+}

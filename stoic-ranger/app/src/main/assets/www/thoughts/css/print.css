@@ -1,0 +1,29 @@
+/* A4 one-pager for "Print / PDF" (always the light Stoic Ranger colours). */
+@font-face{font-family:"Barlow Condensed";font-weight:600;src:url(fonts/barlow-condensed-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:700;src:url(fonts/barlow-condensed-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-weight:400;src:url(fonts/barlow-semi-condensed-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Barlow Semi Condensed";font-weight:600;src:url(fonts/barlow-semi-condensed-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400;src:url(fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2")}
+@page{size:A4;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:#f4f3ee;color:#1d1e1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font:11pt/1.5 "Barlow Semi Condensed",sans-serif}
+.page{width:210mm;min-height:296mm;padding:16mm 18mm 14mm;display:flex;flex-direction:column;gap:7mm}
+header,footer{display:flex;justify-content:space-between;font:600 8.5pt "Barlow Semi Condensed",sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#5d6159;border-bottom:1px solid #d8d6cc;padding-bottom:3mm}
+footer{margin-top:auto;border-bottom:0;border-top:1px solid #d8d6cc;padding:3mm 0 0}
+blockquote{margin:4mm 0 0;padding-left:6mm;border-left:1.6mm solid #3f4630}
+blockquote p{margin:0;font:600 30pt/1.04 "Barlow Condensed",sans-serif}
+blockquote p+p{margin-top:.3em;color:#3f4630}
+blockquote.l1 p{font-size:26pt}blockquote.l2 p{font-size:22pt}blockquote.l3 p{font-size:18pt;line-height:1.12}
+.cite{padding-left:7.6mm;font-size:12pt;color:#5d6159}.cite b{color:#1d1e1a;letter-spacing:.04em}
+.context{display:grid;grid-template-columns:48mm 1fr;gap:7mm;align-items:start}
+.context p{margin:0 0 3mm}
+.coin{width:48mm;height:48mm}
+.event{border:1px solid #d8d6cc;background:#fbfaf6;padding:3mm 4mm}
+.event .when{font:8.5pt "JetBrains Mono",monospace;color:#5d6159}
+.event h3{margin:1mm 0;font:700 12pt "Barlow Condensed",sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.event p{margin:0}
+.practice{background:#3f4630;color:#f4f3ee;padding:5mm 6mm}
+.practice span{font:600 8pt "Barlow Semi Condensed",sans-serif;letter-spacing:.24em;text-transform:uppercase;opacity:.8}
+.practice p{margin:1.5mm 0 0;font:600 14pt/1.35 "Barlow Semi Condensed",sans-serif}
+.notes{font-size:8.5pt;color:#5d6159;margin:0}

@@ -1,53 +1,57 @@
-# Stoic Ranger apps
+# Stoic Ranger
 
-Source of the three Stoic Ranger apps, and their web versions for iPhone, iPad and any browser.
+Source of the **Stoic Ranger** app (from 1.0.0 one app, one database) and its web version for iPhone, iPad and
+any browser.
 
-| App | Home screen name | Android package | Web address (GitHub Pages) |
-|---|---|---|---|
-| Stoic Ranger - Gun Database | SR_Database | `at.rangebook.app` | `/database/` |
-| Stoic Ranger - Training Log | SR_Training Log | `at.stoicranger.traininglog` | `/training-log/` |
-| Stoic Ranger - Shooting Drills | SR_Shooting Drills | `at.stoicranger.shootingdrills` | `/shooting-drills/` |
+| Part | Was (up to 0.x) | What it does |
+|---|---|---|
+| Gun Database | SR_Database (`at.rangebook.app`) | Guns, barrels, ammunition, datasheets, analyse, dope cards |
+| Training Log | SR_Training Log (`at.stoicranger.traininglog`) | Trainings (live and dry fire), trainers, record sheet |
+| Shooting Drills | SR_Shooting Drills (`at.stoicranger.shootingdrills`) | Drill library, results, printable targets |
+| Daily Thoughts | SR_Daily Thoughts (`at.stoicranger.dailythoughts`, repo `daily_thoughts`) | A quote for each day, authors, favourites |
 
-Site: https://datawizmanuel.github.io/StoicRanger_Apps/ (start page with the three apps and install steps).
+The Android app keeps the package id `at.rangebook.app`, so 1.0.0 installs over SR_Database 0.6.0 and converts
+its data in place. Web address: https://datawizmanuel.github.io/StoicRanger_Apps/
 
 ## Layout
 
-- `android/<app>/` – the Android projects (Java WebView shell + the app itself as offline web code in
-  `app/src/main/assets/www`). Their READMEs and MIGRATIONS.md describe build, data format and migrations.
-- `web/shell/native-web.js` – stands in for the Android shell in a browser: the app code calls
-  `RBNative` / `TLNative` / `SDNative` exactly as on Android and gets IndexedDB storage, the share sheet,
-  the file picker, printing and the app links.
-- `web/shell/sw.js` – offline cache per app. `web/icons/` – home screen icons (from `android/<app>/store/icon-512.png`).
-- `web/landing/index.html` – start page.
-- `tools/build-web.mjs` – builds `dist/` from the Android sources. `tools/test-web.mjs` – data-safety tests.
+- `stoic-ranger/` – the Android project (Java WebView shell + the app as offline web code in
+  `app/src/main/assets/www`). Its README and MIGRATIONS.md describe the one database, the build and the migrations.
+  - `www/index.html` + `www/sr/` – home page and the hub (`sr/hub.js`) that gives every part its view of the one database.
+  - `www/gun/`, `www/training/`, `www/drills/`, `www/thoughts/` – the four parts, their code nearly unchanged.
+  - `web/native-web.js` – stands in for the Android shell in a browser (IndexedDB, share sheet, file picker, printing, password).
+- `web/shell/sw.js` – offline cache. `web/icons/stoic-ranger/` – home screen icons.
+- `tools/build-web.mjs` – builds `dist/` from the Android sources. `tools/test-web.mjs` – web data-safety tests.
+- `stoic-ranger/tools/test-one-app.mjs` – Android-path tests (SR_Database conversion, imports, links between the parts).
+- `android/` – the separate apps up to 0.x, frozen (kept for reference and for their data formats).
 - `.github/workflows/pages.yml` – on every push to `main`: build, test, publish on GitHub Pages.
-
-There is one copy of the app code: the web apps are built from `android/<app>/app/src/main/assets/www`, so a
-new Android version gives the matching web version. `build-web.mjs` rewords a few Android-only sentences
-(`PATCHES`); the build stops when one of those sentences is no longer found.
 
 ## Build and test locally
 
 ```
-node tools/build-web.mjs          # → dist/
-node tools/test-web.mjs           # needs playwright (npm i playwright && npx playwright install chromium)
-npx http-server dist              # then open http://localhost:8080/
+node tools/build-web.mjs                    # → dist/
+node tools/test-web.mjs                     # needs playwright (npm i playwright && npx playwright install chromium)
+node stoic-ranger/tools/test-one-app.mjs    # Android path
+stoic-ranger/tools/build-debug.sh           # APK without Gradle (see stoic-ranger/README.md)
 ```
 
-## Data in the web apps
+## Data in the web version
 
-- Each app keeps its data in the browser's IndexedDB for the site (`stoic-ranger` → `files`, keys
-  `gundb/…`, `training-log/…`, `shooting-drills/…`): `db.json`, the previous copy `db.bak.json`,
-  `backups/` (before every schema migration, newest 10), link inboxes. A copy of `db.json` is mirrored to
-  localStorage while it fits, in case iOS stops a write half way.
-- The migrations are the Android ones (same code), so the rules hold here too: updates never delete
-  entries, data from a newer version opens read-only. `tools/test-web.mjs` must pass before a release.
-- The data is tied to the web address. Moving the site to another address means backup and restore in each app.
-- Linking works through the shared site storage, with the same consent rule as on Android (nothing but the
-  status is shared until linking is switched on in both apps).
+- One database in the browser's IndexedDB for the site (`stoic-ranger` → `files`, keys `sr/db.json`,
+  the previous copy `sr/db.bak.json`, `sr/backups/` newest 10), mirrored to localStorage while it fits, in case
+  iOS stops a write half way.
+- Same code as Android, so the same rules: updates never delete entries, data from a newer version opens read-only.
+- The data is tied to the web address. Moving the site means backup and restore.
+
+## One-time password
+
+The web app asks for a password on its first start on a device and then remembers it (localStorage + IndexedDB).
+Only a PBKDF2-SHA-256 hash is stored (`LOCK` in `tools/build-web.mjs`); the password is never written into this
+repository. Changing `LOCK` makes every device ask once more. The Android app has no password.
+To test the right password: `SR_PASSWORD='…' node tools/test-web.mjs`.
 
 ## Android signing key
 
-`debug.keystore` is not in this repository (it is public). Keep it with the Android project on the PC
-(`10_long range shooting\…`). Without the same key, Android refuses app updates and the apps cannot link;
-`tools/build-debug.sh` would quietly make a new key if it is missing.
+`debug.keystore` is not in this repository (it is public). Keep it with the Android project on the PC. It must be
+the key SR_Database was signed with, or Android refuses the update (and would only install after uninstalling,
+which deletes the data). `tools/build-debug.sh` would quietly make a new key if it is missing.
