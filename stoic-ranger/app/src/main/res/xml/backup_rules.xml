@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <include domain="file" path="db.json" />
+    <include domain="file" path="thoughts.json" />
     <exclude domain="sharedpref" path="secrets.xml" />
 </full-backup-content>

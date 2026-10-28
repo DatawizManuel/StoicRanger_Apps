@@ -61,7 +61,7 @@ function figures() {
     hours: thisYear.reduce((a, t) => a + num(t.durationH), 0),
     rounds: live.reduce((a, t) => a + rounds(t), 0),
     results: res.length, resultsYear: res.filter(r => String(r.date || '').startsWith(year)).length,
-    favs: arr(d.favs).length, thoughts: arr(d.thoughtFavs).length, last,
+    favs: arr(d.favs).length, thoughts: arr(SR.thoughts.favs).length, last,
   };
 }
 
@@ -154,7 +154,7 @@ function data(el) {
   const d = SR.db, info = (() => { try { return JSON.parse(window.SRNative.appInfo()); } catch (e) { return {}; } })();
   el.innerHTML = `
     <div class="card"><h3>Backup</h3>
-      <p class="note">Guns, datasheets, trainings, drill results and favourite quotes live in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …); it is also how you move to a new phone.</p>
+      <p class="note">Guns, datasheets, trainings and drill results live in one database on this device, your favourite quotes in a file of their own. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …); it is also how you move to a new phone.</p>
       <div class="stack"><button class="btn pri" data-sr="save">Save a backup of everything</button><button class="btn" data-sr="share">Share a backup</button></div></div>
     <div class="card"><h3>Restore or bring in</h3>
       <p class="note">Pick a backup file: a <b>Stoic Ranger</b> backup restores everything; a backup of the old <b>SR_Training Log</b>, <b>SR_Shooting Drills</b> or <b>SR_Daily Thoughts</b> app is merged into your data (that is how their data moves into this app).</p>
@@ -163,7 +163,7 @@ function data(el) {
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(d.settings.common.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div></div>
     <div class="card"><h3>About</h3>
       <p><b>Stoic Ranger</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : ''}</p>
-      <p class="note">One app, one database: Gun Database, Training Log, Shooting Drills and Daily Thoughts (until version 0.x separate apps). ${count(d, 'weapons')} guns · ${count(d, 'shooters')} shooters · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results · ${arr(d.thoughtFavs).length} favourite quotes.</p>
+      <p class="note">One app: Gun Database, Training Log and Shooting Drills share one database; Daily Thoughts keeps its own (until version 0.x separate apps). ${count(d, 'weapons')} guns · ${count(d, 'shooters')} shooters · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results · ${arr(SR.thoughts.favs).length} favourite quotes.</p>
       <p class="note">No account, no tracking: all entries stay on this device unless you export or share them.</p>
       <div class="row"><button class="btn warn" id="dWipe">Delete all data on this device</button></div></div>`;
   SR.wireData(el, toast);

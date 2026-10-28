@@ -14,7 +14,11 @@
    - What the separate apps sent each other by linking is now computed from the one file: rounds of live-fire
      trainings → Gun Database rounds log, trainings of a day → Shooting Drills, drill results → Training Log.
    - An SR_Database db.json (the Android app this one updates in place) is converted on first start, with a copy
-     kept in backups/ first. Nothing is ever dropped (standing rule since 2026-10-24). */
+     kept in backups/ first. Nothing is ever dropped (standing rule since 2026-10-24).
+   - Daily Thoughts is not part of the shooting database (Manuel 2026-10-28): since 1.0.1 its favourites, settings
+     and history live in a file of their own, thoughts.json (window.SRNative.loadData('thoughts') …). 1.0.0 kept
+     them in db.json (thoughtFavs, settings.dt, schemas.dt); on the first start of 1.0.1 they are copied over, with
+     a backup of db.json first, and the old fields stay in db.json untouched (add-only). */
 'use strict';
 (() => {
 const RAW = window.SRNative;
@@ -24,14 +28,11 @@ const PARTS = {
     tables: ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'targets'] },
   tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['shooters', 'weapons', 'trainers', 'trainings'] },
   sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['shooters', 'weapons', 'results', 'favs'] },
-  // Daily Thoughts (until 0.1.2 the app SR_Daily Thoughts): its favourite quotes are table "favs" in its own shape,
-  // kept as "thoughtFavs" in the one file (Shooting Drills already has "favs": drill ids)
-  dt: { prefix: 'DT', dir: 'thoughts', name: 'Daily Thoughts', app: 'sr-daily-thoughts', tables: ['favs'], map: { favs: 'thoughtFavs' } },
+  // Daily Thoughts (until 0.1.2 the app SR_Daily Thoughts): its own file thoughts.json, not the one database
+  dt: { prefix: 'DT', dir: 'thoughts', name: 'Daily Thoughts', app: 'sr-daily-thoughts', tables: ['favs'], file: 'thoughts' },
 };
-/** The table a part calls t, as named in the one file. */
-const key = (part, t) => (PARTS[part].map && PARTS[part].map[t]) || t;
 const SHARED = ['shooters', 'weapons', 'trainers'];
-const ALL_TABLES = [...new Set(Object.entries(PARTS).flatMap(([n, p]) => p.tables.map(t => key(n, t))))];
+const ALL_TABLES = [...new Set(Object.values(PARTS).filter(p => !p.file).flatMap(p => p.tables))];
 const PART = document.documentElement.dataset.part || 'home';
 
 const parse = t => { try { const j = JSON.parse(t); return j && typeof j === 'object' && !Array.isArray(j) ? j : null; } catch (e) { return null; } };
@@ -99,6 +100,7 @@ function load() {
   } else U = emptyUnified();
   normalize(U);
   if (converted && !newer) writeRaw();
+  loadThoughts();
 }
 function writeRaw() {
   if (newer) return false;
@@ -106,6 +108,55 @@ function writeRaw() {
   let ok = false;
   try { ok = RAW.saveDb(JSON.stringify(U)); } catch (e) { ok = false; }
   return ok;
+}
+
+/* ---------- Daily Thoughts: thoughts.json ---------- */
+const TFORMAT = 1;
+const isThoughtsFile = j => !!(j && j.app === 'stoic-ranger-thoughts');
+let TH = null, thSplit = false;
+/** Daily Thoughts data out of a Stoic Ranger 1.0.0 file (or backup): its favourites, settings and history. */
+function thoughtsFrom(u) {
+  const t = now();
+  const th = { app: 'stoic-ranger-thoughts', format: TFORMAT, created: t, updated: t, schema: null, settings: {}, favs: [], history: [] };
+  if (!u) return th;
+  if (u.schemas && u.schemas.dt != null) th.schema = +u.schemas.dt || 1;
+  if (u.settings && u.settings.dt && typeof u.settings.dt === 'object') th.settings = clone(u.settings.dt);
+  th.favs = clone(arr(u.thoughtFavs));
+  th.history = clone(arr(u.history).filter(h => h && h.part === 'dt'));
+  return th;
+}
+const hasThoughts = u => !!(u && (arr(u.thoughtFavs).length || (u.schemas && u.schemas.dt != null) || (u.settings && u.settings.dt)));
+function normalizeThoughts(th) {
+  th.favs = arr(th.favs); th.history = arr(th.history);
+  if (!th.settings || typeof th.settings !== 'object') th.settings = {};
+  return th;
+}
+function loadThoughts() {
+  thSplit = false;
+  let txt = '';
+  try { txt = RAW.loadData('thoughts') || ''; } catch (e) { }
+  let j = txt ? parse(txt) : null;
+  if (txt && !isThoughtsFile(j)) {                       // damaged: keep it, use the previous copy
+    try { RAW.backupData('thoughts', 'thoughts-damaged-' + Date.now() + '.json'); } catch (e) { }
+    j = parse((() => { try { return RAW.loadDataBackup('thoughts') || ''; } catch (e) { return ''; } })());
+  }
+  if (isThoughtsFile(j)) {
+    TH = normalizeThoughts(j);
+    if ((+TH.format || 1) > TFORMAT) newer = true;         // written by a newer Stoic Ranger: read-only
+    return;
+  }
+  // no thoughts.json yet: 1.0.0 kept Daily Thoughts in db.json. Copy it over (db.json itself is not changed).
+  TH = thoughtsFrom(U);
+  if (hasThoughts(U) && !newer) {
+    try { RAW.backupDb('db-before-thoughts-file-' + new Date().toISOString().slice(0, 10) + '.json'); } catch (e) { }
+    TH.history.push({ at: now(), part: 'dt', note: 'Daily Thoughts moved from db.json into its own file (Stoic Ranger 1.0.1)' });
+    thSplit = writeThoughts();
+  }
+}
+function writeThoughts() {
+  if (newer) return false;
+  TH.updated = now();
+  try { return !!RAW.saveData('thoughts', JSON.stringify(TH)); } catch (e) { return false; }
 }
 
 /* ---------- a part's view ---------- */
@@ -118,17 +169,23 @@ function partSettings(part) {
   if (part === 'sd') s.link = Object.assign({}, s.link, { enabled: true });
   return s;
 }
+function viewThoughts() {
+  if (TH.schema == null && !TH.favs.length) return null;          // first start: its welcome screen
+  const s = TH.settings; s.theme = U.settings.common.theme || 'auto';
+  return { app: PARTS.dt.app, schema: TH.schema || 1, created: TH.created, updated: TH.updated, favs: TH.favs, settings: s, history: TH.history };
+}
 function view(part) {
+  if (part === 'dt') return viewThoughts();
   const P = PARTS[part];
   if (U.schemas[part] == null && !hasData(part)) return null;   // first start of this part: its welcome screen
   const v = { schema: U.schemas[part] || 1, created: U.created, updated: U.updated };
   if (P.app) v.app = P.app;
-  P.tables.forEach(t => { v[t] = U[key(part, t)]; });
+  P.tables.forEach(t => { v[t] = U[t]; });
   v.settings = partSettings(part);
   v.history = arr(U.history).filter(h => !h.part || h.part === part);
   return v;
 }
-const hasData = part => PARTS[part].tables.some(t => arr(U[key(part, t)]).length && !(part === 'gundb' && t === 'targets'));
+const hasData = part => PARTS[part].tables.some(t => arr(U[t]).length && !(part === 'gundb' && t === 'targets'));
 
 /** Uses of a shared record outside the given part (so a part never deletes what another part still needs). */
 function usedElsewhere(table, rec, part) {
@@ -155,14 +212,25 @@ function mergeShared(table, incoming, part) {
   old.forEach(r => { if (!seen.has(r) && usedElsewhere(table, r, part)) out.push(r); });
   return out;
 }
+function saveThoughts(v) {
+  if ('favs' in v) TH.favs = arr(v.favs);
+  TH.schema = +v.schema || TH.schema || 1;
+  if (v.settings) {
+    TH.settings = v.settings;
+    if (v.settings.theme && v.settings.theme !== U.settings.common.theme) { U.settings.common.theme = v.settings.theme; writeRaw(); }
+  }
+  if (Array.isArray(v.history)) TH.history = v.history;
+  return writeThoughts();
+}
 function saveView(part, json) {
   if (newer) return false;
   const v = parse(json);
   if (!v) return false;
+  if (part === 'dt') return saveThoughts(v);
   const P = PARTS[part];
   P.tables.forEach(t => {
     if (!(t in v)) return;
-    const k = key(part, t), before = k === 'results' ? JSON.stringify(arr(U[k])) : '';
+    const k = t, before = k === 'results' ? JSON.stringify(arr(U[k])) : '';
     U[k] = SHARED.includes(k) ? mergeShared(k, v[t], part) : arr(v[t]);
     if (k === 'results' && JSON.stringify(U[k]) !== before) U.resultsChanged = now();
   });
@@ -222,10 +290,17 @@ const pass = ['isNight', 'getSecret', 'setSecret', 'appInfo', 'saveFile', 'openF
 function bridge(part) {
   const N = {};
   pass.forEach(m => { if (RAW[m]) N[m] = (...a) => RAW[m](...a); });
+  if (part === 'dt') N.backupDb = name => { try { return RAW.backupData('thoughts', String(name).replace(/^db-/, 'thoughts-')); } catch (e) { return false; } };
   N.loadDb = () => { const v = view(part); return v ? JSON.stringify(v) : ''; };
   N.saveDb = json => saveView(part, json);
-  N.backupDb = name => { try { return RAW.backupDb(String(name).replace(/^db-/, 'db-' + part + '-')); } catch (e) { return false; } };
+  if (part !== 'dt') N.backupDb = name => { try { return RAW.backupDb(String(name).replace(/^db-/, 'db-' + part + '-')); } catch (e) { return false; } };
   N.loadDbBackup = () => {                               // the previous copy, seen through this part
+    if (part === 'dt') {
+      const j = parse((() => { try { return RAW.loadDataBackup('thoughts') || ''; } catch (e) { return ''; } })());
+      if (!isThoughtsFile(j)) return '';
+      const keep = TH; TH = normalizeThoughts(j);
+      try { const v = viewThoughts(); return v ? JSON.stringify(v) : ''; } finally { TH = keep; }
+    }
     const j = parse(RAW.loadDbBackup() || '');
     if (!j) return '';
     if (!isUnified(j)) return part === 'gundb' && isGunDb(j) ? JSON.stringify(j) : '';
@@ -262,14 +337,14 @@ function importBackup(j) {
   const kind = isUnified(j) ? 'all' : isThoughts(j) ? 'dt' : isTrainingLog(j) ? 'tl' : isDrills(j) ? 'sd' : isGunDb(j) ? 'gundb' : null;
   if (!kind || kind === 'all' || kind === 'gundb') return { kind };
   if (newer) return { kind, error: 'read-only' };
-  if (kind === 'dt') {                                   // favourite quotes: union by quote id
-    try { RAW.backupDb('db-before-import-dt-' + Date.now() + '.json'); } catch (e) { }
-    const have = new Set(arr(U.thoughtFavs).map(f => f && f.id));
+  if (kind === 'dt') {                                   // favourite quotes: union by quote id, into thoughts.json
+    try { RAW.backupData('thoughts', 'thoughts-before-import-' + Date.now() + '.json'); } catch (e) { }
+    const have = new Set(TH.favs.map(f => f && f.id));
     const add = arr(j.favs).map(f => typeof f === 'string' ? { id: f, at: '' } : f).filter(f => f && f.id && !have.has(f.id) && have.add(f.id));
-    U.thoughtFavs = arr(U.thoughtFavs).concat(add);
-    const s = +j.schema || 1; U.schemas.dt = U.schemas.dt ? Math.min(U.schemas.dt, s) : s;
-    U.history.push({ at: now(), part: 'stoic-ranger', note: 'Imported Daily Thoughts favourites', added: add.length });
-    writeRaw();
+    TH.favs = TH.favs.concat(add);
+    const s = +j.schema || 1; TH.schema = TH.schema ? Math.min(TH.schema, s) : s;
+    TH.history.push({ at: now(), part: 'stoic-ranger', note: 'Imported Daily Thoughts favourites', added: add.length });
+    writeThoughts();
     return { kind, stats: { added: { favs: add.length }, matched: {}, skipped: { favs: arr(j.favs).length - add.length } } };
   }
   try { RAW.backupDb('db-before-import-' + kind + '-' + Date.now() + '.json'); } catch (e) { }
@@ -323,14 +398,24 @@ function importBackup(j) {
   writeRaw();
   return { kind, stats };
 }
-/** Replace everything with a Stoic Ranger backup (the current file is kept in backups/ first). */
+/** Replace everything with a Stoic Ranger backup (the current files are kept in backups/ first). A 1.0.1 backup
+    carries Daily Thoughts under "thoughts"; in a 1.0.0 backup it is still in thoughtFavs / settings.dt. */
 function restoreAll(j) {
   if (!isUnified(j) || newer) return false;
   if ((+j.format || 1) > FORMAT) return false;
-  try { RAW.backupDb('db-before-restore-' + Date.now() + '.json'); } catch (e) { }
-  U = normalize(clone(j)); delete U.backup;
-  return writeRaw();
+  if (isThoughtsFile(j.thoughts) && (+j.thoughts.format || 1) > TFORMAT) return false;
+  const stamp = Date.now();
+  try { RAW.backupDb('db-before-restore-' + stamp + '.json'); } catch (e) { }
+  try { RAW.backupData('thoughts', 'thoughts-before-restore-' + stamp + '.json'); } catch (e) { }
+  const th = isThoughtsFile(j.thoughts) ? normalizeThoughts(clone(j.thoughts)) : thoughtsFrom(j);
+  U = normalize(clone(j)); delete U.backup; delete U.thoughts;
+  TH = th;
+  const a = writeRaw(), b = writeThoughts();
+  return a && b;
 }
+/** The whole backup: the one database plus Daily Thoughts. thoughtFavs is filled too, so Stoic Ranger 1.0.0 can
+    still restore a 1.0.1 backup with the current favourites. */
+const backupText = () => JSON.stringify(Object.assign({}, U, { thoughtFavs: TH.favs, thoughts: TH, backup: now() }), null, 1);
 
 /* ---------- file dialogs for the hub (the parts keep their own callbacks) ---------- */
 const hubCbs = {};
@@ -354,12 +439,12 @@ const openJson = () => new Promise(res => RAW.openFile('application/json,text/pl
 load();
 const SR = window.SR = {
   PARTS, part: PARTS[PART] ? PART : 'home', isUnified, isGunDb, isTrainingLog, isDrills, isThoughts,
-  get db() { return U; },
+  get db() { return U; }, get thoughts() { return TH; }, get thoughtsMoved() { return thSplit; },
   get readOnly() { return newer; }, get damaged() { return damaged; }, get converted() { return converted; },
   reload() { load(); },
   save: writeRaw,
-  /** The whole database as one backup file (all parts). */
-  backupText: () => JSON.stringify(Object.assign({}, U, { backup: now() }), null, 1),
+  /** The whole database as one backup file (all parts, Daily Thoughts included). */
+  backupText,
   saveBackup, shareBackup, openJson, importBackup, restoreAll,
   uuid, clone, now, arr,
 };

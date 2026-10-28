@@ -329,6 +329,62 @@ public class MainActivity extends Activity {
             return true;
         }
 
+        /* Files of their own next to db.json (1.0.1: "thoughts" = Daily Thoughts). Same rules as db.json: atomic
+           write with a .bak copy, read falls back to the .bak, backups (newest 10) in files/backups-<name>/. */
+        private boolean dataName(String n) { return "thoughts".equals(n); }
+
+        @JavascriptInterface
+        public String loadData(String n) {
+            if (!dataName(n)) return "";
+            File f = new File(getFilesDir(), n + ".json");
+            if (!f.exists()) f = new File(getFilesDir(), n + ".bak.json");
+            if (!f.exists()) return "";
+            try (FileInputStream is = new FileInputStream(f)) {
+                return new String(readAll(is), StandardCharsets.UTF_8);
+            } catch (IOException e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public boolean saveData(String n, String json) {
+            if (!dataName(n)) return false;
+            File dir = getFilesDir(), tmp = new File(dir, n + ".tmp"), f = new File(dir, n + ".json"), bak = new File(dir, n + ".bak.json");
+            try (FileOutputStream os = new FileOutputStream(tmp)) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+                os.getFD().sync();
+            } catch (IOException e) { return false; }
+            if (f.exists()) { bak.delete(); f.renameTo(bak); }
+            return tmp.renameTo(f);
+        }
+
+        @JavascriptInterface
+        public boolean backupData(String n, String name) {
+            if (!dataName(n)) return false;
+            File src = new File(getFilesDir(), n + ".json");
+            if (!src.exists() || name == null || name.contains("/") || name.contains("..")) return false;
+            File dir = new File(getFilesDir(), "backups-" + n);
+            dir.mkdirs();
+            try (FileInputStream is = new FileInputStream(src); FileOutputStream os = new FileOutputStream(new File(dir, name))) {
+                os.write(readAll(is));
+                os.getFD().sync();
+            } catch (IOException e) { return false; }
+            File[] all = dir.listFiles();
+            if (all != null && all.length > 10) {
+                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                for (int i = 10; i < all.length; i++) all[i].delete();
+            }
+            return true;
+        }
+
+        @JavascriptInterface
+        public String loadDataBackup(String n) {
+            if (!dataName(n)) return "";
+            File f = new File(getFilesDir(), n + ".bak.json");
+            if (!f.exists()) return "";
+            try (FileInputStream is = new FileInputStream(f)) {
+                return new String(readAll(is), StandardCharsets.UTF_8);
+            } catch (IOException e) { return ""; }
+        }
+
         /** The previous version of db.json (written by saveDb). */
         @JavascriptInterface
         public String loadDbBackup() {

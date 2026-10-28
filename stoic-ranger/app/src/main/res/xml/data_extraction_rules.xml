@@ -2,9 +2,11 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="file" path="db.json" />
+        <include domain="file" path="thoughts.json" />
         <exclude domain="sharedpref" path="secrets.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="db.json" />
+        <include domain="file" path="thoughts.json" />
     </device-transfer>
 </data-extraction-rules>

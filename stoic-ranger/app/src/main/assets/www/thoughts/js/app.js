@@ -39,7 +39,6 @@ function route() {
 }
 DT.route = route;
 window.addEventListener('hashchange', () => {
-  if (!DT.isUnlocked()) return;
   const h = location.hash;
   if (stack.length > 1 && stack[stack.length - 2] === h) stack.pop();
   else if (/^#\/(today|authors|favourites|more)$/.test(h)) stack = [h];   // a main tab starts a new trail
@@ -62,40 +61,11 @@ DT.applyTheme = () => {
 };
 
 /* ---------- boot ---------- */
-/* ---------- web app password (iPhone / iPad only; the Android app has no lock) ----------
-   One-time entry per device: a correct password sets the marker 'dt.unlocked' in the page storage. It is kept
-   separate from the favourites (db) and the service worker cache, so app updates, backups and restores never touch
-   it, and a later password change does not lock out people who already got in. Only the SHA-256 of the password is
-   in the code. This keeps casual visitors out; the files themselves stay public on GitHub Pages. */
-DT.PASS_SHA256 = '5096644aada20e45d5b3394e28e169b6cfb634657d697851e61aaaabed2eb402';
-const UNLOCK = 'dt.unlocked';
-DT.isUnlocked = () => { if (DT.native) return true; try { return !!localStorage.getItem(UNLOCK); } catch (e) { return false; } };
-const sha256 = async t => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))).map(b => b.toString(16).padStart(2, '0')).join('');
-function lockScreen(done) {
-  DT.header('Daily Thoughts');
-  $('#nav').hidden = true;
-  $('#view').innerHTML = `<div class="hero lock">
-      <div class="wlogo">${DT.logo('hlogo')}</div>
-      <div class="kicker">Stoic Ranger // Daily Thoughts</div>
-      <h1>Password</h1>
-      <p>Enter the password you were given. You only need it once on this device.</p>
-    </div>
-    <form class="stack" id="lForm"><input type="password" id="lPass" autocomplete="current-password" placeholder="Password" required>
-      <button class="btn pri big">Open Daily Thoughts</button><p class="note" id="lMsg"></p></form>`;
-  $('#lForm').onsubmit = async e => {
-    e.preventDefault();
-    if (await sha256($('#lPass').value.trim()) === DT.PASS_SHA256) {
-      try { localStorage.setItem(UNLOCK, new Date().toISOString()); } catch (x) { }
-      $('#nav').hidden = false; done();
-    } else { $('#lMsg').textContent = 'That is not the password.'; $('#lPass').select(); }
-  };
-}
-
+/* The password of the web app is asked once for the whole Stoic Ranger app (web/native-web.js), not here. */
 document.addEventListener('DOMContentLoaded', () => {
   $('#sprite').innerHTML = DT.SPRITE;
   $('#hBack').onclick = () => DT.back();
   DT.applyTheme();
-  if (!DT.isUnlocked()) { lockScreen(start); return; }
   start();
 });
 function start() {
