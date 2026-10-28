@@ -5,7 +5,9 @@
    2. an entry saved in one part is there after a restart and in the other parts; the previous copy is kept,
    3. a damaged db.json falls back to the previous copy; data from a newer version opens read-only, never overwritten,
    4. the localStorage mirror is used when it is newer than IndexedDB (a write iOS cut short),
-   5. after one online start every page opens offline (service worker).
+   5. after one online start every page opens offline (service worker),
+   6. Daily Thoughts (1.0.1): its own file thoughts.json; 1.0.0 favourites in db.json are copied over on the first
+      start (db.json backed up, left as it was); the Daily Thoughts page asks for no password of its own.
    The Android path (conversion of SR_Database data, imports, cross-part links) is checked by stoic-ranger/tools/test-one-app.mjs.
    Usage: node tools/test-web.mjs [--shots]   (--shots saves iPhone-size screenshots to dist-shots/) */
 import http from 'node:http';
@@ -114,8 +116,10 @@ const dbOf = async p => JSON.parse((await idbAll(p))['sr/db.json'] || 'null');
   await p.evaluate(() => { DT.toggleFav(DT.quoteOfDay().id); DT.flush(); });
   await leave(p);
   d = await dbOf(p);
-  const bak = JSON.parse((await idbAll(p))['sr/db.bak.json'] || '{}');
-  ok(d.thoughtFavs.length === 1 && d.shooters.some(s => s.uid === 'u-test-901'), 'a favourite quote is saved next to everything else');
+  const all = await idbAll(p), th = JSON.parse(all['sr/thoughts.json'] || 'null');
+  const bak = JSON.parse(all['sr/db.bak.json'] || '{}');
+  ok(th && th.app === 'stoic-ranger-thoughts' && th.favs.length === 1 && !arr(d.thoughtFavs).length && d.shooters.some(s => s.uid === 'u-test-901'),
+    'a favourite quote is saved in thoughts.json, the shooting database keeps everything else');
   ok(bak.app === 'stoic-ranger' && bak.shooters.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
   await open(p, '');
   ok(await p.evaluate(() => /Daily Thoughts/i.test(document.body.innerText) && !!document.querySelector('.srwis')), "home shows today's thought and the parts");
@@ -152,6 +156,36 @@ function arr(a) { return Array.isArray(a) ? a : []; }
   await p.evaluate(t => localStorage.setItem('sr.db', t), JSON.stringify(b));
   await open(p, 'drills/');
   ok(await p.evaluate(() => SD.db.shooters.length === 2), 'newer localStorage copy wins over an older IndexedDB copy');
+  await ctx.close();
+}
+
+/* 6: Daily Thoughts in its own file */
+{
+  const { ctx, p } = await fresh();
+  const v100 = { app: 'stoic-ranger', format: 1, updated: '2026-10-28T10:00:00.000Z', schemas: { dt: 1, tl: 3 }, settings: { common: { theme: 'auto' }, dt: { theme: 'auto', seen: 3 } },
+    history: [{ at: '2026-10-28T09:00:00.000Z', part: 'dt', note: 'x' }], shooters: [{ id: 'S-001', uid: 'u1', name: 'A' }], weapons: [], trainers: [], trainings: [],
+    thoughtFavs: [{ id: 'q-seneca-01', at: '2026-10-27T08:00:00Z' }, { id: 'q-epictetus-02', at: '' }] };
+  await idbPut(p, { 'sr/db.json': JSON.stringify(v100) });
+  await open(p, 'thoughts/', '#/favourites');
+  ok(await p.evaluate(() => DT.db.favs.length === 2 && !document.querySelector('#lPass') && !document.querySelector('#srLock')), 'Daily Thoughts shows the 1.0.0 favourites, no password of its own');
+  await leave(p);
+  let all = await idbAll(p);
+  const th = JSON.parse(all['sr/thoughts.json'] || 'null');
+  ok(th && th.favs.map(f => f.id).join() === 'q-seneca-01,q-epictetus-02' && th.schema === 1 && th.settings.seen === 3, '1.0.0 favourites and settings copied into thoughts.json');
+  ok(all['sr/db.json'] === JSON.stringify(v100), 'db.json left exactly as it was (add-only)');
+  ok(Object.keys(all).some(k => k.startsWith('sr/backups/db-before-thoughts-file-')), 'backup of db.json kept before the move');
+  await open(p, 'thoughts/', '#/favourites');
+  await p.evaluate(() => { DT.toggleFav('q-seneca-01'); DT.flush(); });
+  await leave(p);
+  all = await idbAll(p);
+  ok(JSON.parse(all['sr/thoughts.json']).favs.length === 1 && JSON.parse(all['sr/thoughts.bak.json']).app === 'stoic-ranger-thoughts' && all['sr/db.json'] === JSON.stringify(v100),
+    'later changes go to thoughts.json only (previous copy kept), the move runs once');
+  await idbPut(p, { 'sr/thoughts.json': '{"favs":[', 'sr/thoughts.bak.json': all['sr/thoughts.json'] });
+  await p.evaluate(() => localStorage.removeItem('sr.thoughts'));       // no mirror either: only the previous copy is left
+  await open(p, 'thoughts/', '#/favourites');
+  ok(await p.evaluate(() => DT.db.favs.length === 1), 'damaged thoughts.json falls back to the previous copy');
+  await leave(p);
+  ok(Object.keys(await idbAll(p)).some(k => k.startsWith('sr/backups-thoughts/thoughts-damaged-')), 'damaged thoughts.json kept as a backup');
   await ctx.close();
 }
 

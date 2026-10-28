@@ -39,7 +39,8 @@ stoic-ranger/tools/build-debug.sh           # APK without Gradle (see stoic-rang
 
 - One database in the browser's IndexedDB for the site (`stoic-ranger` → `files`, keys `sr/db.json`,
   the previous copy `sr/db.bak.json`, `sr/backups/` newest 10), mirrored to localStorage while it fits, in case
-  iOS stops a write half way.
+  iOS stops a write half way. Daily Thoughts has its own file next to it (from 1.0.1): `sr/thoughts.json`,
+  `sr/thoughts.bak.json`, `sr/backups-thoughts/`.
 - Same code as Android, so the same rules: updates never delete entries, data from a newer version opens read-only.
 - The data is tied to the web address. Moving the site means backup and restore.
 

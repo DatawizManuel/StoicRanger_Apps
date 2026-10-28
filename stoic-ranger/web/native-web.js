@@ -2,8 +2,9 @@
    The app code in app/src/main/assets/www runs unchanged: sr/hub.js talks to window.SRNative exactly as on
    Android, and this file answers.
 
-   Storage: IndexedDB "stoic-ranger" (one store "files"; keys "sr/db.json", "sr/db.bak.json", "sr/backups/…"),
-   plus a localStorage mirror of db.json when it fits, so a save that iOS cuts short still leaves a copy. The
+   Storage: IndexedDB "stoic-ranger" (one store "files"; keys "sr/db.json", "sr/db.bak.json", "sr/backups/…", and
+   since 1.0.1 "sr/thoughts.json", "sr/thoughts.bak.json", "sr/backups-thoughts/…" for Daily Thoughts),
+   plus a localStorage mirror of each file when it fits, so a save that iOS cuts short still leaves a copy. The
    bridge is synchronous (loadDb, saveDb …), so boot() loads the files into memory first, then loads the page's
    scripts and fires DOMContentLoaded for them. Each page (home, gun/, training/, drills/) boots the same way. */
 'use strict';
@@ -12,6 +13,7 @@ const CFG = window.SR_WEB;                       // written by tools/build-web.m
 const APP = 'sr';
 const IDB_NAME = 'stoic-ranger', STORE = 'files';
 const LS_MIRROR = 'sr.db', LS_MIRROR_MAX = 2000000;
+const DATA = ['thoughts'];                        // files of their own next to db.json (1.0.1), see loadData()
 const mem = new Map();                           // key -> string, the synchronous view of the stored files
 
 /* ---------- IndexedDB ---------- */
@@ -48,9 +50,31 @@ const updatedOf = txt => { try { return String(JSON.parse(txt).updated || ''); }
 
 /* ---------- boot: load into memory, then start the app ---------- */
 async function load() {
-  const keys = [k('db.json'), k('db.bak.json')];
+  const keys = ['db', ...DATA].flatMap(n => [k(n + '.json'), k(n + '.bak.json')]);
   const got = await idbGet(keys);
   keys.forEach(key => { if (got[key] != null) mem.set(key, got[key]); });
+}
+const lsKey = n => n === 'db' ? LS_MIRROR : 'sr.' + n;
+/** One file: keep the previous version as .bak, mirror into localStorage when it fits, write to IndexedDB. */
+function writeFile(n, json) {
+  const f = n + '.json', b = n + '.bak.json', prev = read(f), puts = { [k(f)]: json };
+  if (prev) { puts[k(b)] = prev; mem.set(k(b), prev); }
+  mem.set(k(f), json);
+  try { if (json.length <= LS_MIRROR_MAX) localStorage.setItem(lsKey(n), json); else localStorage.removeItem(lsKey(n)); }
+  catch (e) { try { localStorage.removeItem(lsKey(n)); } catch (e2) { } }
+  idbPut(puts);
+  return true;
+}
+/** Copy of a file under <app>/<dir>/ (newest 10 kept). */
+function backupFile(n, dir, name) {
+  const src = read(n + '.json');
+  if (!src || !name || /[\/]|\.\./.test(name)) return false;
+  idbPut({ [k(dir + '/' + name)]: src });
+  idbKeys(k(dir + '/')).then(all => { if (all.length > 10) idbGet(all).then(got => {
+    const sorted = all.sort((a, b) => (updatedOf(got[b]) || '').localeCompare(updatedOf(got[a]) || '') || b.localeCompare(a));
+    idbPut({}, sorted.slice(10));
+  }); });
+  return true;
 }
 
 /* ---------- one-time password (Manuel 2026-10-28): asked once per device, then remembered ----------
@@ -106,12 +130,14 @@ async function boot() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
   await load();
   // The localStorage mirror wins only if it is newer (a save whose IndexedDB write did not finish) or IndexedDB holds a damaged copy.
-  let ls = ''; try { ls = localStorage.getItem(LS_MIRROR) || ''; } catch (e) { }
-  const own = read('db.json');
-  if (ls && ls !== own) {
-    const a = updatedOf(ls), b = own ? updatedOf(own) : '';
-    if (a && (b === null || (b && a > b))) { mem.set(k('db.json'), ls); if (own) mem.set(k('db.bak.json'), own); idbPut({ [k('db.json')]: ls }); }
-  }
+  ['db', ...DATA].forEach(n => {
+    let ls = ''; try { ls = localStorage.getItem(lsKey(n)) || ''; } catch (e) { }
+    const own = read(n + '.json');
+    if (ls && ls !== own) {
+      const a = updatedOf(ls), b = own ? updatedOf(own) : '';
+      if (a && (b === null || (b && a > b))) { mem.set(k(n + '.json'), ls); if (own) mem.set(k(n + '.bak.json'), own); idbPut({ [k(n + '.json')]: ls }); }
+    }
+  });
   for (const src of CFG.scripts) await new Promise(res => {
     const s = document.createElement('script'); s.src = src; s.async = false;
     s.onload = s.onerror = res; document.body.appendChild(s);
@@ -178,27 +204,15 @@ function print(html, job, size) {
 /* ---------- the bridge ---------- */
 const N = {
   loadDb: () => read('db.json') || read('db.bak.json'),
-  saveDb(json) {
-    const prev = read('db.json'), puts = { [k('db.json')]: json };
-    if (prev) { puts[k('db.bak.json')] = prev; mem.set(k('db.bak.json'), prev); }
-    mem.set(k('db.json'), json);
-    try { if (json.length <= LS_MIRROR_MAX) localStorage.setItem(LS_MIRROR, json); else localStorage.removeItem(LS_MIRROR); }
-    catch (e) { try { localStorage.removeItem(LS_MIRROR); } catch (e2) { } }
-    idbPut(puts);
-    return true;
-  },
+  saveDb: json => writeFile('db', json),
   /** Copy of db.json under <app>/backups/ before a schema migration (or of a damaged file); keeps the newest 10. */
-  backupDb(name) {
-    const src = read('db.json');
-    if (!src || !name || /[\/]|\.\./.test(name)) return false;
-    idbPut({ [k('backups/' + name)]: src });
-    idbKeys(k('backups/')).then(all => { if (all.length > 10) idbGet(all).then(got => {
-      const sorted = all.sort((a, b) => (updatedOf(got[b]) || '').localeCompare(updatedOf(got[a]) || '') || b.localeCompare(a));
-      idbPut({}, sorted.slice(10));
-    }); });
-    return true;
-  },
+  backupDb: name => backupFile('db', 'backups', name),
   loadDbBackup: () => read('db.bak.json'),
+  // files of their own (Daily Thoughts: "thoughts"), same rules as db.json; MainActivity.java has the same four
+  loadData: n => DATA.includes(n) ? read(n + '.json') || read(n + '.bak.json') : '',
+  saveData: (n, json) => DATA.includes(n) && writeFile(n, json),
+  backupData: (n, name) => DATA.includes(n) && backupFile(n, 'backups-' + n, name),
+  loadDataBackup: n => DATA.includes(n) ? read(n + '.bak.json') : '',
   isNight: dark,
   getSecret: key => { try { return localStorage.getItem('sr.secret.' + key) || ''; } catch (e) { return ''; } },
   setSecret: (key, v) => { try { localStorage.setItem('sr.secret.' + key, v); } catch (e) { } },

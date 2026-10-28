@@ -25,6 +25,26 @@ thoughtFavs, resultsChanged }`.
   its migrations run again on the merged data (they are safe to repeat).
 - **Restore** of a Stoic Ranger backup replaces the file, again with a copy kept first.
 
+## Stoic Ranger 1.0.1: Daily Thoughts in its own file
+
+Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.0.1 it lives in
+`files/thoughts.json` (web: `sr/thoughts.json`):
+`{ app: 'stoic-ranger-thoughts', format: 1, created, updated, schema, settings, favs, history }`.
+
+- `schema` is the Daily Thoughts data version (`DT.SCHEMA`), `format` the version of this file (`TFORMAT` in
+  `www/sr/hub.js`). A `thoughts.json` with a higher `format` makes the app read-only, like a newer `db.json`.
+- **First start of 1.0.1:** if there is no `thoughts.json` yet and `db.json` holds Daily Thoughts data
+  (`thoughtFavs`, `settings.dt`, `schemas.dt`), `db.json` is copied to `files/backups/db-before-thoughts-file-<date>.json`,
+  then the favourites, settings, schema and the Daily Thoughts history entries are copied into `thoughts.json`.
+  **`db.json` is not changed**: the old fields stay as they were (add-only), nothing in 1.0.1 reads them again.
+- Same safety as `db.json`: atomic write with `thoughts.bak.json`, a damaged file falls back to it (the damaged
+  one is kept in `files/backups-thoughts/`), backups before an import or restore, newest 10 kept.
+- **Backup of everything** (home › Data): the `db.json` content plus `thoughts` (the whole `thoughts.json`), and
+  `thoughtFavs` filled with the current favourites so Stoic Ranger 1.0.0 can still restore it.
+- **Restore:** a 1.0.1 backup restores both files; a 1.0.0 backup restores `db.json` and rebuilds `thoughts.json`
+  from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
+- Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
+
 ## Gun Database (up to SR_Database 0.6.0)
 
 - All data is one file, `files/db.json`, with a `schema` number (`RB.SCHEMA` in `www/gun/js/core.js`).
