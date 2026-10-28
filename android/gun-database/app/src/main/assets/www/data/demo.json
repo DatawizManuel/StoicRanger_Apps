@@ -1,0 +1,1529 @@
+{
+ "schema": 1,
+ "created": "2026-10-24T13:20:16",
+ "updated": "2026-10-24T13:20:16",
+ "weapons": [
+  {
+   "id": "W-001",
+   "name": "Tikka T3x TAC A1",
+   "aliases": "Tikka",
+   "make": "Tikka",
+   "model": "T3x TAC A1",
+   "caliber": "6.5 Creedmoor",
+   "barrelLengthMm": 610,
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "status": "Active",
+   "roundsBeforeLog": 0,
+   "notes": "Example rifle",
+   "sightHeightMm": 38,
+   "zeroM": 100,
+   "scopeUnit": "mrad",
+   "clickValue": 0.1
+  }
+ ],
+ "barrels": [
+  {
+   "id": "B-001",
+   "weaponId": "W-001",
+   "name": "Factory #1",
+   "installed": "2025-04-01",
+   "removed": "2026-08-30",
+   "roundsAtInstall": 0,
+   "notes": "Example"
+  },
+  {
+   "id": "B-002",
+   "weaponId": "W-001",
+   "name": "Barrel #2",
+   "installed": "2026-08-30",
+   "removed": "",
+   "roundsAtInstall": 0,
+   "notes": "Example"
+  }
+ ],
+ "munitions": [
+  {
+   "id": "M-001",
+   "name": "Factory load A (example)",
+   "type": "Factory",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "140 gr match",
+   "bulletWeightG": 9.07,
+   "powder": "",
+   "chargeG": null,
+   "primer": "",
+   "cbtoMm": null,
+   "status": "Active",
+   "bcG1": 0.61,
+   "bcG7": 0.305,
+   "nominalV0": 823,
+   "mfrBarrelMm": 610
+  },
+  {
+   "id": "M-002",
+   "name": "Factory load B (example)",
+   "type": "Factory",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "136 gr",
+   "bulletWeightG": 8.81,
+   "powder": "",
+   "chargeG": null,
+   "primer": "",
+   "cbtoMm": null,
+   "status": "Active",
+   "bcG1": 0.585,
+   "bcG7": 0.296,
+   "nominalV0": 830,
+   "mfrBarrelMm": 610
+  },
+  {
+   "id": "M-003",
+   "name": "Ladder 2.62 g (example)",
+   "type": "Handload",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "140 gr match",
+   "bulletWeightG": 9.07,
+   "powder": "Example powder",
+   "chargeG": 2.62,
+   "primer": "Small rifle",
+   "cbtoMm": 56,
+   "status": "Active",
+   "bcG7": 0.305
+  },
+  {
+   "id": "M-004",
+   "name": "Ladder 2.66 g (example)",
+   "type": "Handload",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "140 gr match",
+   "bulletWeightG": 9.07,
+   "powder": "Example powder",
+   "chargeG": 2.66,
+   "primer": "Small rifle",
+   "cbtoMm": 56,
+   "status": "Active",
+   "bcG7": 0.305
+  },
+  {
+   "id": "M-005",
+   "name": "Ladder 2.70 g (example)",
+   "type": "Handload",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "140 gr match",
+   "bulletWeightG": 9.07,
+   "powder": "Example powder",
+   "chargeG": 2.7,
+   "primer": "Small rifle",
+   "cbtoMm": 56,
+   "status": "Active",
+   "bcG7": 0.305
+  },
+  {
+   "id": "M-006",
+   "name": "Ladder 2.74 g (example)",
+   "type": "Handload",
+   "caliber": "6.5 Creedmoor",
+   "bullet": "140 gr match",
+   "bulletWeightG": 9.07,
+   "powder": "Example powder",
+   "chargeG": 2.74,
+   "primer": "Small rifle",
+   "cbtoMm": 56,
+   "status": "Active",
+   "bcG7": 0.305
+  }
+ ],
+ "shooters": [
+  {
+   "id": "S-001",
+   "name": "Example shooter",
+   "status": "Active"
+  }
+ ],
+ "roundsLog": [
+  {
+   "id": "R-001",
+   "date": "2025-12-31",
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "rounds": 1900,
+   "note": "Example: rounds before the log started"
+  },
+  {
+   "id": "R-002",
+   "date": "2026-06-30",
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "rounds": 300,
+   "note": "Example: practice without sheets"
+  }
+ ],
+ "sheets": [
+  {
+   "no": "EX-001",
+   "date": "2026-01-17",
+   "time": "09:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "25",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "827",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "8",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-001",
+   "hits": [
+    {
+     "x": 4.7,
+     "y": 6.6
+    },
+    {
+     "x": 20.6,
+     "y": -2.4
+    },
+    {
+     "x": 0.2,
+     "y": -13.8
+    },
+    {
+     "x": -6.3,
+     "y": -23.9
+    },
+    {
+     "x": -21.1,
+     "y": -34
+    },
+    {
+     "x": -3.9,
+     "y": -6.1
+    },
+    {
+     "x": -3.5,
+     "y": -18.1
+    },
+    {
+     "x": -13.1,
+     "y": -16.6
+    },
+    {
+     "x": 14.8,
+     "y": -7.3
+    },
+    {
+     "x": 13.8,
+     "y": -9.9
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-002",
+   "date": "2026-02-07",
+   "time": "10:00",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "20",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load B (example)",
+   "bullet": "9.07",
+   "v0": "838",
+   "v0sd": "10",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "12",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-002",
+   "hits": [
+    {
+     "x": -45.4,
+     "y": 48.4
+    },
+    {
+     "x": 5.9,
+     "y": 10.6
+    },
+    {
+     "x": 7.5,
+     "y": -17.4
+    },
+    {
+     "x": -19.9,
+     "y": 24.6
+    },
+    {
+     "x": -5.6,
+     "y": 11
+    },
+    {
+     "x": -3.8,
+     "y": 19.4
+    },
+    {
+     "x": -44.1,
+     "y": 33.8
+    },
+    {
+     "x": -1.6,
+     "y": 26.1
+    },
+    {
+     "x": -44.6,
+     "y": -21.9
+    },
+    {
+     "x": -28.9,
+     "y": 5.4
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-002",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-003",
+   "date": "2026-02-21",
+   "time": "11:30",
+   "shooter": "Example shooter",
+   "purpose": "training",
+   "discipline": "Group · 5 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "30",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "826",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "1.4",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "22",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-003",
+   "hits": [
+    {
+     "x": -59.2,
+     "y": -19.6
+    },
+    {
+     "x": -58.8,
+     "y": 0.4
+    },
+    {
+     "x": -6.1,
+     "y": 23.8
+    },
+    {
+     "x": -15.5,
+     "y": -60
+    },
+    {
+     "x": 4.7,
+     "y": -30.9
+    },
+    {
+     "x": -18.8,
+     "y": -18.6
+    },
+    {
+     "x": -13,
+     "y": -35.5
+    },
+    {
+     "x": -18.7,
+     "y": -6.1
+    },
+    {
+     "x": -44.8,
+     "y": 31.4
+    },
+    {
+     "x": -12,
+     "y": 16.7
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-004",
+   "date": "2026-03-14",
+   "time": "12:00",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "20",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "819",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "4",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-004",
+   "hits": [
+    {
+     "x": 6.7,
+     "y": -16.6
+    },
+    {
+     "x": -3.6,
+     "y": 3.6
+    },
+    {
+     "x": 4.9,
+     "y": -12.8
+    },
+    {
+     "x": -7.1,
+     "y": -22.9
+    },
+    {
+     "x": 4.3,
+     "y": -3.6
+    },
+    {
+     "x": -2.3,
+     "y": -17.4
+    },
+    {
+     "x": -0.8,
+     "y": -11.5
+    },
+    {
+     "x": 4.4,
+     "y": -8.1
+    },
+    {
+     "x": -1.4,
+     "y": -19.5
+    },
+    {
+     "x": -1.8,
+     "y": 1
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-005",
+   "date": "2026-04-04",
+   "time": "09:30",
+   "shooter": "Example shooter",
+   "purpose": "training",
+   "discipline": "Group · 5 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "40",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "824",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "1.4",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "22",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-005",
+   "hits": [
+    {
+     "x": -5.1,
+     "y": -1.9
+    },
+    {
+     "x": -42.5,
+     "y": 17.1
+    },
+    {
+     "x": 51.5,
+     "y": 11.4
+    },
+    {
+     "x": -33.7,
+     "y": -93.2
+    },
+    {
+     "x": 84.4,
+     "y": -29.6
+    },
+    {
+     "x": -28.9,
+     "y": -9.4
+    },
+    {
+     "x": 31.9,
+     "y": -79.3
+    },
+    {
+     "x": 13.3,
+     "y": 33.5
+    },
+    {
+     "x": -88.4,
+     "y": -32.2
+    },
+    {
+     "x": 5.7,
+     "y": -52.2
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-006",
+   "date": "2026-05-02",
+   "time": "10:00",
+   "shooter": "Example shooter",
+   "purpose": "training",
+   "discipline": "Group · 5 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "35",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load B (example)",
+   "bullet": "9.07",
+   "v0": "838",
+   "v0sd": "10",
+   "zero": "100",
+   "dialE": "1.4",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "17",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-006",
+   "hits": [
+    {
+     "x": -127.3,
+     "y": -16.2
+    },
+    {
+     "x": -32.8,
+     "y": -65.4
+    },
+    {
+     "x": 44.1,
+     "y": 26.5
+    },
+    {
+     "x": 34.9,
+     "y": -74.9
+    },
+    {
+     "x": -5.8,
+     "y": 104.5
+    },
+    {
+     "x": 13.3,
+     "y": -9.2
+    },
+    {
+     "x": -107.6,
+     "y": 49.4
+    },
+    {
+     "x": 23.8,
+     "y": 57.1
+    },
+    {
+     "x": 71.3,
+     "y": 18.7
+    },
+    {
+     "x": -10,
+     "y": -90.6
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-002",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-007",
+   "date": "2026-06-06",
+   "time": "11:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "20",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "828",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "17",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-007",
+   "hits": [
+    {
+     "x": -10.7,
+     "y": -14.8
+    },
+    {
+     "x": 11.2,
+     "y": -3
+    },
+    {
+     "x": 19.3,
+     "y": 0.2
+    },
+    {
+     "x": -0.1,
+     "y": 37
+    },
+    {
+     "x": 40.5,
+     "y": 15.9
+    },
+    {
+     "x": 22.8,
+     "y": -3.9
+    },
+    {
+     "x": 4.1,
+     "y": -15.6
+    },
+    {
+     "x": -4.9,
+     "y": -2.4
+    },
+    {
+     "x": 34.6,
+     "y": -29.3
+    },
+    {
+     "x": -13.4,
+     "y": 11.3
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-008",
+   "date": "2026-07-11",
+   "time": "12:00",
+   "shooter": "Example shooter",
+   "purpose": "training",
+   "discipline": "Group · 5 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "40",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "826",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "1.4",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "22",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-008",
+   "hits": [
+    {
+     "x": -52.1,
+     "y": -45.5
+    },
+    {
+     "x": 95.3,
+     "y": -64.6
+    },
+    {
+     "x": 60,
+     "y": -28.9
+    },
+    {
+     "x": -34.9,
+     "y": 6.9
+    },
+    {
+     "x": 7.8,
+     "y": -22.5
+    },
+    {
+     "x": 95.6,
+     "y": -17.1
+    },
+    {
+     "x": -90.6,
+     "y": -91.1
+    },
+    {
+     "x": 35.1,
+     "y": -48.5
+    },
+    {
+     "x": -47.2,
+     "y": -7.6
+    },
+    {
+     "x": 76.6,
+     "y": -27.2
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-009",
+   "date": "2026-08-08",
+   "time": "09:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "20",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "812",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "17",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-009",
+   "hits": [
+    {
+     "x": -27.4,
+     "y": -12.3
+    },
+    {
+     "x": 24.7,
+     "y": 22.2
+    },
+    {
+     "x": -4.1,
+     "y": 4.7
+    },
+    {
+     "x": -16.5,
+     "y": -4.1
+    },
+    {
+     "x": -29,
+     "y": 10.7
+    },
+    {
+     "x": -5.6,
+     "y": 9.4
+    },
+    {
+     "x": 21,
+     "y": 11.6
+    },
+    {
+     "x": -0.2,
+     "y": 10.8
+    },
+    {
+     "x": -41.4,
+     "y": 19.5
+    },
+    {
+     "x": 8.4,
+     "y": 10.5
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-010",
+   "date": "2026-08-22",
+   "time": "10:00",
+   "shooter": "Example shooter",
+   "purpose": "training",
+   "discipline": "Group · 5 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "30",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Factory #1",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "812",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "1.8",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "22",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-010",
+   "hits": [
+    {
+     "x": 97.6,
+     "y": 166.5
+    },
+    {
+     "x": 19.5,
+     "y": -4.1
+    },
+    {
+     "x": -21,
+     "y": 32
+    },
+    {
+     "x": 133.3,
+     "y": 78.3
+    },
+    {
+     "x": 106.3,
+     "y": 103.3
+    },
+    {
+     "x": -47.5,
+     "y": 37.9
+    },
+    {
+     "x": 116.1,
+     "y": -31.3
+    },
+    {
+     "x": 56.4,
+     "y": 135.2
+    },
+    {
+     "x": -9,
+     "y": 169.9
+    },
+    {
+     "x": 99.2,
+     "y": 66.4
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-001",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-011",
+   "date": "2026-09-05",
+   "time": "11:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "20",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "822",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "17",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-011",
+   "hits": [
+    {
+     "x": 0.3,
+     "y": 7.1
+    },
+    {
+     "x": -7.6,
+     "y": 18
+    },
+    {
+     "x": -13.6,
+     "y": 18.1
+    },
+    {
+     "x": -0.5,
+     "y": 15.5
+    },
+    {
+     "x": -5.9,
+     "y": 4.5
+    },
+    {
+     "x": -3.8,
+     "y": 16.4
+    },
+    {
+     "x": -4.8,
+     "y": 19.2
+    },
+    {
+     "x": -8.8,
+     "y": 10.3
+    },
+    {
+     "x": -0.2,
+     "y": 12.8
+    },
+    {
+     "x": -9.9,
+     "y": 18.1
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-012",
+   "date": "2026-09-19",
+   "time": "12:00",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "12",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Ladder 2.62 g (example)",
+   "bullet": "9.07",
+   "v0": "812",
+   "v0sd": "6",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "4",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-012",
+   "hits": [
+    {
+     "x": -10.8,
+     "y": 4.9
+    },
+    {
+     "x": 21.6,
+     "y": 12.3
+    },
+    {
+     "x": -0.8,
+     "y": -14
+    },
+    {
+     "x": -21.2,
+     "y": -4.9
+    },
+    {
+     "x": 2.9,
+     "y": 21.4
+    },
+    {
+     "x": 19.4,
+     "y": -1.6
+    },
+    {
+     "x": -21.4,
+     "y": 2.3
+    },
+    {
+     "x": -3.8,
+     "y": 0.2
+    },
+    {
+     "x": 18.5,
+     "y": -8.9
+    },
+    {
+     "x": 16.4,
+     "y": -11.9
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-003",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-013",
+   "date": "2026-09-19",
+   "time": "09:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "12",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Ladder 2.66 g (example)",
+   "bullet": "9.07",
+   "v0": "824",
+   "v0sd": "4",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "4",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-013",
+   "hits": [
+    {
+     "x": 12.1,
+     "y": -58
+    },
+    {
+     "x": 1.9,
+     "y": -24.6
+    },
+    {
+     "x": -1.1,
+     "y": -56.8
+    },
+    {
+     "x": -2.3,
+     "y": -44.7
+    },
+    {
+     "x": 3,
+     "y": -57.4
+    },
+    {
+     "x": -1.3,
+     "y": -40.2
+    },
+    {
+     "x": 8.4,
+     "y": -37.3
+    },
+    {
+     "x": 4.5,
+     "y": -46.5
+    },
+    {
+     "x": 3.5,
+     "y": -40.9
+    },
+    {
+     "x": 1.8,
+     "y": -44.7
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-004",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-014",
+   "date": "2026-09-19",
+   "time": "10:00",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "12",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Ladder 2.70 g (example)",
+   "bullet": "9.07",
+   "v0": "838",
+   "v0sd": "5",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "4",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-014",
+   "hits": [
+    {
+     "x": -2.2,
+     "y": 14
+    },
+    {
+     "x": -8.3,
+     "y": 0.7
+    },
+    {
+     "x": -6.1,
+     "y": -11.8
+    },
+    {
+     "x": 3.1,
+     "y": 10.1
+    },
+    {
+     "x": -14.3,
+     "y": 13.4
+    },
+    {
+     "x": -2.2,
+     "y": 5.3
+    },
+    {
+     "x": -1.1,
+     "y": 10.8
+    },
+    {
+     "x": 6.2,
+     "y": 8.5
+    },
+    {
+     "x": -8.1,
+     "y": 1.6
+    },
+    {
+     "x": -5.6,
+     "y": 14.3
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-005",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-015",
+   "date": "2026-09-19",
+   "time": "11:30",
+   "shooter": "Example shooter",
+   "purpose": "test",
+   "discipline": "Group · 5 shots",
+   "position": "Bench · bipod + rear bag",
+   "series": "1 / 1",
+   "rounds": "12",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Ladder 2.74 g (example)",
+   "bullet": "9.07",
+   "v0": "846",
+   "v0sd": "9",
+   "zero": "100",
+   "dialE": "",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "100",
+   "setting": "outdoor",
+   "temp": "17",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-015",
+   "hits": [
+    {
+     "x": 15,
+     "y": -11
+    },
+    {
+     "x": 25.9,
+     "y": -31.3
+    },
+    {
+     "x": 8.8,
+     "y": -5.9
+    },
+    {
+     "x": 15.2,
+     "y": -26.7
+    },
+    {
+     "x": 28,
+     "y": -4
+    },
+    {
+     "x": 16.1,
+     "y": -11.5
+    },
+    {
+     "x": 31.9,
+     "y": -44.3
+    },
+    {
+     "x": 10.4,
+     "y": -13.1
+    },
+    {
+     "x": 21.5,
+     "y": -13.1
+    },
+    {
+     "x": 15.5,
+     "y": -8.5
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-006",
+   "shooterId": "S-001",
+   "vel": []
+  },
+  {
+   "no": "EX-016",
+   "date": "2026-10-10",
+   "time": "12:00",
+   "shooter": "Example shooter",
+   "purpose": "competition",
+   "discipline": "Club match · 10 shots",
+   "position": "Prone · bipod",
+   "series": "1 / 1",
+   "rounds": "30",
+   "gun": "Tikka T3x TAC A1",
+   "barrel": "Barrel #2",
+   "optic": "Steiner M7Xi 4-28x56 MSR-2",
+   "caliber": "6.5 Creedmoor",
+   "ammo": "Factory load A (example)",
+   "bullet": "9.07",
+   "v0": "824",
+   "v0sd": "7",
+   "zero": "100",
+   "dialE": "1.5",
+   "dialW": "",
+   "range": "Example range",
+   "coords": "",
+   "elev": "460",
+   "dist": "300",
+   "setting": "outdoor",
+   "temp": "4",
+   "hum": "65",
+   "press": "960",
+   "wind": "",
+   "light": "",
+   "preset": "issf300",
+   "bd": "6.71",
+   "d10": "100",
+   "w": "50",
+   "remarks": "Invented example data.",
+   "id": "SH-EX-016",
+   "hits": [
+    {
+     "x": 9.6,
+     "y": 52.7
+    },
+    {
+     "x": 30.3,
+     "y": 13.3
+    },
+    {
+     "x": 50.6,
+     "y": -108.9
+    },
+    {
+     "x": -59.8,
+     "y": 50.7
+    },
+    {
+     "x": -104.3,
+     "y": -44.5
+    },
+    {
+     "x": 1.7,
+     "y": -39.6
+    },
+    {
+     "x": 126.7,
+     "y": 14.6
+    },
+    {
+     "x": -47,
+     "y": -13.5
+    },
+    {
+     "x": -27.9,
+     "y": -11.2
+    },
+    {
+     "x": -173.5,
+     "y": -37.4
+    }
+   ],
+   "weaponId": "W-001",
+   "barrelId": "B-002",
+   "munitionId": "M-001",
+   "shooterId": "S-001",
+   "vel": []
+  }
+ ],
+ "settings": {
+  "preset": "issf300",
+  "claudeModel": "claude-opus-5-5",
+  "theme": "auto",
+  "sheetPrefix": "ST"
+ }
+}
