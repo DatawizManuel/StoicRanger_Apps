@@ -46,6 +46,13 @@ npx http-server dist              # then open http://localhost:8080/
 - Linking works through the shared site storage, with the same consent rule as on Android (nothing but the
   status is shared until linking is switched on in both apps).
 
+## One-time password
+
+Each app asks for a password on its first start on a device and then remembers it (localStorage + IndexedDB).
+Only a PBKDF2-SHA-256 hash is stored (`LOCK` in `tools/build-web.mjs`); the password is never written into this
+repository. Changing `LOCK` makes every device ask once more. It keeps strangers out of the apps; the code itself
+is public and holds no personal data. To test the right password: `SR_PASSWORD='…' node tools/test-web.mjs`.
+
 ## Android signing key
 
 `debug.keystore` is not in this repository (it is public). Keep it with the Android project on the PC
