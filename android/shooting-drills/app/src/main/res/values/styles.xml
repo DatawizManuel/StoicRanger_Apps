@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="olive">#4B5320</color>
+    <color name="coyote">#5C462A</color>
+    <color name="ink">#121512</color>
+    <color name="paper">#FFFFFF</color>
+    <color name="icon_bg">#3A2C1A</color>
+    <color name="night_bg">#121512</color>
+    <color name="gold">#C9B46A</color>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/ink</item>
+        <item name="android:navigationBarColor">@color/ink</item>
+        <item name="android:colorAccent">@color/olive</item>
+        <item name="android:colorPrimary">@color/olive</item>
+    </style>
+</resources>

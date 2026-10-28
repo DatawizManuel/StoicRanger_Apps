@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Stoic Ranger apps</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{--bg:#f4f2ec;--card:#fff;--fg:#1b1b18;--muted:#5d5b52;--hair:#d9d5c8;--accent:#4B5320}
+@media (prefers-color-scheme:dark){:root{--bg:#121210;--card:#1d1d1a;--fg:#ecebe4;--muted:#a6a395;--hair:#34332d;--accent:#9aa65a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:calc(env(safe-area-inset-top,0px) + 20px) 16px calc(env(safe-area-inset-bottom,0px) + 32px)}
+main{max-width:620px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:.01em}
+h2{font-size:17px;margin:28px 0 8px}
+p{margin:0 0 10px}
+.lead{color:var(--muted);margin-bottom:20px}
+.app{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--hair);padding:12px;margin:0 0 10px;color:inherit;text-decoration:none}
+.app img{border-radius:14px;flex:none}
+.app span{display:flex;flex-direction:column;min-width:0}
+.app b{font-size:18px}
+.app small{color:var(--muted);font-size:14px}
+.app small.v{font-size:12px}
+ol{padding-left:22px;margin:0 0 10px}
+li{margin:0 0 6px}
+.note{background:var(--card);border-left:4px solid var(--accent);padding:10px 12px;margin:0 0 10px}
+.ic{display:inline-block;border:1px solid var(--hair);padding:0 6px;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<h1>Stoic Ranger</h1>
+<p class="lead">The three Stoic Ranger apps for iPhone, iPad and any browser. No App Store, no account: the apps run offline and keep your data on the device.</p>
+
+<!--APPS-->
+
+<h2>Put an app on the iPhone home screen</h2>
+<ol>
+  <li>Open this page in <b>Safari</b>.</li>
+  <li>Tap the app above to open it.</li>
+  <li>Tap the share button <span class="ic">⬆︎</span>, then <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+  <li>Start the app from its home screen icon from then on. It opens full screen and works without signal.</li>
+</ol>
+<p>Repeat for each app you want.</p>
+
+<h2>Your data</h2>
+<p class="note">Entries stay on this device, in the app's storage for this web address. Nothing is uploaded.
+Removing the home screen icon, or clearing Safari's website data, deletes the entries, so save a backup now and then (More › Backup, to iCloud Drive or Files).
+New app versions arrive by themselves when the device is online and never touch your entries.</p>
+<p>Moving from Android: make a backup in the Android app (More › Backup), send it to the iPhone, and restore it in the same app here (More › Restore).</p>
+
+<h2>Linking the apps</h2>
+<p>Linking (shooters and guns shared, rounds and drill results sent across) works when the apps share storage: in the same browser, and on iPhone where iOS lets home screen apps from one web address share it. When iOS keeps them apart, each app tells you the other one is not set up, and every app still works on its own.</p>
+</main>
+</body>
+</html>
