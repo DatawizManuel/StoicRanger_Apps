@@ -163,7 +163,7 @@ function data(el) {
     <div class="card"><h3>Appearance</h3>
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(d.settings.common.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div></div>
     <div class="card"><h3>About</h3>
-      <p><b>Stoic Ranger</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : ''}</p>
+      <p><b>Stoic Ranger</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : info.windows ? ' · Windows' : ''}</p>
       <p class="note">One app: Gun Database, Training Log and Shooting Drills share one database (until version 0.x separate apps). The same app runs on Android, iPhone and Windows and reads and writes the same database.xlsx. ${count(d, 'weapons')} guns · ${count(d, 'shooters')} shooters · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results.</p>
       <p class="note">No account, no tracking: all entries stay on this device unless you export or share them.</p>
       <div class="row"><button class="btn warn" id="dWipe">Delete all data on this device</button></div></div>`;
