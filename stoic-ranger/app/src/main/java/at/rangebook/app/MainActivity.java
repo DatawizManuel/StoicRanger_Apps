@@ -48,7 +48,7 @@ import java.nio.charset.StandardCharsets;
  */
 public class MainActivity extends Activity {
     static final String ORIGIN = "https://appassets.androidplatform.net";
-    private static final int REQ_CHOOSER = 11, REQ_CREATE = 12, REQ_OPEN = 13, REQ_LOCATION = 14;
+    private static final int REQ_CHOOSER = 11, REQ_CREATE = 12, REQ_OPEN = 13, REQ_LOCATION = 14, REQ_LINK_CREATE = 15, REQ_LINK_OPEN = 16;
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -138,7 +138,8 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         web.evaluateJavascript("(window.SR && SR.back) ? SR.back() : false", value -> {
-            if (!"true".equals(value)) finish();
+            // only a plain "false" closes the app (1.0.x closed it when the page navigated away mid-call)
+            if ("false".equals(value)) finish();
         });
     }
 
@@ -204,6 +205,17 @@ public class MainActivity extends Activity {
                 os.write(bytes);
                 callback(cb, true, displayName(data.getData()), null);
             } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
+        } else if (req == REQ_LINK_CREATE || req == REQ_LINK_OPEN) {
+            String cb = pendingCb; pendingCb = null;
+            if (res != RESULT_OK || data == null || data.getData() == null) { callback(cb, false, "cancelled", null); return; }
+            Uri u = data.getData();
+            try {
+                getContentResolver().takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } catch (Exception e) { callback(cb, false, "No lasting access to this file: " + e.getMessage(), null); return; }
+            Uri old = linkedXlsx();
+            if (old != null && !old.equals(u)) releaseXlsx(old);
+            xlsxPrefs().edit().putString("uri", u.toString()).apply();
+            callback(cb, true, displayName(u), null);
         } else if (req == REQ_OPEN) {
             String cb = pendingCb; pendingCb = null;
             if (res != RESULT_OK || data == null || data.getData() == null) { callback(cb, false, "cancelled", null); return; }
@@ -212,6 +224,16 @@ public class MainActivity extends Activity {
                 callback(cb, true, displayName(data.getData()), Base64.encodeToString(b, Base64.NO_WRAP));
             } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
         }
+    }
+
+    /* ---------- the linked database.xlsx (1.1.0) ---------- */
+    private SharedPreferences xlsxPrefs() { return getSharedPreferences("xlsx", Context.MODE_PRIVATE); }
+    private Uri linkedXlsx() {
+        String s = xlsxPrefs().getString("uri", "");
+        return s.isEmpty() ? null : Uri.parse(s);
+    }
+    private void releaseXlsx(Uri u) {
+        try { getContentResolver().releasePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch (Exception ignored) { }
     }
 
     private String displayName(Uri u) {
@@ -331,7 +353,7 @@ public class MainActivity extends Activity {
 
         /* Files of their own next to db.json (1.0.1: "thoughts" = Daily Thoughts). Same rules as db.json: atomic
            write with a .bak copy, read falls back to the .bak, backups (newest 10) in files/backups-<name>/. */
-        private boolean dataName(String n) { return "thoughts".equals(n); }
+        private boolean dataName(String n) { return "thoughts".equals(n) || "xlsxbase".equals(n); }
 
         @JavascriptInterface
         public String loadData(String n) {
@@ -393,6 +415,94 @@ public class MainActivity extends Activity {
             try (FileInputStream is = new FileInputStream(f)) {
                 return new String(readAll(is), StandardCharsets.UTF_8);
             } catch (IOException e) { return ""; }
+        }
+
+        /* The database.xlsx the user linked (Storage Access Framework, lasting permission): read, write, link, unlink. */
+        @JavascriptInterface
+        public String xlsxInfo() {
+            JSONObject o = new JSONObject();
+            try {
+                Uri u = linkedXlsx();
+                o.put("linked", u != null);
+                if (u == null) return o.toString();
+                try (Cursor c = getContentResolver().query(u, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE,
+                        android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED}, null, null, null)) {
+                    if (c != null && c.moveToFirst()) {
+                        o.put("name", c.getString(0));
+                        if (!c.isNull(1)) o.put("size", c.getLong(1));
+                        if (!c.isNull(2)) o.put("mtime", c.getLong(2));
+                    }
+                } catch (Exception e) { o.put("error", String.valueOf(e.getMessage())); }
+            } catch (Exception ignored) { }
+            return o.toString();
+        }
+
+        @JavascriptInterface
+        public String xlsxRead() {
+            Uri u = linkedXlsx();
+            if (u == null) return "";
+            try (InputStream is = getContentResolver().openInputStream(u)) {
+                return Base64.encodeToString(readAll(is), Base64.NO_WRAP);
+            } catch (Exception e) { return ""; }
+        }
+
+        /** Writes the file; the previous bytes go to files/backups-xlsx/ first (newest 10 kept). */
+        @JavascriptInterface
+        public String xlsxWrite(String base64) {
+            JSONObject o = new JSONObject();
+            try {
+                Uri u = linkedXlsx();
+                if (u == null) { o.put("ok", false); o.put("msg", "no file linked"); return o.toString(); }
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                try (InputStream is = getContentResolver().openInputStream(u)) {
+                    byte[] prev = readAll(is);
+                    if (prev.length > 0) {
+                        File dir = new File(getFilesDir(), "backups-xlsx");
+                        dir.mkdirs();
+                        try (FileOutputStream os = new FileOutputStream(new File(dir, "database-" + System.currentTimeMillis() + ".xlsx"))) { os.write(prev); }
+                        File[] all = dir.listFiles();
+                        if (all != null && all.length > 10) {
+                            java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                            for (int i = 10; i < all.length; i++) all[i].delete();
+                        }
+                    }
+                } catch (Exception ignored) { }
+                try (OutputStream os = getContentResolver().openOutputStream(u, "wt")) {
+                    os.write(bytes);
+                }
+                JSONObject i = new JSONObject(xlsxInfo());
+                o.put("ok", true); o.put("size", i.optLong("size", bytes.length)); o.put("mtime", i.optLong("mtime", 0));
+            } catch (Exception e) {
+                try { o.put("ok", false); o.put("msg", String.valueOf(e.getMessage())); } catch (Exception ignored) { }
+            }
+            return o.toString();
+        }
+
+        /** "create": a new database.xlsx where the user says (the picker never overwrites; it adds " (1)"). "open": an existing one. */
+        @JavascriptInterface
+        public void xlsxLink(String mode, String cb) {
+            runOnUiThread(() -> {
+                pendingCb = cb;
+                boolean create = "create".equals(mode);
+                Intent i = new Intent(create ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                if (create) {
+                    i.setType(mime(".xlsx"));
+                    i.putExtra(Intent.EXTRA_TITLE, "database.xlsx");
+                } else {
+                    i.setType("*/*");
+                    i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{mime(".xlsx"), "application/octet-stream"});
+                }
+                try { startActivityForResult(i, create ? REQ_LINK_CREATE : REQ_LINK_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
+            });
+        }
+
+        @JavascriptInterface
+        public void xlsxUnlink() {
+            Uri u = linkedXlsx();
+            if (u != null) releaseXlsx(u);
+            xlsxPrefs().edit().remove("uri").apply();
         }
 
         @JavascriptInterface
