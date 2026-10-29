@@ -45,6 +45,33 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger 1.1.0: Daily Thoughts out again, the shared database.xlsx
+
+**Daily Thoughts** is its own app again (SR_Daily Thoughts 0.2.0, Manuel 2026-10-29). 1.1.0 has no Daily Thoughts
+page any more, but **deletes nothing**: `thoughts.json` and the old `thoughtFavs` stay on the device as they are,
+backups still carry them, restoring a 1.0.x backup still restores them. Home › Data › *Daily Thoughts favourites*
+saves them as an SR_Daily Thoughts backup (`daily-thoughts-favourites_<date>.json`), which Daily Thoughts 0.2.0
+brings in (More › Bring in favourites, merged). Daily Thoughts 0.2.0 also takes a whole Stoic Ranger backup.
+
+**database.xlsx** (`www/sr/xlsxdb.js`): one file for every platform (Android, iPhone web app, Windows) and Excel.
+- Sheets: the PC dashboard's (Weapons, Barrels, Munitions, Shooters, Rounds_Log, Targets, Purposes, Trainers,
+  Trainings, Drill_Results, Info) with the same columns plus `Source uid`, and Datasheets, Shots,
+  Drill_Favourites. A hidden sheet `_StoicRanger` holds the app's whole database as JSON (the full copy, also
+  fields with no column). Reading starts from that copy and lays the visible sheets over it, so Excel edits win.
+- `Info` carries the file format (`FORMAT` in xlsxdb.js). A file from a newer Stoic Ranger is not merged.
+- Sync is a three-way merge against the state of the last sync (`xlsxbase.json` next to `db.json`): a field
+  changed in the file since then is taken from the file, otherwise the app's value stays; rows new in the file are
+  added; rows deleted in Excel are kept (delete in the app); entries deleted in the app since the last sync stay
+  deleted; clashing ids get the next free id. The first sync with a file only fills empty fields and adds rows.
+  Trainings and Drill_Results show names; a name changed in Excel is still found under its old name.
+- `db.json` gets `settings.common.xlsx` = `{ dirty, mtime, size, hash, lastIn, lastOut }` (add-only). A backup
+  of `db.json` is made before every merge.
+- Android links the file with a lasting permission (Storage Access Framework); the previous file goes to
+  `files/backups-xlsx/` (newest 10) before every write. Windows writes next to the file with an atomic replace and
+  a copy in `backups\` next to database.xlsx (newest 30 of its own). The web app saves and opens it by hand.
+- Tests: `node tools/test-web.mjs` (part 7), `node stoic-ranger/tools/test-one-app.mjs` (part 7),
+  `xvfb-run -a node windows/tools/test-desktop.mjs`.
+
 ## Gun Database (up to SR_Database 0.6.0)
 
 - All data is one file, `files/db.json`, with a `schema` number (`RB.SCHEMA` in `www/gun/js/core.js`).
