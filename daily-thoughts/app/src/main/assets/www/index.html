@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Stoic Ranger - Daily Thoughts</title>
+<!-- web app for iPhone / iPad ("Add to Home Screen"); the Android shell ignores these -->
+<meta name="theme-color" content="#3f4630" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#23241f" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SR_Daily Thoughts">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<svg id="sprite" width="0" height="0" style="position:absolute" aria-hidden="true"></svg>
+<div class="wm" aria-hidden="true"><svg viewBox="0 0 200 200"><use href="#sr-siegel"/></svg></div>
+<header class="appbar">
+  <button class="ib" id="hBack" aria-label="Back" hidden>‹</button>
+  <span class="hmark" id="hMark" aria-hidden="true"><svg viewBox="0 0 200 200"><use href="#sr-siegel"/></svg></span>
+  <h1 id="hTitle">Daily Thoughts</h1>
+  <div id="hActions"></div>
+</header>
+<main id="view"></main>
+<nav id="nav">
+  <a href="#/today" data-v="today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg><span>Today</span></a>
+  <a href="#/authors" data-v="authors"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="6"/><path d="M12 8.6l1 2.2 2.4.3-1.8 1.6.5 2.4-2.1-1.2-2.1 1.2.5-2.4-1.8-1.6 2.4-.3z"/></svg><span>Authors</span></a>
+  <a href="#/favourites" data-v="favourites"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg><span>Favourites</span></a>
+  <a href="#/more" data-v="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></a>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="js/core.js"></script>
+<script src="js/logo.js"></script>
+<script src="js/sprite.js"></script>
+<script src="js/content.js"></script>
+<script src="js/app.js"></script>
+<script src="js/views-quote.js"></script>
+<script src="js/views-authors.js"></script>
+<script src="js/views-more.js"></script>
+</body>
+</html>

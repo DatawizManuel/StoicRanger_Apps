@@ -1,0 +1,21 @@
+# Cicero, On Duties 3.52
+q: You must take thought for others and serve the community of humankind.
+q: That is the law you were born under, the nature you must follow.
+c: Cicero has Antipater argue against his teacher Diogenes in the case of the grain merchant at Rhodes. If the merchant hides the fact that more grain ships are coming, he is placing his own profit above the community to which all people belong. Antipater insists that honesty means full disclosure.
+p: In one situation today where you could stay silent for your own advantage, choose to share what you know.
+s: Speech as reconstructed by Cicero, On Duties 3.50–53.
+
+# Stobaeus, Anthology 2.7.6
+q: The goal is to do everything in your power, continuously and without wavering,
+q: to obtain the things that are by nature preferred.
+c: Antipater refined the Stoic goal of life in debates with the sceptic Carneades. The Stoic aims at real things, health, safety, success, but what makes the life good is the steady effort, not the result. It is the basis of the image of the archer, who does all that can be done to hit the target, though the wind is not his to command.
+e: c. 140 BC · Athens | The pen-shouter | Carneades of the Academy was the most feared debater of his time. Antipater did not dare to face him in live debate, so he wrote book after book in reply. He was mocked as "kalamoboas", the man who shouts with his pen. His careful written answers kept the Stoic school alive under Carneades' attack.
+p: Choose a goal today. Do everything in your power towards it, and let the result be what it will be.
+s: Pen-shouter: Plutarch, On Talkativeness 514D.
+
+# Stobaeus, Anthology 4.22 (On Marriage)
+q: For a well-born young man who wishes to serve his city,
+q: marriage is among the first and most necessary of fitting duties.
+c: A long fragment of Antipater's essay On Marriage survives. He describes marriage as a full partnership in which husband and wife share body, soul and property, so close that they are blended like wine and water. He argues that a good citizen should marry and raise children as part of their duty to the community.
+p: Do one thing today that strengthens a bond of family or close friendship.
+s: Fragment preserved by Stobaeus; wording here is a free rendering.

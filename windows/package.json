@@ -1,0 +1,10 @@
+{
+  "name": "stoic-ranger-desktop",
+  "productName": "Stoic Ranger",
+  "version": "1.1.0",
+  "description": "Stoic Ranger for Windows: Gun Database, Training Log and Shooting Drills, working from and into the shared database.xlsx.",
+  "main": "main.js",
+  "author": "Manuel Faessler",
+  "license": "UNLICENSED",
+  "private": true
+}

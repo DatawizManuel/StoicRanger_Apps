@@ -6,8 +6,9 @@
    3. a damaged db.json falls back to the previous copy; data from a newer version opens read-only, never overwritten,
    4. the localStorage mirror is used when it is newer than IndexedDB (a write iOS cut short),
    5. after one online start every page opens offline (service worker),
-   6. Daily Thoughts (1.0.1): its own file thoughts.json; 1.0.0 favourites in db.json are copied over on the first
-      start (db.json backed up, left as it was); the Daily Thoughts page asks for no password of its own.
+   6. Daily Thoughts is its own app again (1.1.0): no Daily Thoughts page or quote on the home page, thoughts.json and
+      1.0.0 favourites stay on the device untouched, and the favourites can be saved as an SR_Daily Thoughts backup,
+   7. database.xlsx (1.1.0): saved by hand, changed "in Excel", opened again: the change comes in, nothing is lost.
    The Android path (conversion of SR_Database data, imports, cross-part links) is checked by stoic-ranger/tools/test-one-app.mjs.
    Usage: node tools/test-web.mjs [--shots]   (--shots saves iPhone-size screenshots to dist-shots/) */
 import http from 'node:http';
@@ -38,7 +39,7 @@ const BASE = `http://localhost:${srv.address().port}`;
 const browser = await chromium.launch();
 const IPHONE = { viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' };
-const PAGES = [['', 'SR', 'home'], ['gun/', 'RB', 'gundb'], ['training/', 'TL', 'tl'], ['drills/', 'SD', 'sd'], ['thoughts/', 'DT', 'dt']];
+const PAGES = [['', 'SR', 'home'], ['gun/', 'RB', 'gundb'], ['training/', 'TL', 'tl'], ['drills/', 'SD', 'sd']];
 
 const idbPut = (p, obj) => p.evaluate(o => new Promise((res, rej) => {
   const r = indexedDB.open('stoic-ranger', 1);
@@ -112,17 +113,13 @@ const dbOf = async p => JSON.parse((await idbAll(p))['sr/db.json'] || 'null');
   ok(await p.evaluate(() => SD.db.shooters.some(s => s.uid === 'u-test-901')), 'a shooter added in the Training Log is in Shooting Drills');
   await open(p, 'gun/');
   ok(await p.evaluate(() => RB.db.shooters.some(s => s.uid === 'u-test-901')), 'and in the Gun Database');
-  await open(p, 'thoughts/');
-  await p.evaluate(() => { DT.toggleFav(DT.quoteOfDay().id); DT.flush(); });
   await leave(p);
   d = await dbOf(p);
-  const all = await idbAll(p), th = JSON.parse(all['sr/thoughts.json'] || 'null');
+  const all = await idbAll(p);
   const bak = JSON.parse(all['sr/db.bak.json'] || '{}');
-  ok(th && th.app === 'stoic-ranger-thoughts' && th.favs.length === 1 && !arr(d.thoughtFavs).length && d.shooters.some(s => s.uid === 'u-test-901'),
-    'a favourite quote is saved in thoughts.json, the shooting database keeps everything else');
   ok(bak.app === 'stoic-ranger' && bak.shooters.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
   await open(p, '');
-  ok(await p.evaluate(() => /Daily Thoughts/i.test(document.body.innerText) && !!document.querySelector('.srwis')), "home shows today's thought and the parts");
+  ok(await p.evaluate(() => !document.querySelector('.srwis') && /Training Log/.test(document.body.innerText) && !/Daily Thoughts/.test(document.querySelector('#view').innerText.split('Data')[0])), 'home shows the three parts and no quote');
   await ctx.close();
 }
 function arr(a) { return Array.isArray(a) ? a : []; }
@@ -159,33 +156,64 @@ function arr(a) { return Array.isArray(a) ? a : []; }
   await ctx.close();
 }
 
-/* 6: Daily Thoughts in its own file */
+/* 6: Daily Thoughts is its own app again (1.1.0) */
 {
   const { ctx, p } = await fresh();
   const v100 = { app: 'stoic-ranger', format: 1, updated: '2026-10-28T10:00:00.000Z', schemas: { dt: 1, tl: 3 }, settings: { common: { theme: 'auto' }, dt: { theme: 'auto', seen: 3 } },
     history: [{ at: '2026-10-28T09:00:00.000Z', part: 'dt', note: 'x' }], shooters: [{ id: 'S-001', uid: 'u1', name: 'A' }], weapons: [], trainers: [], trainings: [],
     thoughtFavs: [{ id: 'q-seneca-01', at: '2026-10-27T08:00:00Z' }, { id: 'q-epictetus-02', at: '' }] };
   await idbPut(p, { 'sr/db.json': JSON.stringify(v100) });
-  await open(p, 'thoughts/', '#/favourites');
-  ok(await p.evaluate(() => DT.db.favs.length === 2 && !document.querySelector('#lPass') && !document.querySelector('#srLock')), 'Daily Thoughts shows the 1.0.0 favourites, no password of its own');
+  await open(p, '', '#/data');
+  ok(await p.evaluate(() => !document.querySelector('.srwis') && !!document.querySelector('#dThoughts') && SR.hasThoughtFavs()), 'no quote on the home page; Data offers the favourites for the Daily Thoughts app');
+  const saved = await p.evaluate(() => new Promise(res => {
+    const N = window.SRNative, keep = N.saveFile;
+    N.saveFile = (name, mime, b64, cb) => { N.saveFile = keep; res({ name, text: decodeURIComponent(escape(atob(b64))) }); };
+    SR.saveThoughtsFile();
+  }));
+  const j = JSON.parse(saved.text);
+  ok(/^daily-thoughts-favourites_\d{4}-\d\d-\d\d\.json$/.test(saved.name) && j.app === 'sr-daily-thoughts' && j.favs.map(f => f.id).join() === 'q-seneca-01,q-epictetus-02',
+    'favourites saved as an SR_Daily Thoughts backup');
   await leave(p);
-  let all = await idbAll(p);
-  const th = JSON.parse(all['sr/thoughts.json'] || 'null');
-  ok(th && th.favs.map(f => f.id).join() === 'q-seneca-01,q-epictetus-02' && th.schema === 1 && th.settings.seen === 3, '1.0.0 favourites and settings copied into thoughts.json');
-  ok(all['sr/db.json'] === JSON.stringify(v100), 'db.json left exactly as it was (add-only)');
-  ok(Object.keys(all).some(k => k.startsWith('sr/backups/db-before-thoughts-file-')), 'backup of db.json kept before the move');
-  await open(p, 'thoughts/', '#/favourites');
-  await p.evaluate(() => { DT.toggleFav('q-seneca-01'); DT.flush(); });
+  const all = await idbAll(p);
+  ok(JSON.parse(all['sr/db.json']).thoughtFavs.length === 2, 'the 1.0.0 favourites stay in db.json (nothing deleted)');
+  await ctx.close();
+}
+
+/* 7: database.xlsx by hand (the way on iPhone): save, change "in Excel", open again */
+{
+  const { ctx, p } = await fresh();
+  await open(p, 'training/');
+  await p.evaluate(() => { TL.db.shooters.push({ id: 'S-801', uid: 'u-x-801', name: 'Xlsx Test' }); TL.save(true); });
+  await open(p, '', '#/data');
+  ok(await p.evaluate(() => !SR.xlsx.canLink() && !!document.querySelector('#xSave') && !!document.querySelector('#xIn')), 'web: database.xlsx is saved and opened by hand (no link)');
+  const b64 = await p.evaluate(() => new Promise(res => {
+    const N = window.SRNative, keep = N.saveFile;
+    N.saveFile = (name, mime, b, cb) => { N.saveFile = keep; res(b); setTimeout(() => SRNativeCallback(cb, { ok: true, msg: name }), 0); };
+    SR.xlsx.save();
+  }));
+  const r = await p.evaluate(b64 => {
+    const wb = XLSX.read(b64, { type: 'base64' });
+    const names = wb.SheetNames.join();
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets.Shooters, { defval: '' });
+    const row = rows.find(x => x.Name === 'Xlsx Test');
+    if (!row) return { names, fail: 'row missing' };
+    row.Name = 'Edited In Excel';
+    rows.push({ Name: 'Added In Excel' });
+    wb.Sheets.Shooters = XLSX.utils.json_to_sheet(rows);
+    const out = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+    return new Promise(res => {
+      const N = window.SRNative, keep = N.openFile;
+      N.openFile = (m, cb) => { N.openFile = keep; setTimeout(() => SRNativeCallback(cb, { ok: true, msg: 'database.xlsx', data: out }), 0); };
+      SR.xlsx.open().then(x => res({ names, x }));
+    });
+  }, b64);
+  ok(/Weapons/.test(r.names) && /Trainings/.test(r.names) && /_StoicRanger/.test(r.names), 'database.xlsx has the PC dashboard sheets and the app copy ' + r.names);
+  ok(r.x && r.x.ok, 'database.xlsx opened again ' + JSON.stringify(r.x && (r.x.msg || r.x.error || r.x.stats)));
   await leave(p);
-  all = await idbAll(p);
-  ok(JSON.parse(all['sr/thoughts.json']).favs.length === 1 && JSON.parse(all['sr/thoughts.bak.json']).app === 'stoic-ranger-thoughts' && all['sr/db.json'] === JSON.stringify(v100),
-    'later changes go to thoughts.json only (previous copy kept), the move runs once');
-  await idbPut(p, { 'sr/thoughts.json': '{"favs":[', 'sr/thoughts.bak.json': all['sr/thoughts.json'] });
-  await p.evaluate(() => localStorage.removeItem('sr.thoughts'));       // no mirror either: only the previous copy is left
-  await open(p, 'thoughts/', '#/favourites');
-  ok(await p.evaluate(() => DT.db.favs.length === 1), 'damaged thoughts.json falls back to the previous copy');
-  await leave(p);
-  ok(Object.keys(await idbAll(p)).some(k => k.startsWith('sr/backups-thoughts/thoughts-damaged-')), 'damaged thoughts.json kept as a backup');
+  const d = await dbOf(p);
+  ok(d.shooters.some(s => s.uid === 'u-x-801' && s.name === 'Edited In Excel') && d.shooters.some(s => s.name === 'Added In Excel'), 'a change and a new row made in Excel come in');
+  await open(p, 'drills/');
+  ok(await p.evaluate(() => SD.db.shooters.some(s => s.name === 'Added In Excel')), 'and every part sees them');
   await ctx.close();
 }
 

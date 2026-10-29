@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
+     No internet: all quotes, author pages and coins ship with the app. The Stoic Ranger signature permission is declared
+     in every Stoic Ranger app (same signing key), so the install order does not matter; Daily Thoughts does not use it yet. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <permission android:name="at.stoicranger.permission.LINK" android:protectionLevel="signature"
+        android:label="Link Stoic Ranger apps" />
+    <uses-permission android:name="at.stoicranger.permission.LINK" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name=".SharedFileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>
