@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark variant: the WebView only reports prefers-color-scheme: dark when the app theme is dark. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/charcoal</item>
+        <item name="android:statusBarColor">@color/night_bar</item>
+        <item name="android:navigationBarColor">@color/charcoal</item>
+        <item name="android:colorAccent">@color/tan</item>
+        <item name="android:colorPrimary">@color/tan</item>
+    </style>
+</resources>
