@@ -3,7 +3,7 @@
 One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
 phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Name "Stoic Ranger Shooting" (from 1.2.0), launcher
 label "SR_Shooting", package id `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0
-and keeps its data). Version 1.2.0, versionCode 11.
+and keeps its data). Version 1.2.1, versionCode 12.
 
 ## How it fits together
 
@@ -52,6 +52,8 @@ from a newer version is never written. Must pass before a release.
 
 ## Versions
 
+- **1.2.1** (versionCode 12, Android only): the phone's Back button works (and saving/sharing files): the cloud build
+  crashed on Java lambdas, now replaced by anonymous classes; the build checks for it.
 - **1.2.0** (versionCode 11): renamed **Stoic Ranger Shooting** (launcher "SR_Shooting"; package id, data files and
   web storage unchanged). The home page gets an **Overview** like the PC dashboard (Guns, Training, Drills, Dope
   cards; filter by year, shooter, gun; read-only, the filter stays on the device) and the **paper datasheet** (save

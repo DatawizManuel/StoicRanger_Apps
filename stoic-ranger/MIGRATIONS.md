@@ -45,6 +45,14 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger Shooting 1.2.1 (Android only): Back button fix
+
+No change to the data; installs over 1.2.0 (or 1.1.0) with everything kept. The Java code had lambdas, and the cloud
+build (dx instead of d8) turned them into calls Android does not have, so the app crashed at the first one: pressing
+Back crashed it (it looked like "Back closes the app"), and so did saving, opening and sharing files and the
+database.xlsx link. All lambdas are now anonymous classes and `tools/build-debug.sh` stops if `classes.dex` mentions
+`LambdaMetafactory`. Web and Windows have no Java code and stay at 1.2.0.
+
 ## Stoic Ranger Shooting 1.2.0: new name, overviews, Field Kit link
 
 No change to the data: `db.json`, `thoughts.json`, the web storage (IndexedDB `stoic-ranger`) and the Windows data
