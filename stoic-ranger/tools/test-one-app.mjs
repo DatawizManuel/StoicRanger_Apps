@@ -244,6 +244,44 @@ await open('index.html', 500);
 ok(await page.evaluate(() => SR.back()) === true && /back again/i.test(await page.evaluate(() => document.body.innerText)), 'first Back at home only warns');
 ok(await page.evaluate(() => SR.back()) === false, 'a second Back within 2 s closes the app');
 
+// 9. 1.2.0: name, overviews on the home page, the paper datasheet (remarks #8, #9, #10)
+await page.goto(`${ORIGIN}/www/nothing.html`).catch(() => { });
+await page.evaluate(t => { localStorage.setItem('m.db', t); localStorage.setItem('m.saves', '0'); localStorage.removeItem('sr.home.overview'); }, JSON.stringify(Object.assign(await unified(), { format: 1 })));
+await open('index.html', 700);
+ok(await page.title() === 'Stoic Ranger Shooting' && (await page.locator('#hTitle').textContent()) === 'Stoic Ranger Shooting', 'the app is called Stoic Ranger Shooting');
+const dbBefore = await page.evaluate(() => localStorage.getItem('m.db'));
+for (const tab of ['guns', 'training', 'drills', 'dope']) {
+  await page.click(`[data-ov="${tab}"]`); await page.waitForTimeout(150);
+  ok(!errors.length && await page.evaluate(t => document.querySelector(`[data-ov="${t}"]`).classList.contains('on') && document.querySelector('#ovBody').innerText.trim().length > 20, tab), `overview tab ${tab} shows ${errors.join(' | ')}`);
+}
+await page.click('[data-ov="guns"]'); await page.waitForTimeout(150);
+const ovGuns = await page.evaluate(() => document.querySelector('#ovBody').innerText);
+ok(/Rounds per gun/i.test(ovGuns) && /Test Pistol/.test(ovGuns), 'guns overview lists the guns with their rounds');
+await page.selectOption('#ovYear', ''); await page.waitForTimeout(150);
+await page.click('[data-ov="dope"]'); await page.waitForTimeout(150);
+const dopeLinks = await page.locator('#ovBody a.item').count(), wantDope = await page.evaluate(() => new Set(SR.db.sheets.filter(s => s.weaponId && s.munitionId && SR.db.weapons.some(w => w.id === s.weaponId) && SR.db.munitions.some(m => m.id === s.munitionId)).map(s => s.weaponId + '|' + s.munitionId)).size);
+ok(dopeLinks === wantDope && dopeLinks > 0, `dope cards: one per gun and ammunition on the datasheets (${dopeLinks})`);
+await page.click('[data-ov="training"]'); await page.waitForTimeout(150);
+await page.selectOption('#ovShooter', await page.evaluate(() => SR.db.shooters.find(s => s.name === 'Test Friend').id)); await page.waitForTimeout(150);
+const trOne = await page.evaluate(() => document.querySelector('#ovBody .tile .v').textContent);
+ok(trOne === '1', 'the shooter filter narrows the training overview');
+ok(await page.evaluate(() => localStorage.getItem('m.db')) === dbBefore && await page.evaluate(() => localStorage.getItem('m.saves')) === '0', 'the overview never changes the database');
+await open('index.html', 600);
+ok(await page.evaluate(() => document.querySelector('[data-ov="training"]').classList.contains('on')), 'the overview keeps its tab on this device');
+await page.selectOption('#ovShooter', ''); await page.waitForTimeout(150);
+await page.click('[data-ov="dope"]'); await page.waitForTimeout(150);
+const first = await page.locator('#ovBody a.item').first().getAttribute('href');
+await open(first, 900);
+const qs = new URLSearchParams(first.split('?')[1]);
+ok(!errors.length && await page.evaluate(([w, m]) => RB.db.settings.dope.weaponId === w && RB.db.settings.dope.munitionId === m && /Dope card/i.test(document.body.innerText), [qs.get('w'), qs.get('m')]), 'a dope card from the home page opens on that gun and ammunition ' + errors.join(' | '));
+await open('index.html', 600);
+await page.click('#ovBlank'); await page.waitForTimeout(600);
+const pdf = await page.evaluate(() => localStorage.getItem('m.saved.training-datasheet-blank.pdf'));
+ok(!!pdf && atob(pdf).startsWith('%PDF'), 'the empty datasheet is saved as a PDF');
+ok(await page.locator('a[href="gun/index.html#/analyse/scan"]').count() === 1, 'and a filled-in sheet can be brought back from the home page');
+const bk = await page.evaluate(async () => { await SR.saveBackup(); return Object.keys(localStorage).filter(k => k.startsWith('m.saved.sr-shooting-backup_')).length; });
+ok(bk === 1, 'backups are named sr-shooting-backup_<date>.json');
+
 await browser.close();
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');
 process.exit(fails ? 1 : 0);

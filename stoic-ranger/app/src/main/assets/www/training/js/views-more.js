@@ -71,7 +71,7 @@ TL.views.more = {
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(s.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div>
       ${TL.hasExamples() ? '<h2>Example data</h2><div class="stack"><button class="btn" id="mExClear">Remove example data</button></div>' : ''}
       <h2>About</h2>
-      <p class="note">Stoic Ranger · Training Log ${esc(info.version || '')} · data format ${TL.SCHEMA}${info.android === 'web app' ? ' · web app' : TL.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
+      <p class="note">Stoic Ranger Shooting · Training Log ${esc(info.version || '')} · data format ${TL.SCHEMA}${info.android === 'web app' ? ' · web app' : TL.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
       ${TL.db.trainings.length} trainings · ${TL.db.shooters.length} shooters · ${TL.db.weapons.length} guns · ${TL.db.trainers.length} trainers<br>
       Fonts: Barlow, JetBrains Mono (SIL Open Font License). SheetJS Community Edition (Apache License 2.0).</p>`;
     SR.wireData(el, TL.toast);

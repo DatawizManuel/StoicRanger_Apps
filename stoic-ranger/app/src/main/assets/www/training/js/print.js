@@ -102,7 +102,7 @@ TL.recordDoc = (f, o = {}) => {
     ${trainers.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.contact || '')}</td><td class="mono">${esc(t.phone || '')}</td><td>${esc(t.email || '')}</td><td>${esc(t.website || '')}</td></tr>`).join('')}</tbody></table>` : ''}
 
   <div class="end">${o.signature ? `<div class="sig"><div>Place, date</div><div>Signature${f.shooter ? ' – ' + esc(TL.nameOf('shooters', f.shooter)) : ''}</div></div>` : ''}
-  <div class="foot"><span>Stoic Ranger - Training Log</span><span>Printed ${stamp}</span></div></div>
+  <div class="foot"><span>Stoic Ranger Shooting - Training Log</span><span>Printed ${stamp}</span></div></div>
   </body></html>`;
 };
 

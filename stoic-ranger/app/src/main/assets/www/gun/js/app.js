@@ -100,7 +100,7 @@ RB.addChooser = () => {
 
 /* ---------- notices about the stored data (update / recovery / newer app) ---------- */
 function dataNotice() {
-  if (RB.readOnly) return `<div class="banner warn">This data was saved by a newer version of Stoic Ranger (data format ${RB.dataSchema}, this app reads up to ${RB.SCHEMA}). Nothing is changed or saved until you update the app.</div>`;
+  if (RB.readOnly) return `<div class="banner warn">This data was saved by a newer version of Stoic Ranger Shooting (data format ${RB.dataSchema}, this app reads up to ${RB.SCHEMA}). Nothing is changed or saved until you update the app.</div>`;
   return '';
 }
 RB.dataNotice = dataNotice;
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
 RB.views.welcome = {
   tab: 'dash',
   render(el) {
-    RB.header("Stoic Ranger");
+    RB.header("Stoic Ranger Shooting");
     el.innerHTML = `
       <div class="hero">
         <div class="wlogo">${RB.logo('hlogo')}</div>

@@ -119,7 +119,7 @@ const dbOf = async p => JSON.parse((await idbAll(p))['sr/db.json'] || 'null');
   const bak = JSON.parse(all['sr/db.bak.json'] || '{}');
   ok(bak.app === 'stoic-ranger' && bak.shooters.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
   await open(p, '');
-  ok(await p.evaluate(() => !document.querySelector('.srwis') && /Training Log/.test(document.body.innerText) && !/Daily Thoughts/.test(document.querySelector('#view').innerText.split('Data')[0])), 'home shows the three parts and no quote');
+  ok(await p.evaluate(() => !document.querySelector('.srwis') && /Training Log/i.test(document.body.innerText) && !/Daily Thoughts/.test(document.querySelector('#view').innerText.split('Data')[0])), 'home shows the three parts and no quote');
   await ctx.close();
 }
 function arr(a) { return Array.isArray(a) ? a : []; }

@@ -45,6 +45,16 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger Shooting 1.2.0: new name, overviews, Field Kit link
+
+No change to the data: `db.json`, `thoughts.json`, the web storage (IndexedDB `stoic-ranger`) and the Windows data
+folder (`%APPDATA%\Stoic Ranger`) keep their names and format, so 1.2.0 installs over 1.1.0 with everything kept.
+- The name ("Stoic Ranger Shooting", short "SR_Shooting") is display only. Backups are saved as
+  `sr-shooting-backup_<date>.json`; a backup is recognised by its content (`app: 'stoic-ranger'`), not by its name.
+- The home page overview only reads. Its tab and filter are kept in localStorage (`sr.home.overview`), not in the
+  database, so they never change database.xlsx.
+- The Field Kit link (`LinkProvider.java`) only reads `files/db.json` (or `db.bak.json`) and never writes.
+
 ## Stoic Ranger 1.1.0: Daily Thoughts out again, the shared database.xlsx
 
 **Daily Thoughts** is its own app again (SR_Daily Thoughts 0.2.0, Manuel 2026-10-29). 1.1.0 has no Daily Thoughts

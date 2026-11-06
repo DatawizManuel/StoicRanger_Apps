@@ -185,7 +185,7 @@ const b64Bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
 const hashBytes = u => { let h = 2166136261; for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + u.length; };
 const loadBase = () => { try { const j = parse(RAW.loadData('xlsxbase') || ''); return j && j.db ? j.db : null; } catch (e) { return null; } };
 const saveBase = db => { try { RAW.saveData('xlsxbase', db ? JSON.stringify({ at: now(), db }) : '{}'); } catch (e) { } };
-const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic Ranger ' + (i.version || '') + (i.android === 'web app' ? ' (web)' : i.windows ? ' (Windows)' : i.android ? ' (Android)' : ''); } catch (e) { return 'Stoic Ranger'; } };
+const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic Ranger Shooting ' + (i.version || '') + (i.android === 'web app' ? ' (web)' : i.windows ? ' (Windows)' : i.android ? ' (Android)' : ''); } catch (e) { return 'Stoic Ranger'; } };
 /** Merge database.xlsx bytes into the one file (three-way against the last sync). The file is written out later. */
 function mergeIn(bytes, meta = {}) {
   if (newer) return { error: 'read-only' };
@@ -530,9 +530,11 @@ window.SRNativeCallback = (id, res) => {
 const cb = f => { const id = 'sr' + Math.random().toString(36).slice(2); hubCbs[id] = f; return id; };
 const b64 = t => { const u = new TextEncoder().encode(t); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = b => new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0)));
-const backupName = () => `stoic-ranger-backup_${new Date().toISOString().slice(0, 10)}.json`;
+const backupName = () => `sr-shooting-backup_${new Date().toISOString().slice(0, 10)}.json`;
+/** Save any file through the device's save dialog / share sheet; resolves {ok, msg}. */
+const saveAs = (name, mime, b64data) => new Promise(res => RAW.saveFile(name, mime, b64data, cb(res)));
 const saveBackup = () => new Promise(res => { SR.flush(); const txt = SR.backupText(); RAW.saveFile(backupName(), 'application/json', b64(txt), cb(res)); });
-const shareBackup = () => { SR.flush(); RAW.shareFile(backupName(), 'application/json', b64(SR.backupText()), 'Stoic Ranger backup'); };
+const shareBackup = () => { SR.flush(); RAW.shareFile(backupName(), 'application/json', b64(SR.backupText()), 'Stoic Ranger Shooting backup'); };
 const openJson = () => new Promise(res => RAW.openFile('application/json,text/plain,application/octet-stream', cb(r => {
   if (!r || !r.ok) return res({ ok: false, msg: r ? r.msg : 'cancelled' });
   let j = null; try { j = JSON.parse(unb64(r.data)); } catch (e) { }
@@ -550,7 +552,7 @@ const SR = window.SR = {
   save: writeRaw,
   /** The whole database as one backup file (all parts, Daily Thoughts included). */
   backupText,
-  saveBackup, shareBackup, openJson, importBackup, restoreAll,
+  saveBackup, shareBackup, saveAs, openJson, importBackup, restoreAll,
   /** database.xlsx: link state, sync, by hand */
   xlsx: { canLink, info: xlsxInfo, linked: () => xlsxLinked(), state: () => xlsxState(), link: xlsxLink, unlink: xlsxUnlink,
     syncIn: () => { LINKED = null; return xlsxIn(true); }, syncOut: () => xlsxOut(true), sync: () => { LINKED = null; const a = xlsxIn(); if (a && a.error) return a; return xlsxOut(true) || a; },
@@ -562,7 +564,7 @@ if (PARTS[PART]) window[PARTS[PART].prefix + 'Native'] = bridge(PART);
 
 /* ---------- the backup block every part's More page shows ---------- */
 SR.dataSection = (h = 'h2') => `<${h}>Backup</${h}>
-  <p class="note">Stoic Ranger keeps guns, trainings and drill results in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …). Restoring, and bringing in backups of the old SR_Training Log and SR_Shooting Drills apps, is on the home page under Data.</p>
+  <p class="note">Stoic Ranger Shooting keeps guns, trainings and drill results in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …). Restoring, and bringing in backups of the old SR_Training Log and SR_Shooting Drills apps, is on the home page under Data.</p>
   <div class="stack"><button class="btn pri" data-sr="save">Save a backup of everything</button><button class="btn" data-sr="share">Share a backup</button><button class="btn" data-sr="data">Restore or bring in data</button></div>`;
 SR.wireData = (el, toast) => {
   const q = s => el.querySelector(`[data-sr="${s}"]`);
@@ -618,7 +620,7 @@ if (PARTS[PART]) document.addEventListener('DOMContentLoaded', () => {
   const bar = document.querySelector('.appbar'), h1 = document.getElementById('hTitle');
   if (!bar || !h1 || document.getElementById('srHome')) return;
   const b = document.createElement('button');
-  b.id = 'srHome'; b.className = 'ib srhome'; b.type = 'button'; b.setAttribute('aria-label', 'Stoic Ranger home');
+  b.id = 'srHome'; b.className = 'ib srhome'; b.type = 'button'; b.setAttribute('aria-label', 'Stoic Ranger Shooting home');
   b.innerHTML = T().LOGO_SVG || '⌂';
   b.onclick = SR.home;
   bar.insertBefore(b, h1);

@@ -1,4 +1,5 @@
-/* Stoic Ranger — home page: the three parts with their key figures, quick "new" buttons, and Data (the shared
+/* Stoic Ranger Shooting — home page: the three parts with their key figures, quick "new" buttons, the overviews
+   (sr/overview.js, 1.2.0), and Data (the shared
    database.xlsx, backup of everything, restore, bringing in the old apps' backups, theme, about).
    1.1.0: no quotes any more (Daily Thoughts is its own app again, Manuel 2026-10-29). */
 'use strict';
@@ -71,7 +72,7 @@ function figures() {
 function home(el) {
   const f = figures();
   el.innerHTML = `
-    ${SR.readOnly ? '<div class="banner warn">This data was saved by a newer version of Stoic Ranger. Nothing is changed or saved until you update the app.</div>' : ''}
+    ${SR.readOnly ? '<div class="banner warn">This data was saved by a newer version of Stoic Ranger Shooting. Nothing is changed or saved until you update the app.</div>' : ''}
     <div class="srnew">
       <a class="btn pri" href="training/index.html#/training/new">+ Training</a>
       <a class="btn pri" href="gun/index.html#/dash?srAdd=1">+ Datasheet</a>
@@ -95,8 +96,9 @@ function home(el) {
       <div class="tile"><div class="l">Drill results</div><div class="v">${f.resultsYear}</div><div class="s">${f.results} in total</div></div>
       <div class="tile"><div class="l">Active guns</div><div class="v">${f.guns}</div><div class="s">${f.barrels} barrels</div></div>
     </div>
-    <p class="note">The full overviews are in each part: Gun Database › Dashboard and Training Log › Dashboard.</p>
-    ${xlsxLine()}`;
+    ${xlsxLine()}
+    ${window.SROverview ? SROverview.html() : ''}`;
+  if (window.SROverview) SROverview.wire(el, () => home(el), toast);
 }
 /** One line under the figures: where the shared database.xlsx stands. */
 function xlsxLine() {
@@ -108,13 +110,13 @@ function xlsxLine() {
 const when = iso => { if (!iso) return ''; const d = new Date(iso); return d.toLocaleDateString('de-AT') + ' ' + d.toTimeString().slice(0, 5); };
 
 /* ---------- data ---------- */
-const describe = j => SR.isUnified(j) ? 'Stoic Ranger backup' : SR.isTrainingLog(j) ? 'SR_Training Log backup' : SR.isDrills(j) ? 'SR_Shooting Drills backup' : SR.isThoughts(j) ? 'SR_Daily Thoughts backup' : SR.isGunDb(j) ? 'SR_Database (Gun Database) backup' : '';
+const describe = j => SR.isUnified(j) ? 'Stoic Ranger Shooting backup' : SR.isTrainingLog(j) ? 'SR_Training Log backup' : SR.isDrills(j) ? 'SR_Shooting Drills backup' : SR.isThoughts(j) ? 'SR_Daily Thoughts backup' : SR.isGunDb(j) ? 'SR_Database (Gun Database) backup' : '';
 const count = (j, t) => arr(j[t]).filter(r => r && !r.example).length;
 async function bringIn() {
   const f = await SR.openJson();
   if (!f.ok) { if (f.msg !== 'cancelled') toast(f.msg, true); return; }
   const j = f.json, kind = describe(j);
-  if (!kind) { toast('This is not a Stoic Ranger backup.', true); return; }
+  if (!kind) { toast('This is not a Stoic Ranger Shooting backup.', true); return; }
   if (SR.isGunDb(j)) {
     const m = sheet('Gun Database backup', `<p>${esc(f.name)}: ${count(j, 'weapons')} guns, ${count(j, 'sheets')} datasheets.</p>
       <p class="note">Gun Database backups are merged in the Gun Database part: More › Import.</p>
@@ -122,7 +124,7 @@ async function bringIn() {
     return m;
   }
   if (SR.isUnified(j)) {
-    const m = sheet('Restore Stoic Ranger backup', `<p>${esc(f.name)}${j.backup ? ' · saved ' + esc(fmtDate(String(j.backup).slice(0, 10))) : ''}: ${count(j, 'weapons')} guns, ${count(j, 'sheets')} datasheets, ${count(j, 'trainings')} trainings, ${count(j, 'results')} drill results.</p>
+    const m = sheet('Restore Stoic Ranger Shooting backup', `<p>${esc(f.name)}${j.backup ? ' · saved ' + esc(fmtDate(String(j.backup).slice(0, 10))) : ''}: ${count(j, 'weapons')} guns, ${count(j, 'sheets')} datasheets, ${count(j, 'trainings')} trainings, ${count(j, 'results')} drill results.</p>
       <p class="note">This replaces everything on this device (now ${count(SR.db, 'weapons')} guns, ${count(SR.db, 'trainings')} trainings, ${count(SR.db, 'results')} drill results). A copy of the current data is kept on the device first.</p>
       <div class="stack"><button class="btn warn big" id="rGo">Replace all data with this backup</button></div>`);
     armed($('#rGo', m.body), () => { if (SR.restoreAll(j)) { m.close(); toast('Backup restored.'); route(); } else toast('Could not restore: the backup is from a newer version, or saving failed.', true); });
@@ -155,7 +157,7 @@ function data(el) {
       <p class="note">Guns, datasheets, trainings and drill results live in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …); it is also how you move to a new phone.</p>
       <div class="stack"><button class="btn pri" data-sr="save">Save a backup of everything</button><button class="btn" data-sr="share">Share a backup</button></div></div>
     <div class="card"><h3>Restore or bring in</h3>
-      <p class="note">Pick a backup file: a <b>Stoic Ranger</b> backup restores everything; a backup of the old <b>SR_Training Log</b> or <b>SR_Shooting Drills</b> app is merged into your data (that is how their data moves into this app).</p>
+      <p class="note">Pick a backup file: a <b>Stoic Ranger Shooting</b> backup restores everything; a backup of the old <b>SR_Training Log</b> or <b>SR_Shooting Drills</b> app is merged into your data (that is how their data moves into this app).</p>
       <div class="stack"><button class="btn" id="dIn">Choose a backup file</button></div></div>
     ${SR.hasThoughtFavs() ? `<div class="card"><h3>Daily Thoughts</h3>
       <p class="note">Daily Thoughts is its own app again. Your ${arr(SR.thoughts.favs).length} favourite quotes are still kept on this device: save them as a file and bring it into the Daily Thoughts app (More › Bring in favourites).</p>
@@ -163,7 +165,7 @@ function data(el) {
     <div class="card"><h3>Appearance</h3>
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(d.settings.common.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div></div>
     <div class="card"><h3>About</h3>
-      <p><b>Stoic Ranger</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : info.windows ? ' · Windows' : ''}</p>
+      <p><b>Stoic Ranger Shooting</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : info.windows ? ' · Windows' : ''}</p>
       <p class="note">One app: Gun Database, Training Log and Shooting Drills share one database (until version 0.x separate apps). The same app runs on Android, iPhone and Windows and reads and writes the same database.xlsx. ${count(d, 'weapons')} guns · ${count(d, 'shooters')} shooters · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results.</p>
       <p class="note">No account, no tracking: all entries stay on this device unless you export or share them.</p>
       <div class="row"><button class="btn warn" id="dWipe">Delete all data on this device</button></div></div>`;
@@ -215,7 +217,7 @@ function wireXlsx(el) {
 function route() {
   const el = $('#view'), page = (location.hash.replace(/^#\/?/, '') || '').split('?')[0];
   window.scrollTo(0, 0);
-  $('#hTitle').textContent = page === 'data' ? 'Data' : 'Stoic Ranger';
+  $('#hTitle').textContent = page === 'data' ? 'Data' : 'Stoic Ranger Shooting';
   if (page === 'data') data(el); else home(el);
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -225,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try { if (window.SRNative && SRNative.isNight) H.setSysDark(SRNative.isNight()); } catch (e) { }
   applyTheme();
   route();
-  if (SR.converted) setTimeout(() => toast('Welcome to Stoic Ranger: your SR_Database data has moved in (a copy of the old file is kept).'), 300);
+  if (SR.converted) setTimeout(() => toast('Welcome to Stoic Ranger Shooting: your SR_Database data has moved in (a copy of the old file is kept).'), 300);
   else if (SR.damaged) setTimeout(() => toast('The data file was damaged: the previous saved copy was used.', true), 300);
   else xlsxNotice();
 });

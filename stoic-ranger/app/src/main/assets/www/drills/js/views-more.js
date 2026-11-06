@@ -68,7 +68,7 @@ SD.views.more = {
       <h2>Appearance</h2>
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(s.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div>
       <h2>About</h2>
-      <p class="note">Stoic Ranger · Shooting Drills ${esc(info.version || '')} · data format ${SD.SCHEMA}${info.android === 'web app' ? ' · web app' : SD.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
+      <p class="note">Stoic Ranger Shooting · Shooting Drills ${esc(info.version || '')} · data format ${SD.SCHEMA}${info.android === 'web app' ? ' · web app' : SD.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
       ${SD.DRILLS.length} drills · ${SD.PRINTABLES.length} printables · ${SD.db.results.length} results · ${SD.db.favs.length} favourites<br>
       Drill descriptions written for this app; drills named after a person are credited on the drill page. Printable targets are own designs.<br>
       ${esc(SD.SAFETY_LIVE)} ${esc(SD.SAFETY_DRY)}<br>

@@ -117,7 +117,7 @@ function write(u, info = {}) {
     ['Trainings', 'Shooter, trainer and guns by name (as in the sheets above). Type: Live fire or Dry fire; dry-fire Rounds are repetitions, never rounds.'],
     ['Datasheets', 'One row per datasheet; its shots are in Shots (X right, Y up, mm on the target). Shots are kept by the app: change them in the app.'],
     ['Units', 'Metric: mm, m, g, m/s, °C, hPa, mrad.'],
-    ['Saved', (info.by || 'Stoic Ranger') + ' ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
+    ['Saved', (info.by || 'Stoic Ranger Shooting') + ' ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
     ['Format', 'Stoic Ranger database.xlsx ' + FORMAT]]), 'Info');
   // the full copy for the apps (hidden): fields without a column, shots, settings
   const full = JSON.stringify({ mark: MARK, format: FORMAT, saved: new Date().toISOString(), by: info.by || '', db: dbPart(u) });

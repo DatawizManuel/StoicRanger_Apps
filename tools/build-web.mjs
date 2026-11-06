@@ -13,7 +13,7 @@ const DIST = path.join(ROOT, 'dist');
 const APP = path.join(ROOT, 'stoic-ranger');
 const WWW = path.join(APP, 'app/src/main/assets/www');
 const PAGES = ['index.html', 'gun/index.html', 'training/index.html', 'drills/index.html'];
-const NAME = 'Stoic Ranger', COLOR = '#111111';
+const NAME = 'Stoic Ranger Shooting', SHORT = 'SR_Shooting', COLOR = '#111111';   // renamed in 1.2.0 (Manuel 2026-11-06)
 
 /* One-time password asked on the first start on a device (Manuel 2026-10-28). Only the PBKDF2-SHA-256 hash is
    stored here; the password itself is never written into this repository. To change it, put a new salt and
@@ -57,7 +57,7 @@ export function build() {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="${NAME}">
+<meta name="apple-mobile-web-app-title" content="${SHORT}">
 <meta name="theme-color" content="${COLOR}">
 </head>`).replace('</body>', `<script>window.SR_WEB=${JSON.stringify(cfg)};</script>
 <script src="${root}native-web.js"></script>
@@ -66,7 +66,7 @@ export function build() {
   }
 
   fs.writeFileSync(path.join(DIST, 'manifest.webmanifest'), JSON.stringify({
-    name: NAME, short_name: NAME, id: './', start_url: './', scope: './', display: 'standalone',
+    name: NAME, short_name: SHORT, id: './', start_url: './', scope: './', display: 'standalone',
     background_color: COLOR, theme_color: COLOR,
     description: 'Gun Database, Training Log and Shooting Drills in one app, with a shared database.xlsx.',
     icons: [192, 512].map(s => ({ src: `icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png', purpose: 'any' })),

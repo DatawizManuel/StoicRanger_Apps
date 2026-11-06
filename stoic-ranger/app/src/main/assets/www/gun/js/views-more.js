@@ -30,7 +30,7 @@ RB.exportXlsx = async () => {
   const shots = [['Sheet ID', 'Date', 'Shot', 'X mm', 'Y mm', 'Ring', 'X mrad', 'Y mrad', 'Ammunition', 'Purpose']];
   D.shots.forEach(t => shots.push([t.sheetId, t.date, t.shot, t.x, t.y, t.ring, t.dist ? rnd(t.x / t.dist, 3) : '', t.dist ? rnd(t.y / t.dist, 3) : '', t.ammo, t.purpose]));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(shots), 'Shots');
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger - Gun Database ' + new Date().toISOString().slice(0, 16).replace('T', ' ')], ['Units', 'Metric: mm, m, g, m/s, mrad.'], ['Auto columns', 'Columns marked (auto) are calculated by the app from the datasheets.']]), 'Info');
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger Shooting - Gun Database ' + new Date().toISOString().slice(0, 16).replace('T', ' ')], ['Units', 'Metric: mm, m, g, m/s, mrad.'], ['Auto columns', 'Columns marked (auto) are calculated by the app from the datasheets.']]), 'Info');
   const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
   return RB.saveFile(`database_${RB.today()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', new Uint8Array(out));
 };
@@ -152,7 +152,7 @@ RB.views.more = {
       ${RB.hasExamples() ? `<div class="card"><h3>Example data</h3><p class="note">Example entries are still in the database (from an imported file). Your own entries are not touched.</p><div class="row"><button class="btn warn" id="mExDel">Remove all example data now</button></div></div>` : ''}
 
       <div class="card"><h3>About</h3>
-        <p><b>Stoic Ranger</b> · Gun Database ${esc(info.version || '')} · ${info.android === 'web app' ? 'web app' : 'Android ' + esc(info.android || '')} · ${esc(info.device || '')}</p>
+        <p><b>Stoic Ranger Shooting</b> · Gun Database ${esc(info.version || '')} · ${info.android === 'web app' ? 'web app' : 'Android ' + esc(info.android || '')} · ${esc(info.device || '')}</p>
         <p class="note">Training log for long-range and precision shooting (rifles and pistols). Units: ${S.units === 'imperial' ? 'imperial (stored metric)' : 'metric'}. Data: ${RB.db.weapons.length} guns, ${RB.db.barrels.length} barrels, ${RB.db.munitions.length} ammunition, ${RB.db.shooters.length} shooters, ${RB.db.sheets.length} datasheets, ${RB.db.roundsLog.length} rounds-log entries.</p>
         <details><summary>Privacy</summary><p class="note">The app has no account and no tracking. All entries stay on the phone. When you use Claude photo reading, that photo and the request go to Anthropic with your own API key; nothing else leaves the phone unless you export or share it.</p></details>
         <details><summary>Open-source licences</summary><p class="note">Barlow Condensed, Barlow Semi Condensed (Jeremy Tribby) and JetBrains Mono: SIL Open Font License 1.1. SheetJS Community Edition: Apache License 2.0. Hole-finding, statistics, charts and the ballistic solver: own code. G1/G7 drag tables: standard reference data (BRL / JBM, as published in py-ballisticcalc).</p></details>

@@ -1,6 +1,6 @@
-# Stoic Ranger for Windows
+# Stoic Ranger Shooting for Windows
 
-The same Stoic Ranger as on Android and iPhone (Gun Database, Training Log, Shooting Drills) as a Windows program.
+The same Stoic Ranger Shooting as on Android and iPhone (Gun Database, Training Log, Shooting Drills) as a Windows program.
 It works from and into your **database.xlsx**, the one file the phone, the iPhone web app, the PC dashboard and
 Excel all use.
 
@@ -11,12 +11,12 @@ Excel all use.
    - asks **where your database.xlsx is**. If the folder you pick has no database.xlsx yet, the empty
      `database.xlsx` from this package is copied there. An existing database.xlsx is **never overwritten**.
      An update offers the database.xlsx the app uses now.
-   - puts a "Stoic Ranger" shortcut on the desktop and in the Start menu and starts the app.
+   - puts a "Stoic Ranger Shooting" shortcut (an old "Stoic Ranger" shortcut is removed) on the desktop and in the Start menu and starts the app.
 3. On its first start the app links that database.xlsx and brings its entries in (nothing in the app or in the file
    is lost; the file then also gets the app's entries).
 
 Your settings and the app's own copy of the data stay in `%APPDATA%\Stoic Ranger` through every update.
-Uninstall: Windows Settings › Apps › Stoic Ranger (or `uninstall.ps1` in the app folder); database.xlsx and the
+Uninstall: Windows Settings › Apps › Stoic Ranger Shooting (or `uninstall.ps1` in the app folder); database.xlsx and the
 app data are not removed.
 
 ## How the database.xlsx is kept in step

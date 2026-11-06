@@ -45,7 +45,7 @@ const db = () => JSON.parse(fs.readFileSync(path.join(USERDATA, 'data', 'db.json
 fs.mkdirSync(USERDATA, { recursive: true });
 fs.writeFileSync(path.join(USERDATA, 'config.json'), JSON.stringify({ asked: true }));
 let a = await launch();
-ok(!a.errors.length && await a.page.evaluate(() => SR.xlsx.canLink() && !SR.xlsx.linked() && /Training Log/.test(document.body.innerText)), 'starts, home shows the parts, no database.xlsx linked yet ' + a.errors.join(' | '));
+ok(!a.errors.length && await a.page.evaluate(() => SR.xlsx.canLink() && !SR.xlsx.linked() && /Training Log/i.test(document.body.innerText)), 'starts, home shows the parts, no database.xlsx linked yet ' + a.errors.join(' | '));
 ok(await a.page.evaluate(() => JSON.parse(SRNative.appInfo()).windows === true), 'the app knows it runs on Windows');
 await a.page.evaluate(() => { location.href = 'training/index.html'; });
 await a.page.waitForFunction(() => window.TL, null, { timeout: 15000 }); await a.page.waitForTimeout(800);

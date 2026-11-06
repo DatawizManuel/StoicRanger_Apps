@@ -106,7 +106,7 @@ RB.sheetHTML = s => {
   return `
   <div class="cls top">Stoic Ranger // Training datasheet</div>
   <div class="shdr">
-    <div class="brand">${RB.logo('slogo')}<div><div class="doctype">Training Datasheet</div><div class="docsub">Stoic Ranger · Gun Database · record of one series</div></div></div>
+    <div class="brand">${RB.logo('slogo')}<div><div class="doctype">Training Datasheet</div><div class="docsub">Stoic Ranger Shooting · Gun Database · record of one series</div></div></div>
     <div class="idbox"><div>Sheet no.</div><div class="sm">${v('no')}</div><div>Date</div><div class="sm">${esc(RB.fmtDate(s.date))}</div><div>Time</div><div class="sm">${v('time')}</div><div>Series</div><div class="sm">${v('series')}</div></div>
   </div>
   <div class="meta">
@@ -165,7 +165,7 @@ RB.sheetHTML = s => {
   </div>
   <h3><span class="n">4</span>Remarks</h3>
   <div class="rem">${Array.from({ length: 12 }, (_, i) => `<i style="top:${(i + 1) * 6.6 + .4}mm"></i>`).join('')}<p>${v('remarks')}</p></div>
-  <div class="ftr"><div>${esc(s.no || 'Training datasheet')}</div><div>Stoic Ranger - Gun Database</div><div>${esc([s.gun, s.caliber].filter(Boolean).join(' · '))}</div></div>
+  <div class="ftr"><div>${esc(s.no || 'Training datasheet')}</div><div>Stoic Ranger Shooting - Gun Database</div><div>${esc([s.gun, s.caliber].filter(Boolean).join(' · '))}</div></div>
   <div class="cls bot">Long range training // Datasheet</div>`;
 };
 

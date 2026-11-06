@@ -11,7 +11,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $here    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $version = '__VERSION__'
 $sha     = '__SHA256__'
-$title   = "Stoic Ranger $version"
+$title   = "Stoic Ranger Shooting $version"
 $key     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\StoicRanger'
 $cfgDir  = Join-Path $env:APPDATA 'Stoic Ranger'
 $cfgFile = Join-Path $cfgDir 'config.json'
@@ -46,12 +46,12 @@ try {
   if (Test-Path $key) { $old = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).InstallLocation }
   $dest = $null
   if ($old -and (Test-Path (Join-Path $old 'StoicRanger.exe'))) {
-    $a = Ask "Stoic Ranger is installed in`n$old`n`nUpdate it there?`n(No = choose another folder)" 'YesNoCancel'
+    $a = Ask "Stoic Ranger Shooting is installed in`n$old`n`nUpdate it there?`n(No = choose another folder)" 'YesNoCancel'
     if ($a -eq 'Cancel') { throw 'cancelled' }
     if ($a -eq 'Yes') { $dest = $old }
   }
   if (-not $dest) {
-    $parent = PickFolder 'Where should Stoic Ranger be installed? A folder "Stoic Ranger" is made inside the folder you choose.' (Join-Path $env:LOCALAPPDATA 'Programs')
+    $parent = PickFolder 'Where should Stoic Ranger Shooting be installed? A folder "Stoic Ranger" is made inside the folder you choose.' (Join-Path $env:LOCALAPPDATA 'Programs')
     if (-not $parent) { throw 'cancelled' }
     $dest = Join-Path $parent 'Stoic Ranger'
   }
@@ -88,7 +88,7 @@ try {
   # 4. install
   $running = Get-Process -Name 'StoicRanger' -ErrorAction SilentlyContinue
   if ($running) {
-    Write-Host 'Stoic Ranger is open. It is closed for the update (it saves its data first).' -ForegroundColor Yellow
+    Write-Host 'Stoic Ranger Shooting is open. It is closed for the update (it saves its data first).' -ForegroundColor Yellow
     $running | ForEach-Object { $_.CloseMainWindow() | Out-Null }; Start-Sleep -Seconds 5
     Get-Process -Name 'StoicRanger' -ErrorAction SilentlyContinue | Stop-Process -Force
   }
@@ -104,14 +104,18 @@ try {
 
   $exe = Join-Path $dest 'StoicRanger.exe'
   $sh  = New-Object -ComObject WScript.Shell
+  # 1.2.0: the app is called "Stoic Ranger Shooting" (Manuel 2026-11-06). The shortcuts of older versions go; the
+  # install folder, StoicRanger.exe and the settings in %APPDATA%\Stoic Ranger keep their names, so updates find them.
   foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Stoic Ranger.lnk'),
-                     (Join-Path ([Environment]::GetFolderPath('Programs')) 'Stoic Ranger.lnk'))) {
+                     (Join-Path ([Environment]::GetFolderPath('Programs')) 'Stoic Ranger.lnk'))) { Remove-Item $lnk -Force -ErrorAction SilentlyContinue }
+  foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Stoic Ranger Shooting.lnk'),
+                     (Join-Path ([Environment]::GetFolderPath('Programs')) 'Stoic Ranger Shooting.lnk'))) {
     $s = $sh.CreateShortcut($lnk); $s.TargetPath = $exe; $s.WorkingDirectory = $dest
-    $s.IconLocation = "$exe,0"; $s.Description = 'Stoic Ranger'; $s.Save()
+    $s.IconLocation = "$exe,0"; $s.Description = 'Stoic Ranger Shooting'; $s.Save()
   }
   New-Item -Path $key -Force | Out-Null
   $u = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$dest\uninstall.ps1`""
-  @{ DisplayName = 'Stoic Ranger'; DisplayVersion = $version; Publisher = 'Stoic Ranger'; DisplayIcon = "$exe,0";
+  @{ DisplayName = 'Stoic Ranger Shooting'; DisplayVersion = $version; Publisher = 'Stoic Ranger'; DisplayIcon = "$exe,0";
      InstallLocation = $dest; UninstallString = $u; NoModify = 1; NoRepair = 1 }.GetEnumerator() | ForEach-Object {
     $t = if ($_.Value -is [int]) { 'DWord' } else { 'String' }
     New-ItemProperty -Path $key -Name $_.Key -Value $_.Value -PropertyType $t -Force | Out-Null }

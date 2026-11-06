@@ -197,7 +197,7 @@ function buildMenu() {
       { label: 'Open the app data folder', click: () => shell.openPath(DATA()) },
       { label: 'Developer tools', accelerator: 'CmdOrCtrl+Shift+I', click: () => win.webContents.toggleDevTools() },
       { type: 'separator' },
-      { label: 'About Stoic Ranger', click: () => dialog.showMessageBox(win, { type: 'info', title: 'About', icon: path.join(__dirname, 'res', 'icon.png'), message: `Stoic Ranger ${app.getVersion()}`,
+      { label: 'About Stoic Ranger Shooting', click: () => dialog.showMessageBox(win, { type: 'info', title: 'About', icon: path.join(__dirname, 'res', 'icon.png'), message: `Stoic Ranger Shooting ${app.getVersion()}`,
         detail: `Gun Database, Training Log and Shooting Drills: the same app as on Android and iPhone.\n\ndatabase.xlsx:\n${cfg.xlsx || '(none linked yet: File › Data and database.xlsx)'}\n\nThe app's own copy of the data:\n${DATA()}` }) },
     ] },
   ]));
@@ -208,20 +208,20 @@ async function firstStart() {
   if (cfg.pending && cfg.pending !== cfg.xlsx) {        // set up by the installer: link it (the first sync merges, nothing is lost)
     const res = await js("window.SR && SR.xlsx ? SR.xlsx.link('pending').then(r => JSON.stringify(r)) : null");
     let o = null; try { o = JSON.parse(res); } catch { }
-    if (o && !o.ok) dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger', message: 'database.xlsx could not be linked', detail: String(o.msg || '') });
+    if (o && !o.ok) dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger Shooting', message: 'database.xlsx could not be linked', detail: String(o.msg || '') });
     else if (o) win.loadURL(HOME + '#/data');
     return;
   }
   if (cfg.xlsx) return;
   if (cfg.asked) return;
   cfg.asked = true; saveCfg();
-  const r = await dialog.showMessageBox(win, { type: 'question', title: 'Stoic Ranger', message: 'Work with a database.xlsx?',
-    detail: 'Stoic Ranger keeps its data in one database.xlsx that the phone, the iPhone web app and Excel can use too. Use your existing file (for example 02_shared\\pc-dashboard\\03_registry\\database.xlsx) or create a new one. You can change this later under File › Data and database.xlsx.',
+  const r = await dialog.showMessageBox(win, { type: 'question', title: 'Stoic Ranger Shooting', message: 'Work with a database.xlsx?',
+    detail: 'Stoic Ranger Shooting keeps its data in one database.xlsx that the phone, the iPhone web app and Excel can use too. Use your existing file (for example 02_shared\\pc-dashboard\\03_registry\\database.xlsx) or create a new one. You can change this later under File › Data and database.xlsx.',
     buttons: ['Use an existing database.xlsx', 'Create a new database.xlsx', 'Later'], defaultId: 0, cancelId: 2, noLink: true });
   if (r.response === 2) return;
   const res = await js(`window.SR && SR.xlsx && SR.xlsx.link('${r.response === 0 ? 'open' : 'create'}').then(r => JSON.stringify(r))`);
   let o = null; try { o = JSON.parse(res); } catch { }
-  if (o && !o.ok && o.msg !== 'cancelled') dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger', message: o.msg });
+  if (o && !o.ok && o.msg !== 'cancelled') dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger Shooting', message: o.msg });
   if (o && o.ok) win.loadURL(HOME + '#/data');
 }
 
@@ -229,7 +229,7 @@ function createWindow() {
   const b = cfg.bounds || { width: 1100, height: 860 };
   win = new BrowserWindow({
     ...b, minWidth: 380, minHeight: 500, show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111111' : '#ffffff',
-    title: 'Stoic Ranger', icon: path.join(__dirname, 'res', 'icon.png'),
+    title: 'Stoic Ranger Shooting', icon: path.join(__dirname, 'res', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: false, nodeIntegration: false, sandbox: false, spellcheck: false },
   });
   if (cfg.maximized) win.maximize();
@@ -250,7 +250,7 @@ function createWindow() {
   // mouse back button and the keyboard's Back key walk back like the phone's Back (never closes the app here)
   win.on('app-command', (e, cmd) => { if (cmd === 'browser-backward') back(); });
   win.webContents.on('before-input-event', (e, i) => { if (i.type === 'keyDown' && i.key === 'BrowserBack') { e.preventDefault(); back(); } });
-  win.on('page-title-updated', e => { e.preventDefault(); win.setTitle('Stoic Ranger'); });
+  win.on('page-title-updated', e => { e.preventDefault(); win.setTitle('Stoic Ranger Shooting'); });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(ORIGIN)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); } });
   nativeTheme.on('updated', () => js('window.SR && SR.onResume && SR.onResume()'));

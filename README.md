@@ -1,6 +1,6 @@
-# Stoic Ranger
+# Stoic Ranger Shooting
 
-Source of the **Stoic Ranger** app (from 1.0.0 one app, one database) and its web version for iPhone, iPad and
+Source of the **Stoic Ranger Shooting** app (called Stoic Ranger until 1.1.0; from 1.0.0 one app, one database) and its web version for iPhone, iPad and
 any browser.
 
 | Part | Was (up to 0.x) | What it does |

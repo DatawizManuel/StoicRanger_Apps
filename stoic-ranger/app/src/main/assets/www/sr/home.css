@@ -24,3 +24,24 @@ body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
 .srwis .k{font:600 12px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
 .srwis blockquote{margin:8px 0 6px;font:500 18px/1.35 "Barlow Semi Condensed",sans-serif}
 .srwis .r{font-size:13px;opacity:.75}
+
+/* overviews (sr/overview.js) */
+.ovf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 8px}
+.ovf label{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ovf label span{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ovf select{width:100%;min-width:0}
+.ovbars{display:block;width:100%;height:auto;margin:4px 0 10px}
+.ovbars rect{fill:var(--accent,#4b5320)}
+.ovbars text{fill:var(--muted);font:500 10px var(--f-mono)}
+.ovh{margin:4px 0 10px}
+.ovh .r{display:grid;grid-template-columns:minmax(0,38%) 1fr auto;gap:8px;align-items:center;margin:5px 0;font-size:14px}
+.ovh .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ovh .b{height:10px;background:var(--panel,#8882)}
+.ovh .b i{display:block;height:100%;background:var(--accent,#4b5320)}
+.ovh .v{font:13px var(--f-mono);white-space:nowrap}
+.ovt{overflow-x:auto;margin:4px 0 10px}
+.ovt table{width:100%;border-collapse:collapse;font-size:13px}
+.ovt th{font:600 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ovt td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--hair);font-family:var(--f-mono);white-space:nowrap}
+.ovt .t{text-align:left;font-family:var(--f-body);white-space:normal}
+.kvs .warn{color:var(--warn,#9a6a00)}

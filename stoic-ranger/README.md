@@ -1,9 +1,9 @@
-# Stoic Ranger (Android)
+# Stoic Ranger Shooting (Android)
 
 One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
-phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Launcher name "Stoic Ranger", package id
-`at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0 and keeps its data).
-Version 1.1.0, versionCode 10.
+phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Name "Stoic Ranger Shooting" (from 1.2.0), launcher
+label "SR_Shooting", package id `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0
+and keeps its data). Version 1.2.0, versionCode 11.
 
 ## How it fits together
 
@@ -52,6 +52,13 @@ from a newer version is never written. Must pass before a release.
 
 ## Versions
 
+- **1.2.0** (versionCode 11): renamed **Stoic Ranger Shooting** (launcher "SR_Shooting"; package id, data files and
+  web storage unchanged). The home page gets an **Overview** like the PC dashboard (Guns, Training, Drills, Dope
+  cards; filter by year, shooter, gun; read-only, the filter stays on the device) and the **paper datasheet** (save
+  the empty sheet as PDF, print it, bring a filled-in sheet back by photo). New read-only **link for SR Field Kit**
+  (`LinkProvider.java`, `content://at.rangebook.app.link`, signature permission `at.stoicranger.permission.LINK`;
+  `call("ballistics")` returns guns, loads and the measured V0 per gun and load). Backups are now saved as
+  `sr-shooting-backup_<date>.json` (every older name still imports). Tests: `bash tools/test-link.sh` checks the link data.
 - **1.1.0** (versionCode 10): the shared database.xlsx (link one on the phone under home › Data; changes come in
   at start and when the app comes back, go out when you leave a part or the app); Back button fixed (it closed the
   app) and a second Back at home closes it; Daily Thoughts taken out (its data stays, favourites can be saved for

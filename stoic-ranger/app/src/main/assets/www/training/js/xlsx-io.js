@@ -41,7 +41,7 @@ TL.exportXlsx = () => {
     return r;
   });
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([head, ...rows]), 'Trainings');
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger - Training Log ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger Shooting - Training Log ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
     ['Trainings', 'Shooter, trainer and weapons by name (matched to the sheets above); Source uid = permanent id of the training in the app.'],
     ['Type', 'Live fire or Dry fire. Dry fire: the Rounds columns hold dry-fire reps and never count as rounds.']]), 'Info');
   return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' }));
