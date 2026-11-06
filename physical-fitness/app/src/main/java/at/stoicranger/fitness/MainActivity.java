@@ -107,8 +107,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        web.evaluateJavascript("(window.PF && PF.back) ? PF.back() : false", value -> {
-            if ("false".equals(value)) finish();      // only a plain false closes the app
+        web.evaluateJavascript("(window.PF && PF.back) ? PF.back() : false", new android.webkit.ValueCallback<String>() {
+            @Override public void onReceiveValue(String value) {
+                if ("false".equals(value)) finish();      // only a plain false closes the app
+            }
         });
     }
 
@@ -154,7 +156,7 @@ public class MainActivity extends Activity {
             o.put("ok", ok); o.put("msg", msg == null ? "" : msg);
             if (data != null) o.put("data", data);
             final String js = "window.PFNativeCallback && PFNativeCallback(" + JSONObject.quote(cb) + "," + o.toString() + ")";
-            runOnUiThread(() -> web.evaluateJavascript(js, null));
+            runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
         } catch (Exception ignored) { }
     }
 
@@ -254,7 +256,9 @@ public class MainActivity extends Activity {
             } catch (IOException e) { return false; }
             File[] all = dir.listFiles();
             if (all != null && all.length > 10) {
-                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                java.util.Arrays.sort(all, new java.util.Comparator<File>() {
+                    @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); }
+                });
                 for (int i = 10; i < all.length; i++) all[i].delete();
             }
             return true;
@@ -288,7 +292,7 @@ public class MainActivity extends Activity {
         /** Let the user pick where to save (Downloads, Drive, …). */
         @JavascriptInterface
         public void saveFile(String name, String mime, String base64, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 pendingBytes = Base64.decode(base64, Base64.DEFAULT);
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -296,24 +300,24 @@ public class MainActivity extends Activity {
                 i.setType(mime);
                 i.putExtra(Intent.EXTRA_TITLE, name);
                 try { startActivityForResult(i, REQ_CREATE); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void openFile(String mimes, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
                 if (mimes != null && !mimes.isEmpty()) i.putExtra(Intent.EXTRA_MIME_TYPES, mimes.split(","));
                 try { startActivityForResult(i, REQ_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void shareFile(String name, String mime, String base64, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try {
                     File dir = new File(getCacheDir(), "shared");
                     dir.mkdirs();
@@ -326,25 +330,25 @@ public class MainActivity extends Activity {
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(i, "Share"));
                 } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Share plain text (a quote) through the Android share sheet. */
         @JavascriptInterface
         public void shareText(String subject, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 Intent i = new Intent(Intent.ACTION_SEND);
                 i.setType("text/plain");
                 if (subject != null && !subject.isEmpty()) i.putExtra(Intent.EXTRA_SUBJECT, subject);
                 i.putExtra(Intent.EXTRA_TEXT, text);
                 try { startActivity(Intent.createChooser(i, "Share")); } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Print (or "Save as PDF") an HTML document rendered by the web app; A4 portrait. */
         @JavascriptInterface
         public void print(String html, String jobName) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 printView = new WebView(MainActivity.this);
                 printView.getSettings().setJavaScriptEnabled(false);
                 printView.setWebViewClient(new WebViewClient() {
@@ -364,7 +368,7 @@ public class MainActivity extends Activity {
                     }
                 });
                 printView.loadDataWithBaseURL(ORIGIN + "/www/", html, "text/html", "utf-8", null);
-            });
+            }});
         }
     }
 }

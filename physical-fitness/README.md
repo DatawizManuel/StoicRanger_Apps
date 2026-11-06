@@ -1,10 +1,16 @@
-# Stoic Ranger - Physical Fitness (Android) 0.1.0
+# Stoic Ranger - Physical Fitness (Android) 0.1.1
 
 Shown as **SR_Physical Fitness** under the launcher icon (Stoic Ranger emblem on steel blue #3E5765). Package id
 `at.stoicranger.fitness`, signed with the same key as the other Stoic Ranger apps. Offline: no internet permission,
 all data stays on the phone. A separate app with its own data file; it is not merged with Stoic Ranger.
 
 Functional fitness on a time budget: whole body, stronger, more flexible, healthy.
+
+- **0.1.1** (versionCode 2, 2026-11-06): the phone's Back button closed the app. Cause: the cloud build tool (dx)
+  turns Java lambdas into calls to `LambdaMetafactory`, which Android does not have, so the app crashed the first
+  time one ran: on Back, and also on Excel export/import, share, print and the backup before a migration. The Java
+  code now uses plain classes, and the build refuses an APK that still has such calls. No change to data or screens.
+- **0.1.0** (versionCode 1, 2026-11-03): first version.
 
 - **Setup**: sessions per week, minutes per session, training days; equipment on/off: kettlebells, dumbbells and
   sandbags by weight, long loop bands by strength, pull-up bar, mini band, bench/box/chair, hand gripper, wrist roller.
@@ -43,7 +49,7 @@ phone is deleted unless it is on the Deleted sheet. A copy of the phone's data i
 
 ## Install the test build
 
-1. Copy `sr-physical-fitness-0.1.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
+1. Copy `sr-physical-fitness-0.1.1-debug.apk` to the phone and open it in the Files app; allow installs from that app.
 2. Play Protect may warn about an unknown app: *Install anyway* (debug build, Stoic Ranger test key).
 3. Open **SR_Physical Fitness**: Setup → Assessment → Create plan.
 

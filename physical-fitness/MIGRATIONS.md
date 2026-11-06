@@ -36,3 +36,5 @@ or reused, so logged sets keep pointing at the right exercise.
 ## Migrations
 
 None yet (first format).
+
+- 0.1.1 (format 1): no data change.

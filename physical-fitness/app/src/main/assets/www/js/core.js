@@ -49,7 +49,7 @@ PF.openFile = (mimes = '') => new Promise(res => {
   i.onchange = async () => { const f = i.files[0]; if (!f) return res({ ok: false, msg: 'cancelled' }); res({ ok: true, name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }); };
   i.click();
 });
-PF.VERSION = '0.1.0';
+PF.VERSION = '0.1.1';
 PF.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: PF.VERSION, android: '-', device: navigator.userAgent.slice(0, 60) }; } catch (e) { return { version: PF.VERSION }; } };
 
 /* ---------- database ----------
