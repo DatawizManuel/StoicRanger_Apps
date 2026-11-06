@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<title>SR Field Kit</title>
+<link rel="stylesheet" href="css/kit.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="phone" id="app">
+  <header class="appbar" id="appbar">
+    <a class="srhome" id="hHome" href="#home" aria-label="SR Field Kit home"></a>
+    <h1 id="hTitle">SR Field Kit</h1>
+    <button type="button" class="ib" id="aboutBtn" aria-label="About, settings and data">⋯</button>
+  </header>
+  <div class="screen">
+  <main>
+  <p class="banner" id="roBanner" hidden></p>
+  <section id="v-home" hidden>
+    <span hidden><small id="offState"></small><button id="offBtn" type="button"></button></span><div id="offHelp" hidden></div>
+    <a class="choice srpart sh" href="#shoot"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="12"/><path d="M17 2v9M17 23v9M2 17h9M23 17h9"/></svg></div><div><h3>Shooting helpers</h3>
+      <p>Drop and wind table, MIL/MOA, scope clicks, range, angle, par timer for dry fire</p><p class="mono" id="hSh"></p></div></a>
+    <a class="choice srpart nv" href="#nav"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14"/><path d="M17 6l4 11-4 11-4-11z"/><path d="M17 6l4 11h-8z" fill="currentColor"/></svg></div><div><h3>Navigate</h3>
+      <p>Your position as MGRS, bearings to a point, sun and moon</p><p class="mono" id="hNv"></p></div></a>
+    <a class="choice srpart br" href="#breathe"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="13"/><circle cx="17" cy="17" r="6"/><circle cx="17" cy="4" r="2" fill="currentColor"/></svg></div><div><h3>Breathe</h3>
+      <p>Six breathing patterns with sound cues, minutes and day streak</p><p class="mono" id="hBr"></p></div></a>
+    <a class="choice srpart fc" href="#cards"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="6" y="4" width="22" height="27"/><path d="M10 10h14M10 15h14M10 20h9"/></svg></div><div><h3>Field cards</h3>
+      <p>Business-card references: survival, medical, comms, shooting, stoic</p><p class="mono" id="hFc"></p></div></a>
+    <a class="choice srpart pr" href="#print"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M9 12V4h16v8"/><rect x="4" y="12" width="26" height="12"/><path d="M9 20h16v10H9z"/><path d="M12 24h10M12 27h7"/></svg></div><div><h3>Printables</h3>
+      <p>Range cards, training datasheet, wind cheat sheet: print or save as PDF</p><p class="mono">3 sheets · A4, A5, A6</p></div></a>
+    <div class="choice srpart soon"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 8v18M8 17h18"/></svg></div><div><h3>More to come</h3>
+      <p>Room for the next tools. Each new tool gets its own row here.</p></div></div>
+    <p class="note">Everything stays on this phone. Nothing is sent anywhere.</p>
+  </section>
+  <!-- BREATHE -->
+  <section id="v-breathe" hidden>
+        <h2>Breathe</h2>
+    <p class="lede">Follow the dot around the ring. The centre fills as you breathe in and empties as you breathe out. Turn on sound and you can do it with eyes closed.</p>
+    <div class="breathe">
+      <div>
+        <div class="pacer">
+          <svg viewBox="0 0 220 220" aria-hidden="true">
+            <circle cx="110" cy="110" r="92" fill="none" stroke="var(--hair)" stroke-width="10"/>
+            <g id="segs" transform="rotate(-90 110 110)"></g>
+            <circle id="core" cx="110" cy="110" r="30" fill="var(--raised)" stroke="var(--fg)" stroke-width="1.5"/>
+            <circle id="dot" cx="110" cy="18" r="8" fill="var(--bright)" stroke="var(--bg)" stroke-width="3"/>
+          </svg>
+          <div class="phase"><b id="phaseName">Ready</b><span id="phaseCount">–</span></div>
+        </div>
+        <div class="actions bctl">
+          <button class="button" id="bStart" type="button">Start</button>
+          <button class="button ghost" id="bStop" type="button">Reset</button>
+        </div>
+        <div class="legend"><span><i class="lg-in"></i>In</span><span><i class="lg-hold"></i>Hold</span><span><i class="lg-out"></i>Out</span></div>
+        <div class="stats">
+          <div><b id="rounds">0</b><small>Rounds</small></div>
+          <div><b id="left">5:00</b><small>Left</small></div>
+          <div><b id="today">0</b><small>Min today</small></div>
+          <div><b id="streak">0</b><small>Day streak</small></div>
+        </div>
+      </div>
+      <div>
+        <div class="patterns" id="patterns"></div>
+        <div class="custom" id="customBox" hidden></div>
+        <div class="opts">
+          <div class="field w150"><label for="dur">Session</label>
+            <select id="dur"><option value="60">1 minute</option><option value="180">3 minutes</option><option value="300" selected>5 minutes</option><option value="600">10 minutes</option><option value="1200">20 minutes</option></select></div>
+          <label class="check"><input type="checkbox" id="sound" checked> Sound cues</label>
+          <label class="check"><input type="checkbox" id="awake" checked> Keep screen on</label>
+        </div>
+        <p class="note mt16">Minutes and streak are kept on this device only.</p>
+      </div>
+    </div>
+    <div class="guide">
+      <h3>Which pattern, when</h3>
+      <div class="guide-grid" id="guide"></div>
+      <p class="note">Stop and breathe normally if you feel dizzy or tingly. Never practise breath holds in or near water, or while driving. This is training guidance, not medical advice.</p>
+    </div>
+  </section>
+
+  <!-- SHOOTING -->
+  <section id="v-shoot" hidden>
+        <h2>Shooting helpers</h2>
+    <p class="lede">Every result is an estimate to start from; confirm it on the range and keep your own data.</p>
+    <div class="seg" role="group" aria-label="Tool">
+      <button type="button" data-tab="ball" aria-pressed="true">Drop &amp; wind</button>
+      <button type="button" data-tab="conv" aria-pressed="false">Convert</button>
+      <button type="button" data-tab="clicks" aria-pressed="false">Scope clicks</button>
+      <button type="button" data-tab="range" aria-pressed="false">Range</button>
+      <button type="button" data-tab="angle" aria-pressed="false">Angle</button>
+      <button type="button" data-tab="timer" aria-pressed="false">Par timer</button>
+    </div>
+
+    <div class="panel" data-pane="ball">
+      <div class="srlink" id="srLink"></div>
+      <div class="form">
+        <div class="field span2"><label for="bPre">Load</label><select id="bPre"></select></div>
+        <div class="field"><label for="bModel">Drag model</label><select id="bModel"><option value="G1" selected>G1</option><option value="G7">G7</option></select></div>
+        <div class="field"><label for="bBC">BC</label><input id="bBC" type="number" step="0.001"></div>
+        <div class="field"><label for="bMV">Muzzle velocity (m/s)</label><input id="bMV" type="number" step="1"></div>
+        <div class="field"><label for="bMass">Bullet (g)</label><input id="bMass" type="number" step="0.1"></div>
+        <div class="field"><label for="bSH">Sight height (cm)</label><input id="bSH" type="number" step="0.1" value="4.5"></div>
+        <div class="field"><label for="bZero">Zero (m)</label><input id="bZero" type="number" step="1" value="100"></div>
+        <div class="field"><label for="bWind">Wind (km/h)</label><input id="bWind" type="number" step="1" value="10"></div>
+        <div class="field"><label for="bClock">Wind from</label><select id="bClock"><option value="3" selected>3 / 9 o'clock</option><option value="2">2 / 4 / 8 / 10</option><option value="1">1 / 5 / 7 / 11</option><option value="0">12 / 6 o'clock</option></select></div>
+        <div class="field"><label for="bAlt">Altitude (m)</label><input id="bAlt" type="number" step="10" value="400"></div>
+        <div class="field"><label for="bTemp">Temperature (°C)</label><input id="bTemp" type="number" step="1" value="10"></div>
+        <div class="field"><label for="bMax">Out to (m)</label><select id="bMax"><option>300</option><option>500</option><option selected>800</option><option>1000</option></select></div>
+        <div class="field"><label for="bStep">Step (m)</label><select id="bStep"><option>25</option><option selected>50</option><option>100</option></select></div>
+        <div class="field"><label for="bMove">Target speed (km/h)</label><input id="bMove" type="number" step="0.5" value="5"></div>
+      </div>
+      <div class="results" id="bSum"></div>
+      <div class="subhead"><h3 class="m0">Come-ups</h3><span class="note">Highlighted: zero distance. <span class="warn">Bronze rows: bullet below 1.2× speed of sound, less predictable.</span></span></div>
+      <div class="tablewrap"><table class="data" id="bTable"></table></div>
+      <p class="formula">Same solver as the Stoic Ranger dope cards: point mass, G1 or G7 drag tables, air density from your altitude and temperature. Drop is below the line of sight; dial or hold the MIL value up. Lead is for a target crossing at the speed you set. Tap "Field cards → DOPE card" to see this table as a printable card.</p>
+    </div>
+
+    <div class="panel" data-pane="conv" hidden>
+      <div class="form">
+        <div class="field"><label for="cVal">Value</label><input id="cVal" type="number" step="any" value="1"></div>
+        <div class="field"><label for="cUnit">Unit</label><select id="cUnit"><option value="mil" selected>MIL (mrad)</option><option value="moa">MOA</option><option value="cm">cm</option><option value="in">inch</option></select></div>
+        <div class="field"><label for="cDist">Distance (m)</label><input id="cDist" type="number" step="any" value="300"></div>
+      </div>
+      <div class="results" id="cOut"></div>
+      <p class="formula">1 MIL = <code>10 cm at 100 m</code> · 1 MOA = <code>2.91 cm at 100 m</code> · 1 MIL = <code>3.44 MOA</code>. Also use it to turn a group size into MOA or MIL.</p>
+    </div>
+
+    <div class="panel" data-pane="clicks" hidden>
+      <div class="form">
+        <div class="field"><label for="kV">Group off (cm)</label><input id="kV" type="number" step="any" value="6"></div>
+        <div class="field"><label for="kVd">Vertical</label><select id="kVd"><option value="low">low</option><option value="high">high</option></select></div>
+        <div class="field"><label for="kH">Group off (cm)</label><input id="kH" type="number" step="any" value="3"></div>
+        <div class="field"><label for="kHd">Horizontal</label><select id="kHd"><option value="left">left</option><option value="right" selected>right</option></select></div>
+        <div class="field"><label for="kDist">Distance (m)</label><input id="kDist" type="number" step="any" value="100"></div>
+        <div class="field"><label for="kClick">Click value</label><select id="kClick"><option value="0.1mil" selected>0.1 MIL</option><option value="0.05mil">0.05 MIL</option><option value="0.25moa">1/4 MOA</option><option value="0.125moa">1/8 MOA</option></select></div>
+      </div>
+      <div class="results" id="kOut"></div>
+      <p class="formula">Dial toward where you want the bullets to go. Check against the markings on your own turrets.</p>
+    </div>
+
+    <div class="panel" data-pane="range" hidden>
+      <div class="form">
+        <div class="field span2"><label for="rPre">Known size</label><select id="rPre">
+          <option value="1.8">Standing person, 1.8 m</option>
+          <option value="0.25">Human head, 0.25 m</option>
+          <option value="0.5">Shoulder width, 0.5 m</option>
+          <option value="1.0">Roe deer, chest to back, 1.0 m</option>
+          <option value="1.5">Car height, 1.5 m</option>
+          <option value="4.5">Car length, 4.5 m</option>
+          <option value="2.0">Door height, 2.0 m</option>
+          <option value="0.76">IPSC target height, 0.76 m</option>
+          <option value="custom">Custom size</option></select></div>
+        <div class="field"><label for="rSize">Size (m)</label><input id="rSize" type="number" step="any" value="1.8"></div>
+        <div class="field"><label for="rMils">Reads (MIL)</label><input id="rMils" type="number" step="any" value="4.5"></div>
+      </div>
+      <div class="results" id="rOut"></div>
+      <p class="formula">Mil relation: <code>distance (m) = size (m) × 1000 ÷ mils</code>. Half a mil misread at 4 mils is a 12 % range error, so measure carefully.</p>
+    </div>
+
+    <div class="panel" data-pane="angle" hidden>
+      <div class="form">
+        <div class="field"><label for="aDist">Line-of-sight distance (m)</label><input id="aDist" type="number" step="1" value="400"></div>
+        <div class="field"><label for="aDeg">Angle up or down (°)</label><input id="aDeg" type="number" step="1" value="25"></div>
+      </div>
+      <div class="results" id="aOut"></div>
+      <p class="formula">Rifleman's rule: <code>shoot for distance × cos(angle)</code>, uphill or downhill alike. Below 10° the difference is usually smaller than your hold.</p>
+    </div>
+
+    <div class="panel" data-pane="timer" hidden>
+      <div class="timer">
+        <div class="clock" id="clock"><span id="tState">Ready</span><b id="tTime">0.00</b><span id="tRep">Rep 0 / 5</span></div>
+        <div>
+          <div class="form">
+            <div class="field"><label for="tPar">Par time (s)</label><input id="tPar" type="number" step="0.1" value="1.5"></div>
+            <div class="field"><label for="tMin">Random delay from (s)</label><input id="tMin" type="number" step="0.5" value="2"></div>
+            <div class="field"><label for="tMax">to (s)</label><input id="tMax" type="number" step="0.5" value="4"></div>
+            <div class="field"><label for="tReps">Reps</label><input id="tReps" type="number" step="1" value="5"></div>
+            <div class="field"><label for="tRest">Rest between (s)</label><input id="tRest" type="number" step="1" value="5"></div>
+          </div>
+          <div class="actions start"><button class="button" id="tGo" type="button">Start</button><button class="button ghost" id="tStop" type="button">Stop</button></div>
+          <p class="formula">Random delay, then a start beep. Finish the drill before the par beep. Made for dry fire at home: unloaded, no ammunition in the room.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NAVIGATE -->
+  <section id="v-nav" hidden>
+        <h2>Navigate</h2>
+    <p class="lede">Your position as a grid reference, bearings to a point, and the light for any day. Your position is worked out on this device and never leaves it.</p>
+    <div class="seg" role="group" aria-label="Tool">
+      <button type="button" data-ntab="pos" aria-pressed="true">Position &amp; grid</button>
+      <button type="button" data-ntab="sun" aria-pressed="false">Sun &amp; moon</button>
+    </div>
+
+    <div class="panel" data-npane="pos">
+      <div class="posbar">
+        <button class="button" id="gpsBtn" type="button">Use my position</button>
+        <div class="field grow"><label for="posIn">Or type a position (MGRS or lat, lon)</label><input id="posIn" type="text" autocomplete="off" spellcheck="false" placeholder="30U YC 08213 07235  or  51.4779, -0.0015"></div>
+      </div>
+      <p class="note" id="posMsg" aria-live="polite"></p>
+      <div class="gridref" id="gridref"></div>
+      <div class="results" id="posOut"></div>
+
+      <div class="subhead"><h3 class="m0">Bearing to a point</h3><span class="note">From your position above to the target.</span></div>
+      <div class="form">
+        <div class="field span2"><label for="tgtIn">Target (MGRS or lat, lon)</label><input id="tgtIn" type="text" autocomplete="off" spellcheck="false" placeholder="30U YC 09200 07300"></div>
+        <div class="field"><label for="tgtPick">Or a saved point</label><select id="tgtPick"><option value="">–</option></select></div>
+        <div class="field"><label for="decl">Declination (° east +)</label><input id="decl" type="number" step="0.1" value="0"></div>
+      </div>
+      <div class="results" id="brgOut"></div>
+      <p class="formula">Bearings in degrees and NATO mils (6400). Magnetic = true − declination. Take the declination from your map margin or a current declination calculator; it changes with place and year. Grid north differs from true north by the convergence shown.</p>
+
+      <div class="subhead"><h3 class="m0">Saved points</h3><span class="note">Kept on this device only.</span></div>
+      <div class="savebar"><div class="field grow"><label for="ptName">Name</label><input id="ptName" type="text" maxlength="40" placeholder="Car, camp, RV 1"></div><button class="button ghost" id="ptSave" type="button">Save current position</button></div>
+      <div class="tablewrap"><table class="data" id="ptTable"></table></div>
+    </div>
+
+    <div class="panel" data-npane="sun" hidden>
+      <div class="posbar">
+        <button class="button" id="gpsBtn2" type="button">Use my position</button>
+        <div class="field"><label for="sunDate">Date</label><input id="sunDate" type="date"></div>
+      </div>
+      <p class="note" id="sunWhere"></p>
+      <div class="sunmoon">
+        <div class="results" id="sunOut"></div>
+        <div class="moonbox"><svg id="moonSvg" viewBox="0 0 120 120" aria-hidden="true"></svg><div id="moonTxt"></div></div>
+      </div>
+      <div class="subhead"><h3 class="m0">Next 7 days</h3><span class="note">Times in your device's time zone.</span></div>
+      <div class="tablewrap"><table class="data" id="sunTable"></table></div>
+      <p class="formula">First light = civil dawn (sun 6° below the horizon): enough light to work without a torch. Last light = civil dusk. Nautical twilight (12°) is when the horizon disappears. Computed on the device, accurate to about a minute for the sun and a few minutes for the moon.</p>
+    </div>
+  </section>
+
+
+  <!-- FIELD CARDS -->
+  <section id="v-cards" hidden>
+        <h2>Field cards</h2>
+    <p class="lede">Business-card size, 85 × 55 mm: one topic per card, front and back. Laminate them, punch a corner, carry the set on a ring or in a wallet. Pick a topic to see both sides.</p>
+    <div class="seg" role="group" aria-label="Filter" id="cardFilters"></div>
+    <div class="printbar"><button class="button ghost" id="printBtn" type="button">Print cards</button><span class="note">Prints <b id="printCount"></b> on A4: fronts on one page, backs on the next. In the print screen choose <b>Save as PDF</b> to keep a file, or print double-sided (flip on long edge) at 100 % scale, then cut along the lines.</span></div>
+    <div class="cardgrid" id="cardGrid"></div>
+    <div class="preview" id="preview"></div>
+  </section>
+
+  <!-- PRINTABLES -->
+  <section id="v-print" hidden>
+    <h2>Printables</h2>
+    <p class="lede">Sheets to print and fill in by hand at the range. Print opens the phone's print screen, where you can print or save a PDF. Share sends the PDF to another app, for example to a print shop.</p>
+    <div class="plist">
+      <article class="pitem">
+        <img src="printables/range-card-A4-1.png" alt="Range card, front: header fields, sector sketch, targets and reference points table" width="120" height="170">
+        <div class="pbody">
+          <span class="pcat">Long range · 15</span>
+          <h3>Range card</h3>
+          <p>Sector sketch with range rings, targets and reference points with bearing, range, angle, elevation and wind. Back: field sketch.</p>
+          <p class="pmeta">2 pages · front and back</p>
+          <div class="psizes"><div class="ps"><span>A4</span><button type="button" class="button" data-print="range-card-A4.pdf">Print</button><button type="button" class="button ghost" data-share="range-card-A4.pdf">Share</button></div><div class="ps"><span>A5</span><button type="button" class="button ghost" data-print="range-card-A5.pdf">Print</button><button type="button" class="button ghost" data-share="range-card-A5.pdf">Share</button></div><div class="ps"><span>A6</span><button type="button" class="button ghost" data-print="range-card-A6.pdf">Print</button><button type="button" class="button ghost" data-share="range-card-A6.pdf">Share</button></div></div>
+        </div>
+      </article>
+      <article class="pitem">
+        <img src="printables/datasheet-blank-1.png" alt="Training datasheet: rifle and ammunition, range and conditions, ring target with hit table, remarks" width="120" height="170">
+        <div class="pbody">
+          <span class="pcat">Long range training</span>
+          <h3>Training datasheet</h3>
+          <p>Record of one series: rifle and ammunition, range and conditions, ring target with 12 hits, group and correction, remarks.</p>
+          <p class="pmeta">1 page</p>
+          <div class="psizes"><div class="ps"><span>A4</span><button type="button" class="button" data-print="datasheet-blank.pdf">Print</button><button type="button" class="button ghost" data-share="datasheet-blank.pdf">Share</button></div></div>
+        </div>
+      </article>
+      <article class="pitem">
+        <img src="printables/wind-cheat-sheet-generic.png" alt="Wind cheat sheet: clock values, holds table, speed without a meter, the wind call, error budget, log" width="120" height="170">
+        <div class="pbody">
+          <span class="pcat">Long range · 03</span>
+          <h3>Wind cheat sheet</h3>
+          <p>Clock values, wind holds, reading wind speed without a meter, the wind call step by step, error budget and a log. Pick a gun and load to fill in the holds.</p>
+          <p class="pmeta">1 page · A4 · generic or made for one gun and load</p>
+          <div class="field wsfield"><label for="wsSrc">Holds for</label><select id="wsSrc"></select></div>
+          <div class="psizes"><button type="button" class="button" id="wsOpen">Open sheet</button></div>
+        </div>
+      </article>
+    </div>
+  </section>
+  </main>
+  </div>
+  <div class="aboutscr wsview" id="wsView" hidden></div>
+  <div class="aboutscr" id="about" hidden>
+    <div class="viewbar"><button type="button" class="vback" id="aboutClose">‹ Back</button></div>
+    <h2>About and settings</h2>
+    <p>SR Field Kit: shooting helpers, navigation, breathing, field cards and printables for the Stoic Ranger. Works fully offline. The app has no internet permission, no accounts and no tracking. Everything you enter stays on this phone.</p>
+    <dl class="kv"><dt>Version</dt><dd id="aboutVer">0.1.0</dd><dt>Permissions</dt><dd>Location, only when you tap "Use my position"</dd><dt>Fonts</dt><dd>Barlow and JetBrains Mono, SIL Open Font License 1.1</dd><dt>Data file</dt><dd id="aboutData">db.json on this phone</dd><dt>Linked apps</dt><dd id="aboutLink">None</dd><dt>Website</dt><dd>stoic-ranger.com</dd></dl>
+    <h3>Settings</h3>
+    <div class="setrow2"><span>Look</span><div class="seg" role="group" aria-label="Look"><button type="button" data-th="" aria-pressed="true">Phone</button><button type="button" data-th="light" aria-pressed="false">Light</button><button type="button" data-th="dark" aria-pressed="false">Dark</button></div></div>
+    <div class="setunits"><span>Units</span><div class="seg" role="group" aria-label="Units"><button type="button" data-u="metric" aria-pressed="true">Metric</button><button type="button" data-u="imp" aria-pressed="false">Imperial</button></div></div>
+    <p class="note">Imperial shows yards, inches, fps, grains, ft·lb, mph, feet and °F. MIL and MOA stay as they are.</p>
+    <label class="check setrow"><input type="checkbox" id="setLink" checked> Offer Stoic Ranger data in Drop &amp; wind</label>
+    <p class="note">Off: the link box in Shooting helpers stays hidden and nothing is read from Stoic Ranger.</p>
+    <h3>Your data</h3>
+    <p class="note">Breathing minutes and streak, breathing settings, Drop &amp; wind values, last position, saved points, settings. A copy is kept on the phone before anything is deleted.</p>
+    <div class="actions start"><button type="button" class="button ghost" id="wipeBtn">Delete all my data</button></div>
+    <div class="confirm" id="wipeAsk" hidden><p>Delete breathing log, settings, last position and all saved points? The app keeps one backup copy on the phone, but you can't restore it from inside the app.</p><div class="actions start"><button type="button" class="button" id="wipeYes">Delete</button><button type="button" class="button ghost" id="wipeNo">Keep</button></div></div>
+    <p class="note" id="wipeMsg" aria-live="polite"></p>
+  </div>
+</div>
+<div id="printout" aria-hidden="true"></div>
+<script src="js/store.js"></script>
+<script src="js/emblem.js"></script>
+<script src="js/ballistics.js"></script>
+<script src="js/kit.js"></script>
+<script src="js/link.js"></script>
+<script src="js/wsheet.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

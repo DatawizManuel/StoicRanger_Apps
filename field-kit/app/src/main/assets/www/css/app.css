@@ -1,0 +1,229 @@
+/* SR Field Kit app look: same tokens as the Stoic Ranger app (www/gun/css/app.css). Black header band with the emblem
+   (gold in dark mode), Barlow + JetBrains Mono, square corners, a home list of tools with colour stripes.
+   Light or dark: data-theme on <html> is always set by js/app.js (phone setting, or the user's choice in Settings).
+   Tool colours (proposals): Shooting gunmetal, Navigate olive, Breathe bronze, Field cards coyote, Printables oxblood. */
+.phone { position: relative; width: 100%; height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+
+.appbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 14px 10px; border-bottom: 1px solid var(--hair); background: var(--surface); }
+.appbar span { flex: 1; font: 700 1.15rem/1 var(--f-disp); letter-spacing: .14em; text-transform: uppercase; color: var(--bright); }
+.appbar .info { width: 40px; height: 40px; background: transparent; border: 1px solid var(--hair); color: var(--fg); font: 700 1.1rem/1 var(--f-disp); cursor: pointer; }
+.appbar .info:hover { border-color: var(--muted); color: var(--bright); }
+
+.screen { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg); overscroll-behavior: contain; }
+.phone main { max-width: none; padding: 16px 14px 28px; }
+.phone h2 { font-size: 1.9rem; }
+.phone .lede { font-size: .95rem; margin-bottom: 16px; }
+
+/* everything single-column inside the phone, whatever the browser width */
+.phone .breathe, .phone .timer, .phone .sunmoon { grid-template-columns: 1fr; gap: 18px; }
+.phone .pacer { max-width: min(290px, 46vh); }
+.phone .bctl .button { flex: 1; min-width: 0; min-height: 48px; }
+.phone .custom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.phone .patterns { grid-template-columns: 1fr; }
+.phone .guide-grid { grid-template-columns: 1fr; }
+.phone .form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.phone .form .span2 { grid-column: span 2 !important; }
+.phone .results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.phone .cardgrid { grid-template-columns: 1fr; }
+.phone .fcard > span:not(.cardrow) { display: block; }
+.phone .seg { width: 100%; }
+.phone .seg button { flex: 1; min-height: 44px; }
+.phone .stats b { font-size: 1.3rem; }
+.phone .button { min-height: 48px; }
+.phone .posbar .button { width: 100%; }
+
+/* bottom navigation */
+
+/* full-screen card viewer and About, both inside the phone */
+.phone .preview { margin: 0; }
+.phone .preview:not(.open) { display: none; }
+.phone .preview.open, .phone .aboutscr { position: absolute; inset: 0; z-index: 20; overflow-y: auto; background: var(--bg); padding: 12px 14px 24px; }
+.viewbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.vback { background: transparent; border: 1px solid var(--hair); color: var(--bright); padding: 10px 14px; min-height: 44px; cursor: pointer; font: 700 .95rem/1 var(--f-disp); letter-spacing: .12em; text-transform: uppercase; }
+.vback:hover { border-color: var(--muted); }
+.vflip { min-width: 0; }
+.preview .kit-head { padding-top: 0; border-top: 0; }
+.preview .kit-head h3 { font-size: 1.15rem; }
+.preview .zoomseg { margin: 0; width: auto; }
+.preview .pairgrid { cursor: pointer; }
+.preview.open:not(.showb) .pairgrid > div:nth-child(2) { display: none; }
+.preview.open.showb .pairgrid > div:first-child { display: none; }
+
+.aboutscr h2 { margin-bottom: 12px; }
+.aboutscr p { margin: 0 0 12px; }
+.aboutscr h3 { margin-top: 20px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 8px; font-size: .95rem; }
+.kv dt { color: var(--muted); font: 700 .8rem/1.6 var(--f-disp); letter-spacing: .12em; text-transform: uppercase; }
+.kv dd { margin: 0; color: var(--bright); }
+.confirm { border: 1px solid var(--bronze); padding: 12px; margin-top: 12px; background: var(--raised); }
+
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; font-display: swap; src: url(fonts/barlow-condensed-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-weight: 500; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url(fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 600; font-display: swap; src: url(fonts/jetbrains-mono-latin-600-normal.woff2) format("woff2"); }
+
+:root {
+  --bg: #ffffff; --surface: #ffffff; --raised: #f1f1ec; --fg: #111111; --bright: #111111; --muted: #4a4a4a; --hair: #c9c9c1;
+  --accent: #4b5320; --accent-ink: #ffffff; --band: #111111; --band-ink: #ffffff; --bronze: #A27B3E; --green: #4b5320;
+  --s-br: #A27B3E; --s-nv: #4B5320; --s-fc: #5C462A; --frame: #0E0F0C;
+  --f-mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121512; --surface: #1a1e1a; --raised: #232823; --fg: #dfe2d8; --bright: #f2f4ec; --muted: #9aa194; --hair: #2f3630;
+  --accent: #c9b46a; --accent-ink: #121512; --band: #c9b46a; --band-ink: #121512; --bronze: #C99A55; --green: #8E9A4A;
+  --s-br: #C99A55; --s-nv: #8E9A4A; --s-fc: #A88A62; --frame: #000000; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121512; --surface: #1a1e1a; --raised: #232823; --fg: #dfe2d8; --bright: #f2f4ec; --muted: #9aa194; --hair: #2f3630;
+  --accent: #c9b46a; --accent-ink: #121512; --band: #c9b46a; --band-ink: #121512; --bronze: #C99A55; --green: #8E9A4A;
+  --s-br: #C99A55; --s-nv: #8E9A4A; --s-fc: #A88A62; --frame: #000000; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); }
+.screen { background: var(--bg); }
+
+
+/* status bar + header band */
+.appbar { background: var(--band); color: var(--band-ink); border-bottom: 3px solid var(--accent); padding: 4px 6px 6px 10px; min-height: 52px; gap: 6px; }
+.appbar[data-sec="breathe"] { border-bottom-color: var(--s-br); }
+.appbar[data-sec="nav"] { border-bottom-color: var(--s-nv); }
+.appbar[data-sec="cards"] { border-bottom-color: var(--s-fc); }
+.appbar h1 { flex: 1; margin: 0; font: 700 21px/1.05 var(--f-disp); letter-spacing: .04em; text-transform: uppercase; color: var(--band-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srhome { width: 40px; height: 40px; padding: 4px; color: var(--band-ink); flex: none; display: inline-flex; }
+.appbar .ib { appearance: none; background: none; border: 0; color: var(--band-ink); font: 600 24px/1 var(--f-body); min-width: 44px; height: 44px; cursor: pointer; }
+
+/* inside the phone: section title lives in the header band */
+.phone main section > h2 { display: none; }
+.phone .lede { color: var(--muted); }
+
+/* home: tool rows (same as Stoic Ranger home) */
+.choice { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--hair); padding: 16px; margin: 0 0 12px; color: var(--fg); text-decoration: none; }
+.choice:hover { border-color: var(--muted); }
+.choice .ic { width: 40px; flex: none; color: var(--accent); }
+.choice .ic svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.8; display: block; }
+.choice h3 { margin: 0; font: 700 19px/1.1 var(--f-disp); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
+.choice p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.35; }
+.choice p.mono { font: 13px/1.35 var(--f-mono); color: var(--fg); }
+.srpart { border-left: 6px solid var(--fg); }
+.srpart.br { border-left-color: var(--s-br); } .srpart.br .ic { color: var(--s-br); }
+.srpart.nv { border-left-color: var(--s-nv); } .srpart.nv .ic { color: var(--s-nv); }
+.srpart.fc { border-left-color: var(--s-fc); } .srpart.fc .ic { color: var(--s-fc); }
+.srpart.soon { border-style: dashed; border-left: 6px dashed var(--hair); background: transparent; }
+.srpart.soon .ic, .srpart.soon h3 { color: var(--muted); }
+
+/* controls in the app look */
+.phone .button { border: 1.5px solid var(--accent); }
+.phone .button.ghost { border-color: var(--fg); color: var(--fg); background: var(--surface); }
+.phone .button:hover { background: var(--accent); color: var(--accent-ink); }
+.phone .button.ghost:hover { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.phone .seg { border: 1.5px solid var(--fg); }
+.phone .seg button { color: var(--fg); border-right: 1px solid var(--hair); }
+.phone .seg button:last-child { border-right: 0; }
+.phone .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.phone .panel { background: var(--surface); }
+.phone .field input, .phone .field select { background: var(--bg); color: var(--fg); border: 1px solid var(--hair); border-bottom: 2px solid var(--muted); min-height: 44px; }
+.phone .field input:focus, .phone .field select:focus { outline: none; border-bottom-color: var(--accent); }
+.phone .results b, .phone .stats b, .phone .gridref b, .phone .phase span { font-family: var(--f-mono); font-weight: 600; letter-spacing: 0; }
+.phone .results b { font-size: 1.35rem; }
+.phone .stats b { font-size: 1.15rem; }
+.phone .gridref b { font-size: 1.45rem; }
+.phone .phase span { font-size: 2.2rem; }
+.phone table.data { font-family: var(--f-mono); font-size: .8rem; }
+.phone table.data th { font-family: var(--f-body); border-bottom: 2px solid var(--fg); background: var(--surface); }
+.phone .patterns label { background: var(--surface); }
+.phone .patterns label:has(input:checked) { border-color: var(--s-br); border-left: 4px solid var(--s-br); background: var(--raised); }
+.phone .guide article { background: var(--surface); }
+.phone .fcard { background: var(--surface); border-left: 4px solid var(--s-fc); }
+.phone .fcard[aria-pressed="true"] { border-color: var(--s-fc); }
+.phone .pillar { color: var(--s-fc); }
+.phone .moonbox, .phone .gridref, .phone .results > div, .phone .stats div { background: var(--bg); }
+.vback { color: var(--fg); border: 1.5px solid var(--fg); background: var(--surface); }
+.aboutscr .kv dd { color: var(--fg); }
+
+/* v3: Shooting helpers as a fourth tool (proposed colour: gunmetal) */
+:root { --s-sh: #4A5560; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s-sh: #8A98A6; } }
+:root[data-theme="dark"] { --s-sh: #8A98A6; }
+.appbar[data-sec="shoot"] { border-bottom-color: var(--s-sh); }
+.srpart.sh { border-left-color: var(--s-sh); } .srpart.sh .ic { color: var(--s-sh); }
+.phone .seg button { flex: 1 1 30%; }
+.phone .clock { background: var(--bg); }
+.phone .clock b { font-family: var(--f-mono); font-weight: 600; font-size: clamp(2.6rem, 14vw, 4rem); }
+.phone table.data td.key { color: var(--fg); font-weight: 600; background: var(--raised); }
+.phone table.data tr.zero td { background: color-mix(in srgb, var(--s-nv) 18%, var(--bg)); }
+.phone table.data td:first-child { color: var(--fg); }
+
+/* v4: Printables (proposed colour: oxblood, like the red marks on the sheets) */
+:root { --s-pr: #7A2E24; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s-pr: #C8705F; } }
+:root[data-theme="dark"] { --s-pr: #C8705F; }
+.appbar[data-sec="print"] { border-bottom-color: var(--s-pr); }
+.srpart.pr { border-left-color: var(--s-pr); } .srpart.pr .ic { color: var(--s-pr); }
+.plist { display: flex; flex-direction: column; gap: 12px; }
+.pitem { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; background: var(--surface); border: 1px solid var(--hair); border-left: 4px solid var(--s-pr); padding: 12px; }
+.pitem img { width: 96px; height: auto; border: 1px solid var(--hair); background: #fff; display: block; }
+.pbody { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pcat { font: 600 11px/1.2 var(--f-body); text-transform: uppercase; letter-spacing: .1em; color: var(--s-pr); }
+.pbody h3 { margin: 0; font: 700 18px/1.1 var(--f-disp); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
+.pbody p { margin: 0; font-size: 14px; line-height: 1.35; color: var(--muted); }
+.pbody .pmeta { font: 12px/1.3 var(--f-mono); color: var(--fg); }
+.psizes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.phone .psizes .button { min-width: 56px; min-height: 44px; padding: 10px 12px; flex: 1; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+
+/* v5: Drop & wind linked to Stoic Ranger */
+.srlink { border: 1px solid var(--hair); border-left: 4px solid var(--s-sh); background: var(--raised); padding: 12px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+.srlink p { margin: 0; font-size: .92rem; line-height: 1.4; }
+.srlink b { color: var(--fg); }
+.srlink .row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.srlink .row2 .button { flex: 1; min-width: 0; }
+.srhead { display: flex; justify-content: space-between; align-items: center; font: 700 .8rem/1 var(--f-disp); letter-spacing: .14em; text-transform: uppercase; color: var(--s-sh); }
+.lnk { background: none; border: 0; color: var(--fg); text-decoration: underline; cursor: pointer; font: 600 .85rem/1 var(--f-body); padding: 8px 0 8px 8px; }
+.srform { margin: 0; }
+.srsrc { font: 12px/1.45 var(--f-mono) !important; color: var(--fg); }
+.phone .srform { grid-template-columns: 1fr; }
+
+/* v6: settings, generated wind cheat sheet */
+.setrow { margin: 4px 0; min-height: 44px; color: var(--fg); }
+.wsfield { margin-top: 6px; }
+.wsview { padding: 12px 10px 24px; }
+.wsheet { padding: 14px; max-width: none; margin: 0; box-shadow: none; }
+.wsheet .sh { flex-wrap: wrap; align-items: flex-end; }
+.wsheet .sh small { white-space: normal; text-align: left; font-size: .7rem; line-height: 1.35; }
+.wsheet .wscat { display: block; font: 700 .7rem/1 var(--f-disp); letter-spacing: .14em; text-transform: uppercase; color: #9A3A2E; margin-bottom: 4px; }
+.wsheet .two { margin-bottom: 6px; }
+.wsheet h4 { margin-top: 12px; }
+.wsheet .wsclock { max-width: 210px; margin: 0 auto 6px; }
+.wsheet .box { margin: 8px 0; font-size: .82rem; }
+.wsheet .box b.big { font-size: 1rem; white-space: nowrap; }
+.wsheet td { font-family: var(--f-mono); font-size: .74rem; }
+.wsheet td.l { font-family: var(--f-body); }
+.wsheet td:first-child { white-space: nowrap; }
+.setunits { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 6px 0 2px; }
+.setunits > span { font: 700 .85rem/1 var(--f-disp); letter-spacing: .12em; text-transform: uppercase; color: var(--fg); }
+.setunits .seg { width: auto; margin: 0; }
+.setunits .seg button { min-width: 96px; }
+
+/* ---------- app shell ---------- */
+html, body { height: 100%; }
+body { display: block; padding: 0; min-height: 0; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.appbar { padding-top: max(4px, env(safe-area-inset-top, 0px)); }
+.phone main { padding-bottom: max(28px, env(safe-area-inset-bottom, 0px)); }
+.phone .preview.open, .phone .aboutscr { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
+.banner { border: 1px solid var(--bronze); border-left: 4px solid var(--bronze); background: var(--raised); padding: 10px 12px; margin: 0 0 12px; font-size: .92rem; color: var(--fg); }
+.setrow2 { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 2px; }
+.setrow2 > span { font: 700 .85rem/1 var(--f-disp); letter-spacing: .12em; text-transform: uppercase; color: var(--fg); }
+.setrow2 .seg { width: auto; margin: 0; }
+.setrow2 .seg button { min-width: 84px; }
+.psizes .ps { display: flex; gap: 6px; flex: 1 1 100%; }
+.psizes .ps span { font: 700 .85rem/44px var(--f-disp); letter-spacing: .1em; min-width: 32px; color: var(--fg); }
+.viewbar .vprint { min-height: 44px; }
+.printbar .button { min-height: 48px; }
+
+/* ---------- printing (Android print screen: print or Save as PDF) ---------- */
+@media print {
+  html, body { height: auto !important; overflow: visible !important; }
+  #printout .wsheet { width: 194mm; margin: 0 auto; padding: 6mm 0; border: 0; box-shadow: none; font-size: 10.5px; }
+  #printout .wsheet .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  #printout .wsheet .wsclock { max-width: 150px; }
+  #printout .wsheet th, #printout .wsheet td { padding: 2px 4px; font-size: 9px; }
+  #printout .wsheet p, #printout .wsheet li { font-size: 9.5px; }
+}
