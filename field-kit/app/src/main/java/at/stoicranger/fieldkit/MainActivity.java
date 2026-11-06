@@ -150,10 +150,10 @@ public class MainActivity extends Activity {
      *  (FK.back in js/fk.js) and only a plain false closes the app. Each press is logged for ⋯ › About. */
     @Override
     public void onBackPressed() {
-        web.evaluateJavascript("(window.FK && FK.back) ? FK.back() : false", value -> {
+        web.evaluateJavascript("(window.FK && FK.back) ? FK.back() : false", new android.webkit.ValueCallback<String>() { @Override public void onReceiveValue(String value) {
             logBack("back", value);
             if ("false".equals(value)) finish();      // only a plain false closes the app
-        });
+        }});
     }
 
     private void logBack(String via, String value) {
@@ -204,7 +204,7 @@ public class MainActivity extends Activity {
             JSONObject o = new JSONObject();
             o.put("ok", ok); o.put("msg", msg == null ? "" : msg);
             final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + o.toString() + ")";
-            runOnUiThread(() -> web.evaluateJavascript(js, null));
+            runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
         } catch (Exception ignored) { }
     }
 
@@ -317,7 +317,7 @@ public class MainActivity extends Activity {
             } catch (IOException e) { return false; }
             File[] all = dir.listFiles();
             if (all != null && all.length > 10) {
-                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                java.util.Arrays.sort(all, new java.util.Comparator<File>() { @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); } });
                 for (int i = 10; i < all.length; i++) all[i].delete();
             }
             return true;
@@ -350,10 +350,10 @@ public class MainActivity extends Activity {
         /** Breathing pacer and par timer: keep the screen on while they run. */
         @JavascriptInterface
         public void keepScreenOn(boolean on) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            });
+            }});
         }
 
         /** Last Back presses (for ⋯ › About) and whether the Android 13+ back callback is registered. */
@@ -371,10 +371,10 @@ public class MainActivity extends Activity {
         /** After the user refused location: open this app's page in the Android settings. */
         @JavascriptInterface
         public void openAppSettings() {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); }
                 catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** {installed, version} of Stoic Ranger. Reads nothing from it. */
@@ -411,7 +411,7 @@ public class MainActivity extends Activity {
         /** Let the user pick where to save (Downloads, Drive, …). */
         @JavascriptInterface
         public void saveFile(String name, String mime, String base64, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 pendingBytes = Base64.decode(base64, Base64.DEFAULT);
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -419,13 +419,13 @@ public class MainActivity extends Activity {
                 i.setType(mime);
                 i.putExtra(Intent.EXTRA_TITLE, name);
                 try { startActivityForResult(i, REQ_CREATE); } catch (Exception e) { callback(cb, false, e.getMessage()); }
-            });
+            }});
         }
 
         /** Share a PDF from assets/www/printables (e.g. to send a range card to a print shop). */
         @JavascriptInterface
         public void shareAsset(String path, String name) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try {
                     if (path == null || !path.startsWith("www/printables/") || path.contains("..")) return;
                     File dir = new File(getCacheDir(), "shared");
@@ -438,26 +438,26 @@ public class MainActivity extends Activity {
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(i, "Share"));
                 } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Print (or "Save as PDF") a PDF that ships with the app. */
         @JavascriptInterface
         public void printAsset(String path, String jobName) {
             if (path == null || !path.startsWith("www/printables/") || path.contains("..")) return;
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
                 PrintAttributes attrs = new PrintAttributes.Builder()
                         .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
                         .setColorMode(PrintAttributes.COLOR_MODE_COLOR).build();
                 pm.print(jobName, new AssetPdfAdapter(path, jobName), attrs);
-            });
+            }});
         }
 
         /** Print (or "Save as PDF") an HTML document rendered by the web app (field cards, wind cheat sheet); A4 portrait. */
         @JavascriptInterface
         public void print(String html, String jobName) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 printView = new WebView(MainActivity.this);
                 printView.getSettings().setJavaScriptEnabled(false);
                 printView.setWebViewClient(new WebViewClient() {
@@ -477,7 +477,7 @@ public class MainActivity extends Activity {
                     }
                 });
                 printView.loadDataWithBaseURL(ORIGIN + "/www/", html, "text/html", "utf-8", null);
-            });
+            }});
         }
     }
 }

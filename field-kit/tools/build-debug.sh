@@ -43,4 +43,10 @@ if [ -f "$TOOLS/apksigner.jar" ]; then SIGN=(java -jar "$TOOLS/apksigner.jar"); 
 "${SIGN[@]}" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
    --ks-key-alias androiddebugkey --min-sdk-version 26 --out "$APK" "$OUT/aligned.apk"
 "${SIGN[@]}" verify --min-sdk-version 26 "$APK"
+# dx turns Java lambdas into LambdaMetafactory calls that Android does not have: the app then crashes on the first
+# lambda it runs (0.1.0-0.1.3: the Back button "closed" the app). Use anonymous classes; stop the build if one slips in.
+if unzip -p "$APK" classes.dex | strings | grep -q LambdaMetafactory; then
+  echo "ERROR: classes.dex uses LambdaMetafactory (a Java lambda or method reference). Replace it with an anonymous class." >&2
+  rm -f "$APK"; exit 1
+fi
 echo "$APK"
