@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.1.2
+# SR Field Kit (Android) — 0.1.3
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
@@ -6,6 +6,11 @@ Stoic Ranger app look. Works fully offline: **no INTERNET permission**, no accou
 
 ## Versions
 
+- **0.1.3** (versionCode 4, 2026-11-06): Back done exactly the way SR Daily Thoughts does it, the only Stoic Ranger
+  app where Back works on Manuel's phone: the same `onBackPressed` as Daily Thoughts (0.1.2's key and dispatcher
+  handling removed), and the whole Back logic in `js/fk.js`, loaded first and independent of every other script:
+  close what is open → `history.back()` through the pages visited → home → "Press back again to close".
+  ⋯ › About › "Back button log" shows each Back press and any script errors.
 - **0.1.2** (versionCode 3, 2026-11-06): Back still closed the app on Manuel's phone with 0.1.1. Now the Back key is
   caught in `dispatchKeyEvent` before the system can act, the Android 13+ back callback is registered through the
   public interfaces (0.1.1's reflection call could fail silently), the page's Content-Security-Policy is gone (the
@@ -59,7 +64,7 @@ version opens read-only; a damaged file is backed up and the previous copy is us
 
 ```
 node field-kit/tools/test-app.mjs          # 36 checks in Chromium: routes, solver, MGRS, units, link, data safety
-KEYSTORE=/path/to/debug.keystore VERSION_CODE=3 VERSION_NAME=0.1.2 field-kit/tools/build-debug.sh
+KEYSTORE=/path/to/debug.keystore VERSION_CODE=4 VERSION_NAME=0.1.3 field-kit/tools/build-debug.sh
 ```
 
 The build needs no Gradle: aapt2, ecj, dalvik-exchange (or dx), apksigner (`apt install aapt apksigner

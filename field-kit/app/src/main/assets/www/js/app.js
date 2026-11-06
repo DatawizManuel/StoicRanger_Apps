@@ -36,11 +36,8 @@
     $("hFc").textContent = cards + " cards · 5 categories";
   }
   const view = () => { const h = (location.hash || "#home").slice(1); return TITLES[h] ? h : "home"; };
-  // pages visited, so the phone's Back goes to the last page (not straight home, and never closes the app there)
-  const trail = []; let cur = view(), goingBack = false;
   function sync(){
     const h = view();
-    if (h !== cur){ if (goingBack) goingBack = false; else { trail.push(cur); if (trail.length > 30) trail.shift(); } cur = h; }
     $("hTitle").textContent = TITLES[h];
     $("appbar").dataset.sec = h;
     if (h === "home") homeLines();
@@ -84,7 +81,8 @@
   if (info.version) $("aboutVer").textContent = info.version + (info.code ? " (" + info.code + ")" : "");
   if (!N) $("aboutData").textContent = "This browser's storage";
   $("aboutBtn").onclick = () => { A.hidden = false; A.scrollTop = 0; $("wipeMsg").textContent = "";
-    if (N && N.backLog){ $("backLog").textContent = N.backLog(); $("backLogBox").hidden = false; } };
+    const log = (N && N.backLog ? N.backLog() : "") + (FK.errors && FK.errors.length ? "\nScript errors:\n" + FK.errors.join("\n") : "");
+    if (log){ $("backLog").textContent = log; $("backLogBox").hidden = false; } };
   const closeAbout = () => { A.hidden = true; $("wipeAsk").hidden = true; };
   $("aboutClose").onclick = closeAbout;
   $("wipeBtn").onclick = () => { $("wipeAsk").hidden = false; };
@@ -111,24 +109,7 @@
 
   // ---------- window.FK: called by MainActivity ----------
   const FK = window.FK = window.FK || {};
-  /** Phone Back: close what is open (About, wind sheet, card viewer), then the last page visited, then home.
-   *  On home the first Back shows "Press back again to close"; only a second Back within 2 s closes the app. */
-  let backAt = 0, toastT = null;
-  function toast(t){ const e = $("toast"); e.textContent = t; e.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { e.hidden = true; }, 2000); }
-  FK.back = () => {
-    try {
-      const ws = $("wsView"), pv = $("preview");
-      if (!A.hidden){ closeAbout(); return true; }
-      if (ws && !ws.hidden){ ws.hidden = true; return true; }
-      if (pv && pv.classList.contains("open")){ const c = $("vClose"); if (c) c.click(); else pv.classList.remove("open"); return true; }
-      if (view() !== "home"){
-        let to = trail.pop(); while (to === view() && trail.length) to = trail.pop();
-        goingBack = true; location.hash = "#" + (to && to !== view() ? to : "home"); backAt = 0; return true;
-      }
-      if (Date.now() - backAt < 2000){ backAt = 0; store.flush(); return false; }
-      backAt = Date.now(); toast("Press back again to close"); return true;
-    } catch (e) { return view() !== "home" ? (location.hash = "#home", true) : false; }
-  };
+  // FK.back: js/fk.js (loaded first, Daily Thoughts style)
   FK.pause = () => { store.flush(); };
   FK.resume = () => { if (window.__SR) window.__SR.refresh(); if (view() === "home") homeLines(); };
   FK.setSysDark = d => { sysDark = !!d; theme(); };
