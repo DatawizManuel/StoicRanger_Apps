@@ -1,8 +1,17 @@
-# SR Field Kit (Android) — 0.1.0, first draft
+# SR Field Kit (Android) — 0.1.1
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
 Stoic Ranger app look. Works fully offline: **no INTERNET permission**, no accounts, no tracking.
+
+## Versions
+
+- **0.1.1** (versionCode 2, 2026-11-06): phone Back no longer closes the app (remark #1). Back closes an open
+  overlay (About, wind sheet, card viewer), then goes to the last page visited, then home; on home the first Back
+  shows "Press back again to close" and only a second Back within 2 s closes the app. Android also gets Back through
+  the Android 13+ back dispatcher, and a minimal Back handler (`js/fk.js`) loads before everything else.
+  Checked against Stoic Ranger Shooting 1.2.0's link provider (same interface).
+- **0.1.0** (versionCode 1): first draft.
 
 ## Tools (home screen, in this order)
 
@@ -24,8 +33,8 @@ offer Stoic Ranger data in Drop & wind, delete all my data.
 When Stoic Ranger (`at.rangebook.app`) is installed, Drop & wind shows a box: *Use Stoic Ranger data* → Allow /
 Not now, or *Dismiss* (bring back in Settings). After Allow, guns, ammunition and measured V0 are read through
 `content://at.rangebook.app.link` (`call("ballistics")`), guarded by the signature permission
-`at.stoicranger.permission.LINK` — both apps must be signed with the same key. **Stoic Ranger 1.1.0 has no link
-provider yet**: the box then says Stoic Ranger needs an update (remark #11 in `00_docs/REMARKS.md`).
+`at.stoicranger.permission.LINK` — both apps must be signed with the same key. The provider comes with
+**Stoic Ranger Shooting 1.2.0**; with an older Stoic Ranger the box says it needs an update.
 
 ## Data
 
@@ -44,8 +53,8 @@ version opens read-only; a damaged file is backed up and the previous copy is us
 ## Build and test
 
 ```
-node field-kit/tools/test-app.mjs          # 31 checks in Chromium: routes, solver, MGRS, units, link, data safety
-KEYSTORE=/path/to/debug.keystore VERSION_CODE=1 VERSION_NAME=0.1.0 field-kit/tools/build-debug.sh
+node field-kit/tools/test-app.mjs          # 36 checks in Chromium: routes, solver, MGRS, units, link, data safety
+KEYSTORE=/path/to/debug.keystore VERSION_CODE=2 VERSION_NAME=0.1.1 field-kit/tools/build-debug.sh
 ```
 
 The build needs no Gradle: aapt2, ecj, dalvik-exchange (or dx), apksigner (`apt install aapt apksigner

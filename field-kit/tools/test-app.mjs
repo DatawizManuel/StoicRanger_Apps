@@ -50,8 +50,19 @@ async function page(opts, hash = '') {
   }
   ok(await p.evaluate(() => document.querySelectorAll('#cardGrid .fcard').length) === 30, '30 field cards (incl. DOPE)');
   ok(await p.$eval('#srLink', e => e.hidden), 'no link box without Stoic Ranger');
-  ok(await p.evaluate(() => FK.back()) === true && await p.evaluate(() => location.hash) === '#home', 'Back from a tool goes home');
-  ok(await p.evaluate(() => FK.back()) === false, 'Back on home lets Android close');
+  // phone Back (remark #1): last page, then home, then "press again" before closing
+  await p.evaluate(() => { location.hash = '#home'; }); await p.waitForTimeout(50);
+  for (const h of ['shoot', 'nav', 'cards']) { await p.evaluate(h => { location.hash = '#' + h; }, h); await p.waitForTimeout(50); }
+  const step = async () => { const r = await p.evaluate(() => FK.back()); await p.waitForTimeout(50); return [r, await p.evaluate(() => location.hash)]; };
+  ok(JSON.stringify(await step()) === '[true,"#nav"]', 'Back: Field cards → Navigate (last page)');
+  ok(JSON.stringify(await step()) === '[true,"#shoot"]', 'Back: Navigate → Shooting helpers');
+  ok(JSON.stringify(await step()) === '[true,"#home"]', 'Back: Shooting helpers → home');
+  const r1 = await step(); ok(r1[0] === true && !(await p.$eval('#toast', e => e.hidden)), 'Back on home: "Press back again to close", app stays open');
+  ok((await step())[0] === false, 'second Back on home within 2 s closes the app');
+  await p.evaluate(() => { location.hash = '#cards'; }); await p.waitForTimeout(50);
+  await p.click('#cardGrid .fcard'); await p.waitForTimeout(50);
+  ok(await p.evaluate(() => FK.back()) === true && await p.evaluate(() => location.hash) === '#cards' && !(await p.$eval('#preview', e => e.classList.contains('open'))), 'Back closes the card viewer first');
+  await p.click('#aboutBtn'); ok(await p.evaluate(() => FK.back()) === true && await p.$eval('#about', e => e.hidden), 'Back closes About first');
   // solver vs Stoic Ranger dope (ballistics.js directly)
   const r = await p.evaluate(() => { const a = RB.air({ temp: 15, alt: 0 }); const d = RB.dope({ v0: 820, bc: 0.326, model: 'G7', sightMm: 52, zeroM: 100, air: a, maxM: 1000, stepM: 100, windMs: 0, massG: 9.07 }); return d.rows.find(x => x.x === 100); });
   ok(Math.abs(r.elevMrad) < 0.05, 'solver: zero at 100 m');

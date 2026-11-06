@@ -96,7 +96,7 @@
       body = `<div class="form srform">
         <div class="field"><label for="srW">Gun</label><select id="srW">${data.weapons.map(w => `<option value="${esc(w.id)}"${w.id === st.w ? " selected" : ""}>${esc(w.name)}</option>`).join("")}</select></div>
         <div class="field"><label for="srM">Ammunition</label><select id="srM">${r.list.length ? r.list.map(m => `<option value="${esc(m.id)}"${m.id === st.m ? " selected" : ""}>${esc(m.name)}</option>`).join("") : `<option value="">No ammunition in Stoic Ranger</option>`}</select></div>
-      </div>` + (r.m ? `<p class="srsrc">${r.v ? "V0 " + esc(FKUnits.imp() ? Math.round(r.v * 3.28084) + " fps" : r.v + " m/s") + " " + (r.meas ? "measured, average of " + r.meas.n + " datasheet" + (r.meas.n === 1 ? "" : "s") : "from the maker") : "No V0 in Stoic Ranger: type it below"} · BC ${r.m.bcG7 > 0 ? "G7 " + r.m.bcG7 + (r.m.bcG1 > 0 ? " (G1 " + r.m.bcG1 + ")" : "") : "G1 " + esc(r.m.bcG1)} · ${esc(r.m.bulletWeightG)} g · sight height ${esc(r.w.sightHeightMm)} mm · zero ${esc(r.w.zeroM)} m</p>
+      </div>` + (r.m ? `<p class="srsrc">${r.v ? "V0 " + esc(FKUnits.imp() ? Math.round(r.v * 3.28084) + " fps" : r.v + " m/s") + " " + (r.meas ? "measured, average of " + r.meas.n + " datasheet" + (r.meas.n === 1 ? "" : "s") : "from the maker") : "No V0 in Stoic Ranger: type it below"} · BC ${r.m.bcG7 > 0 ? "G7 " + r.m.bcG7 + (r.m.bcG1 > 0 ? " (G1 " + r.m.bcG1 + ")" : "") : (r.m.bcG1 > 0 ? "G1 " + r.m.bcG1 : "none: type it below")} · ${esc(r.m.bulletWeightG)} g · sight height ${esc(r.w.sightHeightMm)} mm · zero ${esc(r.w.zeroM)} m</p>
         <p class="note">Change any field below to try something else; the values in Stoic Ranger stay as they are.</p>` : "");
       save();
     }

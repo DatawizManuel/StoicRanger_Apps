@@ -101,6 +101,7 @@ public class MainActivity extends Activity {
         });
         if (state != null) web.restoreState(state);
         else web.loadUrl(ORIGIN + "/www/index.html");
+        registerBackCallback();
     }
 
     private boolean hasLocation() {
@@ -147,10 +148,37 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() {
-        web.evaluateJavascript("(window.FK && FK.back) ? FK.back() : false", value -> {
-            if ("false".equals(value)) finish();      // only a plain false closes the app
+    public void onBackPressed() { handleBack(); }
+
+    /** Phone Back: the page decides (FK.back: close overlay → last page → home → "press again" → close).
+     *  Only a plain false closes the app. If the page gave no answer (still loading, script error), go back in the
+     *  WebView's own history, and close only when there is none. */
+    private void handleBack() {
+        if (web == null) { finish(); return; }
+        web.evaluateJavascript("(function(){try{return (window.FK&&FK.back)?FK.back():false}catch(e){return null}})()", value -> {
+            if ("true".equals(value)) return;
+            if ("false".equals(value)) { finish(); return; }
+            if (web.canGoBack()) web.goBack(); else finish();
         });
+    }
+
+    /** Android 13+ can deliver Back through OnBackInvokedDispatcher instead of onBackPressed (predictive back,
+     *  some phones and newer targets). Register for it too, by reflection: the cloud build compiles against API 23. */
+    private Object backCallback;
+    private void registerBackCallback() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        try {
+            Class<?> cb = Class.forName("android.window.OnBackInvokedCallback");
+            backCallback = java.lang.reflect.Proxy.newProxyInstance(cb.getClassLoader(), new Class<?>[] { cb }, (proxy, m, args) -> {
+                if ("onBackInvoked".equals(m.getName())) runOnUiThread(this::handleBack);
+                else if ("hashCode".equals(m.getName())) return System.identityHashCode(proxy);
+                else if ("equals".equals(m.getName())) return proxy == args[0];
+                else if ("toString".equals(m.getName())) return "FKBack";
+                return null;
+            });
+            Object d = getClass().getMethod("getOnBackInvokedDispatcher").invoke(this);
+            d.getClass().getMethod("registerOnBackInvokedCallback", int.class, cb).invoke(d, 0, backCallback);
+        } catch (Throwable ignored) { backCallback = null; }   // onBackPressed still works
     }
 
     @Override
