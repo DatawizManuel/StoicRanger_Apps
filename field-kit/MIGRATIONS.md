@@ -23,5 +23,6 @@ Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.1.2 (format 1): no data change (new file back-log.txt, diagnostics only).
 - 0.1.1 (format 1): no data change.
 - 0.1.0 (format 1): first version, nothing to migrate.

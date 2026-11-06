@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
 <title>SR Field Kit</title>
 <link rel="stylesheet" href="css/kit.css">
@@ -303,6 +302,7 @@
     <div class="actions start"><button type="button" class="button ghost" id="wipeBtn">Delete all my data</button></div>
     <div class="confirm" id="wipeAsk" hidden><p>Delete breathing log, settings, last position and all saved points? The app keeps one backup copy on the phone, but you can't restore it from inside the app.</p><div class="actions start"><button type="button" class="button" id="wipeYes">Delete</button><button type="button" class="button ghost" id="wipeNo">Keep</button></div></div>
     <p class="note" id="wipeMsg" aria-live="polite"></p>
+    <details class="backlog" id="backLogBox" hidden><summary>Back button log (for fixing problems)</summary><pre id="backLog"></pre></details>
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

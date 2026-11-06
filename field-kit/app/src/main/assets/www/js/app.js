@@ -83,7 +83,8 @@
   const info = N && N.appInfo ? parse(N.appInfo()) || {} : {};
   if (info.version) $("aboutVer").textContent = info.version + (info.code ? " (" + info.code + ")" : "");
   if (!N) $("aboutData").textContent = "This browser's storage";
-  $("aboutBtn").onclick = () => { A.hidden = false; A.scrollTop = 0; $("wipeMsg").textContent = ""; };
+  $("aboutBtn").onclick = () => { A.hidden = false; A.scrollTop = 0; $("wipeMsg").textContent = "";
+    if (N && N.backLog){ $("backLog").textContent = N.backLog(); $("backLogBox").hidden = false; } };
   const closeAbout = () => { A.hidden = true; $("wipeAsk").hidden = true; };
   $("aboutClose").onclick = closeAbout;
   $("wipeBtn").onclick = () => { $("wipeAsk").hidden = false; };

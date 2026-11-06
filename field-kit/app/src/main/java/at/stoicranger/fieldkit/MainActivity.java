@@ -22,6 +22,7 @@ import android.print.PrintManager;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.Base64;
+import android.view.KeyEvent;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.GeolocationPermissions;
@@ -148,37 +149,74 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() { handleBack(); }
+    public void onBackPressed() { handleBack("onBackPressed"); }
+
+    /** Back key (3-button navigation, and gestures on most phones arrive as this key): handle it here, before the
+     *  system can close the activity on its own. Down and up are both consumed; Back runs once, on up. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        if (e.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            if (e.getAction() == KeyEvent.ACTION_UP && !e.isCanceled()) handleBack("key");
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
 
     /** Phone Back: the page decides (FK.back: close overlay → last page → home → "press again" → close).
-     *  Only a plain false closes the app. If the page gave no answer (still loading, script error), go back in the
-     *  WebView's own history, and close only when there is none. */
-    private void handleBack() {
-        if (web == null) { finish(); return; }
-        web.evaluateJavascript("(function(){try{return (window.FK&&FK.back)?FK.back():false}catch(e){return null}})()", value -> {
+     *  Only a plain false from the page closes the app. No answer (page still loading, script error): go back in
+     *  the WebView's history if there is one, otherwise stay open. Each Back is written to files/back-log.txt
+     *  (last 8), shown under ⋯ › About, so a phone that misbehaves tells us why. */
+    private long lastBack = 0;
+    private void handleBack(String via) {
+        long now = System.currentTimeMillis();
+        if (now - lastBack < 250) return;          // the same press reported twice (key + dispatcher)
+        lastBack = now;
+        if (web == null) { logBack(via, "no page"); finish(); return; }
+        web.evaluateJavascript("(function(){try{return (window.FK&&FK.back)?FK.back():'nofk'}catch(e){return 'error: '+e}})()", value -> {
+            logBack(via, value);
             if ("true".equals(value)) return;
             if ("false".equals(value)) { finish(); return; }
-            if (web.canGoBack()) web.goBack(); else finish();
+            if (web.canGoBack()) web.goBack();
         });
     }
 
-    /** Android 13+ can deliver Back through OnBackInvokedDispatcher instead of onBackPressed (predictive back,
-     *  some phones and newer targets). Register for it too, by reflection: the cloud build compiles against API 23. */
+    private void logBack(String via, String value) {
+        try {
+            File f = new File(getFilesDir(), "back-log.txt");
+            String old = "";
+            if (f.exists()) try (FileInputStream is = new FileInputStream(f)) { old = new String(readAll(is), StandardCharsets.UTF_8); }
+            String line = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(new java.util.Date())
+                + " " + via + " → " + value + "\n";
+            String[] rows = (old + line).split("\n");
+            StringBuilder b = new StringBuilder();
+            for (int i = Math.max(0, rows.length - 8); i < rows.length; i++) if (!rows[i].isEmpty()) b.append(rows[i]).append('\n');
+            try (FileOutputStream os = new FileOutputStream(f)) { os.write(b.toString().getBytes(StandardCharsets.UTF_8)); }
+        } catch (Exception ignored) { }
+    }
+
+    /** Android 13+ can deliver Back through OnBackInvokedDispatcher instead of onBackPressed (predictive back on
+     *  some phones). Register for it too, by reflection through the public interfaces (the cloud build compiles
+     *  against API 23). Registering means the system never closes the app by itself on Back. */
     private Object backCallback;
+    String backDispatch = "not needed";
     private void registerBackCallback() {
         if (Build.VERSION.SDK_INT < 33) return;
         try {
             Class<?> cb = Class.forName("android.window.OnBackInvokedCallback");
+            Class<?> disp = Class.forName("android.window.OnBackInvokedDispatcher");
             backCallback = java.lang.reflect.Proxy.newProxyInstance(cb.getClassLoader(), new Class<?>[] { cb }, (proxy, m, args) -> {
-                if ("onBackInvoked".equals(m.getName())) runOnUiThread(this::handleBack);
-                else if ("hashCode".equals(m.getName())) return System.identityHashCode(proxy);
-                else if ("equals".equals(m.getName())) return proxy == args[0];
-                else if ("toString".equals(m.getName())) return "FKBack";
-                return null;
+                switch (m.getName()) {
+                    case "onBackInvoked": runOnUiThread(() -> handleBack("dispatcher")); return null;
+                    case "hashCode": return System.identityHashCode(proxy);
+                    case "equals": return proxy == args[0];
+                    case "toString": return "FKBack";
+                    default: return null;
+                }
             });
-            Object d = getClass().getMethod("getOnBackInvokedDispatcher").invoke(this);
-            d.getClass().getMethod("registerOnBackInvokedCallback", int.class, cb).invoke(d, 0, backCallback);
-        } catch (Throwable ignored) { backCallback = null; }   // onBackPressed still works
+            Object d = Activity.class.getMethod("getOnBackInvokedDispatcher").invoke(this);
+            disp.getMethod("registerOnBackInvokedCallback", int.class, cb).invoke(d, 0, backCallback);
+            backDispatch = "registered";
+        } catch (Throwable t) { backCallback = null; backDispatch = "failed: " + t; }   // onBackPressed / key still work
     }
 
     @Override
@@ -365,6 +403,15 @@ public class MainActivity extends Activity {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             });
+        }
+
+        /** Last Back presses (for ⋯ › About) and whether the Android 13+ back callback is registered. */
+        @JavascriptInterface
+        public String backLog() {
+            String t = "";
+            try (FileInputStream is = new FileInputStream(new File(getFilesDir(), "back-log.txt"))) { t = new String(readAll(is), StandardCharsets.UTF_8); }
+            catch (Exception ignored) { }
+            return "Android " + Build.VERSION.RELEASE + " · back callback " + backDispatch + "\n" + t;
         }
 
         @JavascriptInterface
