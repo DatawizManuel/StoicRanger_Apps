@@ -67,6 +67,7 @@ PF.TABLES = ['assessments', 'plans', 'sets', 'sessions', 'activities', 'mobility
 PF.DEFAULT_SETTINGS = () => ({
   sessions: 3, minutes: 45, days: ['Mon', 'Wed', 'Fri'],
   eq: { kb: [10, 12, 16, 24], db: [], sb: [10, 20], bar: true, bands: ['light', 'medium', 'heavy'], mini: true, bench: true, gripper: false, roller: false },
+  skip: [],          // muscle groups not targeted (PF.plan.MGROUPS keys); new blocks start with these
   theme: 'auto'
 });
 PF.emptyDb = () => ({
@@ -89,6 +90,7 @@ PF.normalize = db => {
   const e = PF.emptyDb();
   db.settings = Object.assign(e.settings, db.settings || {});
   db.settings.eq = Object.assign(PF.DEFAULT_SETTINGS().eq, db.settings.eq || {});
+  if (!Array.isArray(db.settings.skip)) db.settings.skip = [];
   for (const t of PF.TABLES.concat(['deleted', 'history'])) if (!Array.isArray(db[t])) db[t] = [];
   if (!db.ui || typeof db.ui !== 'object') db.ui = {};
   for (const t of PF.TABLES) {               // every row has an id; duplicates (same id) are merged to one

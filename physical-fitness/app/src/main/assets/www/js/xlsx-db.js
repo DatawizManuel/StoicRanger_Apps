@@ -1,5 +1,9 @@
-/* SR Physical Fitness — Excel file (own file, not shared with Stoic Ranger): export and import between devices.
+/* SR Physical Fitness — Excel file: export, import and the Nextcloud file. Layout per the shared Stoic Ranger
+   database contract (00_docs/SHARED-DB-CONTRACT.md): every sheet of this app starts with PF_, plus one hidden
+   sheet _PF_Data with a full JSON copy. The app writes only its own sheets and keeps every other sheet of the
+   workbook unchanged, so the same file can later hold other Stoic Ranger apps too. Unlinked file name: fitness.xlsx.
    One sheet per table, same fields as the app database, readable and editable in Excel without the app.
+   Files from 0.1.x (sheets without prefix, hidden _PF) are still read.
    Import merges by id: a row changed later wins (an Excel edit counts as newer when the row is unchanged on the
    phone); rows deleted on either side stay deleted (Deleted sheet); nothing on the phone is lost. */
 'use strict';
@@ -19,22 +23,34 @@
   const HELPER = ['exercise', 'drill'];                 // shown for reading, ignored on import
   const NUM = ['block', 'week', 'sess', 'set', 'reps', 'kg', 'sec', 'm', 'min', 'km', 'elev', 'hr', 'rpe', 'swingKg', 'gobletKg', 'pressKg', 'pullup', 'pushup', 'situp', 'hang', 'toe', 'reachR', 'reachL'];
   const BOOL = ['done'];
-  X.FILE = () => `sr-physical-fitness-${PF.todayIso()}.xlsx`;
+  X.FILE = () => `fitness-${PF.todayIso()}.xlsx`;
+  X.SYNC_FILE = 'fitness.xlsx';
+  const PRE = 'PF_', HIDDEN = '_PF_Data', CHUNK = 30000;
+  const OLD = ['README', 'Settings', 'Exercises', '_PF'].concat(Object.keys(COLS));   // 0.1.x sheet names (own file only)
+  X.mine = n => n.startsWith(PRE) || n === HIDDEN;
   const mobName = id => { const m = (window.MOB || []).find(x => x.id === id); return m && EX[m.ex] ? EX[m.ex].n : ''; };
 
-  X.build = (db = PF.db) => {
-    const wb = XLSX.utils.book_new();
-    const add = (name, rows, hidden) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = (rows[0] || []).map((h, i) => ({ wch: Math.min(40, Math.max(8, ...rows.slice(0, 200).map(r => String(r[i] ?? '').length))) })); XLSX.utils.book_append_sheet(wb, ws, name); if (hidden) { wb.Workbook = wb.Workbook || { Sheets: [] }; } };
+  /** workbook bytes with this app's sheets; `existing` (bytes of the current file) keeps every other sheet as it is */
+  X.build = (db = PF.db, existing = null) => {
+    let wb = XLSX.utils.book_new(), keepHidden = {};
+    if (existing && existing.length) {
+      wb = XLSX.read(existing, { type: 'array', cellStyles: true, bookVBA: true });
+      const oldOwn = !!wb.Sheets._PF;                                  // a 0.1.x file of this app alone
+      (wb.Workbook && wb.Workbook.Sheets || []).forEach(x => { if (x.Hidden) keepHidden[x.name] = x.Hidden; });
+      for (const n of wb.SheetNames.slice()) if (X.mine(n) || oldOwn && OLD.includes(n)) { delete wb.Sheets[n]; wb.SheetNames.splice(wb.SheetNames.indexOf(n), 1); }
+    }
+    const add = (name, rows) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = (rows[0] || []).map((h, i) => ({ wch: Math.min(40, Math.max(8, ...rows.slice(0, 200).map(r => String(r[i] ?? '').length))) })); XLSX.utils.book_append_sheet(wb, ws, PRE + name); };
     add('README', [['SR Physical Fitness – data file'], [''], ['Every sheet is one table of the app. Each row has a permanent id: keep it when you edit a row.'],
       ['Add a row: leave id empty, the app gives it one on import. Delete a row: delete it in the app (or put its table and id on the Deleted sheet).'],
       ['Dates are YYYY-MM-DD. Weights in kg, distances in km or m, durations in minutes or seconds as the column says.'],
       ['Columns "exercise" and "drill" are only there to read; the app uses the ids next to them.'],
-      ['Import this file in the app under Setup → Data. Importing merges: nothing on the phone is deleted unless it is on the Deleted sheet.'],
+      ['Import this file in the app under Setup → Data. Importing merges: nothing on the phone is deleted unless it is on the PF_Deleted sheet.'],
+      ['All sheets of SR Physical Fitness start with PF_. Other sheets in this file belong to other Stoic Ranger apps and are left as they are.'],
       [''], ['Exported', new Date().toLocaleString('en-GB')], ['App version', PF.appInfo().version || PF.VERSION], ['Data format', PF.SCHEMA]]);
     const s = db.settings;
     add('Settings', [['key', 'value'], ['sessions', s.sessions], ['minutes', s.minutes], ['days', s.days.join(', ')], ['kettlebells_kg', s.eq.kb.join(', ')], ['dumbbells_kg', s.eq.db.join(', ')],
       ['sandbags_kg', s.eq.sb.join(', ')], ['bands', s.eq.bands.join(', ')], ['pullup_bar', s.eq.bar ? 'yes' : 'no'], ['mini_band', s.eq.mini ? 'yes' : 'no'], ['bench', s.eq.bench ? 'yes' : 'no'],
-      ['gripper', s.eq.gripper ? 'yes' : 'no'], ['wrist_roller', s.eq.roller ? 'yes' : 'no'], ['theme', s.theme || 'auto'], ['changed', s.at || '']]);
+      ['gripper', s.eq.gripper ? 'yes' : 'no'], ['wrist_roller', s.eq.roller ? 'yes' : 'no'], ['not_targeted', (s.skip || []).join(', ')], ['theme', s.theme || 'auto'], ['changed', s.at || '']]);
     for (const [sheet, cols] of Object.entries(COLS)) {
       const t = TABLE[sheet]; const list = sheet === 'Deleted' ? db.deleted : db[t];
       const rows = [cols].concat(list.map(r => cols.map(c => {
@@ -47,10 +63,15 @@
       add(sheet, rows);
     }
     add('Exercises', [['id', 'name', 'group', 'pattern', 'equipment', 'level', 'main muscles', 'supporting muscles', 'dose']].concat(EXLIST.map(e => [e.id, e.n, EX_GROUPS[e.g], EX_PATTERNS[e.pat], e.equip.join(', '), e.lvl, e.prim.join(', '), e.sec.join(', '), e.dose])));
-    add('_PF', [['key', 'value'], ['app', PF.APP_ID], ['schema', PF.SCHEMA], ['exported', PF.now()]]);
-    wb.Workbook = { Sheets: wb.SheetNames.map(n => ({ name: n, Hidden: n === '_PF' ? 1 : 0 })) };
-    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const full = JSON.stringify({ app: PF.APP_ID, schema: PF.SCHEMA, saved: PF.now(), by: 'SR Physical Fitness ' + (PF.appInfo().version || PF.VERSION), db: X.dataPart(db) });
+    const hrows = [[PF.APP_ID, PF.SCHEMA, 'Do not edit: a copy of the SR Physical Fitness data for the apps. The PF_ sheets win over it.']];
+    for (let i = 0; i < full.length; i += CHUNK) hrows.push([full.slice(i, i + CHUNK)]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hrows), HIDDEN);
+    wb.Workbook = Object.assign(wb.Workbook || {}, { Sheets: wb.SheetNames.map(n => ({ name: n, Hidden: n === HIDDEN ? 1 : keepHidden[n] || 0 })) });
+    return XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
   };
+  /** what goes into the file: settings (without the storage setting), tables and tombstones; not ui/history */
+  X.dataPart = db => { const o = { settings: PF.clone(db.settings), deleted: PF.clone(db.deleted) }; delete o.settings.nc; for (const t of PF.TABLES) o[t] = PF.clone(db[t]); return o; };
   const bytes = () => new Uint8Array(X.build());
   const MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   X.export = async () => { const r = await PF.saveFile(X.FILE(), MIME, bytes()); if (r && r.ok) PF.toast('Saved: ' + (r.msg || X.FILE())); else if (r && r.msg !== 'cancelled') PF.toast('Could not save: ' + (r.msg || ''), true); };
@@ -76,11 +97,19 @@
   /** parse a workbook (Uint8Array) → {meta, settings, tables, errors} */
   X.parse = u8 => {
     const wb = XLSX.read(u8, { type: 'array', cellDates: true });
-    const sheet = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: '', raw: true }) : null;
-    const meta = {}; (sheet('_PF') || []).forEach(r => meta[r.key] = r.value);
-    const out = { meta, tables: {}, errors: [], settings: null };
+    const legacy = !wb.Sheets[PRE + 'Sets'] && !wb.Sheets[PRE + 'Plans'] && !wb.Sheets[HIDDEN];     // 0.1.x file
+    const nm = n => legacy ? n : PRE + n;
+    const sheet = n => wb.Sheets[nm(n)] ? XLSX.utils.sheet_to_json(wb.Sheets[nm(n)], { defval: '', raw: true }) : null;
+    const meta = {};
+    if (legacy) (wb.Sheets._PF ? XLSX.utils.sheet_to_json(wb.Sheets._PF, { defval: '', raw: true }) : []).forEach(r => meta[r.key] = r.value);
+    const out = { meta, tables: {}, errors: [], settings: null, full: null };
+    if (wb.Sheets[HIDDEN]) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[HIDDEN], { header: 1, defval: '', raw: true });
+      meta.app = String(rows[0] && rows[0][0] || ''); meta.schema = rows[0] && rows[0][1];
+      try { out.full = JSON.parse(rows.slice(1).map(r => String(r[0] ?? '')).join('')); } catch (e) { out.full = null; }
+    }
     if (meta.app && meta.app !== PF.APP_ID) throw new Error('This is not an SR Physical Fitness file.');
-    if (!meta.app && !wb.Sheets.Sets && !wb.Sheets.Plans) throw new Error('This file has no SR Physical Fitness sheets.');
+    if (!meta.app && !(legacy ? wb.Sheets.Sets || wb.Sheets.Plans : wb.Sheets[PRE + 'Sets'] || wb.Sheets[PRE + 'Plans'])) throw new Error('This file has no SR Physical Fitness sheets.');
     if (+meta.schema > PF.SCHEMA) { out.newer = true; return out; }
     for (const [sh, cols] of Object.entries(COLS)) {
       const rows = sheet(sh); if (!rows) continue; const list = [];
@@ -132,6 +161,7 @@
       if ('sandbags_kg' in s) S.eq.sb = listN(s.sandbags_kg).map(Number).filter(n => n > 0);
       if ('bands' in s) S.eq.bands = listN(s.bands);
       for (const [k, e] of [['pullup_bar', 'bar'], ['mini_band', 'mini'], ['bench', 'bench'], ['gripper', 'gripper'], ['wrist_roller', 'roller']]) if (k in s) S.eq[e] = yes(s[k]);
+      if ('not_targeted' in s) S.skip = listN(s.not_targeted).map(x => { x = x.toLowerCase(); const g = PF.plan.MGROUPS.find(g => g.k === x || g.n.toLowerCase() === x); return g && g.k; }).filter(Boolean);
       if (s.theme) S.theme = String(s.theme); S.at = s.changed || S.at; c.settings = true;
     }
     PF.normalize(db);

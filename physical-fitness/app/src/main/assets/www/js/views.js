@@ -214,7 +214,12 @@
      ===================================================================================================== */
   const KB_ALL = [4, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32], DB_ALL = [2, 4, 5, 6, 8, 10, 12, 12.5, 15, 17.5, 20, 22.5, 25, 30], SB_ALL = [5, 10, 15, 20, 25, 30, 40], BANDS = ['light', 'medium', 'heavy', 'extra heavy'];
   const PRESET = { 2: ['Tue', 'Fri'], 3: ['Mon', 'Wed', 'Fri'], 4: ['Mon', 'Tue', 'Thu', 'Fri'], 5: ['Mon', 'Tue', 'Wed', 'Fri', 'Sat'], 6: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
-  const cfgOf = s => ({ sessions: s.sessions, minutes: s.minutes, days: s.days.slice(), eq: clone(s.eq) });
+  const cfgOf = s => ({ sessions: s.sessions, minutes: s.minutes, days: s.days.slice(), eq: clone(s.eq), skip: (s.skip || []).slice() });
+  /* muscle groups: highlighted = targeted; tap to leave a group out (or take it back in) */
+  const mgCard = (skip, attr, intro) => { const on = P.MGROUPS.filter(g => !skip.includes(g.k)).map(g => g.k);
+    return `<div class="card stack"><h3>Muscle groups to target</h3><div class="small muted">${intro}</div>${W.chips(on, P.MGROUPS.map(g => g.k), attr, P.MG_NAME)}
+      ${skip.length ? `<div class="small">Not targeted: ${esc(skip.map(P.MG_NAME).join(', '))}. Exercises that mainly work these are left out; the time goes to the others.</div>` : ''}${on.length < 3 ? '<div class="small warn">Keep at least 3 groups.</div>' : ''}</div>`; };
+  const mgTog = (skip, k) => { const i = skip.indexOf(k); if (i >= 0) skip.splice(i, 1); else if (P.MGROUPS.length - skip.length > 3) skip.push(k); else PF.toast('Keep at least 3 muscle groups.', true); skip.sort((a, b) => P.MGROUPS.findIndex(g => g.k === a) - P.MGROUPS.findIndex(g => g.k === b)); };
   V.setup = () => {
     PF.header('Settings and data');
     if (!PF.ui.setup) PF.ui.setup = cfgOf(PF.db.settings);
@@ -232,6 +237,7 @@
         <div class="equip"><span class="lbl"><b>Sandbags</b> (kg)</span>${W.chips(D.eq.sb, SB_ALL, 'eqsb')}</div>
         <div class="equip"><span class="lbl"><b>Long loop bands</b></span>${W.chips(D.eq.bands, BANDS, 'eqband')}</div>
         <div class="equip">${toggle('bar', 'Pull-up bar')}${toggle('mini', 'Mini band (hips)')}${toggle('bench', 'Bench, box or sturdy chair')}${toggle('gripper', 'Hand gripper')}${toggle('roller', 'Wrist roller')}</div></div>
+      ${mgCard(D.skip, 'mg', 'All groups are targeted by default. Tap a group to leave it out, for example while an injury heals.')}
       ${dirty ? `<div class="row"><button type="button" class="btn primary" data-savesetup="1" ${D.days.length !== D.sessions ? 'disabled' : ''}>Save changes</button><button type="button" class="btn" data-resetsetup="1">Undo</button></div>` : ''}
       <div class="card stack"><h3>Look</h3><div class="seg">${[['auto', 'Like the phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<button type="button" data-theme="${k}" class="${(PF.db.settings.theme || 'auto') === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
       <div class="card stack"><h3>Assessment</h3><div class="small muted">${P.lastAssessment() ? 'Last one: ' + fmtDY(P.lastAssessment().date) : 'Not done yet.'}</div><a class="btn" href="#assess">Do the assessment</a></div>
@@ -252,6 +258,7 @@
   PF.on.eqdb = v => { tog(D().eq.db, num(v)); D().eq.db.sort((a, b) => a - b); PF.rerender(); };
   PF.on.eqsb = v => { tog(D().eq.sb, num(v)); D().eq.sb.sort((a, b) => a - b); PF.rerender(); };
   PF.on.eqband = v => { tog(D().eq.bands, v); D().eq.bands.sort((a, b) => BANDS.indexOf(a) - BANDS.indexOf(b)); PF.rerender(); };
+  PF.on.mg = v => { mgTog(D().skip, v); PF.rerender(); };
   PF.on.eqsw = v => { D().eq[v] = !D().eq[v]; PF.rerender(); };
   PF.on.resetsetup = () => { PF.ui.setup = null; PF.rerender(); };
   PF.on.theme = v => { PF.db.settings.theme = v; if (!PF.readOnly) PF.save(); PF.applyTheme(); PF.rerender(); };
@@ -265,6 +272,8 @@
       if (add.length) o.push(`${n} added: ${add.join(', ')}${u}`); if (rem.length) o.push(`${n} removed: ${rem.join(', ')}${u}`);
     }
     for (const k of ['bar', 'mini', 'bench', 'gripper', 'roller']) if (!!a.eq[k] !== !!b.eq[k]) o.push(`${P.EQUIP_NAMES[k]} ${b.eq[k] ? 'added' : 'removed'}`);
+    const sa = a.skip || [], sb = b.skip || [], off = sb.filter(x => !sa.includes(x)), back = sa.filter(x => !sb.includes(x));
+    if (off.length) o.push(`No longer targeted: ${off.map(P.MG_NAME).join(', ')}`); if (back.length) o.push(`Targeted again: ${back.map(P.MG_NAME).join(', ')}`);
     return o;
   };
   PF.on.savesetup = () => {
@@ -331,7 +340,7 @@
   V.new = () => {
     PF.header('New 12-week plan', true);
     const s = PF.db.settings; const a = P.lastAssessment();
-    if (!PF.ui.np) PF.ui.np = { sessions: s.sessions, minutes: s.minutes, days: s.days.slice(), start: iso(PF.nextMonday()) };
+    if (!PF.ui.np) PF.ui.np = { sessions: s.sessions, minutes: s.minutes, days: s.days.slice(), skip: (s.skip || []).slice(), start: iso(PF.nextMonday()) };
     const N = PF.ui.np; const cur = P.current();
     return `<div class="stack"><div class="eyebrow">${cur ? `Replaces block ${cur.block} as your current plan` : 'Your first block'}</div><h1>New 12-week plan</h1></div>
       ${a ? `<div class="card small">Starting levels from your assessment on ${fmtD(a.date)}. <a href="#assess">Redo it</a></div>` : `<div class="card small warn">No assessment yet: the plan uses moderate default levels. <a href="#assess">Do the assessment first</a> for a better start.</div>`}
@@ -339,16 +348,18 @@
         <div class="field"><span class="lbl">Minutes per session</span>${W.chips([N.minutes], [20, 30, 45, 60, 75, 90], 'npmin', v => v + ' min')}</div>
         <div class="field"><span class="lbl">Training days</span>${W.chips(N.days, PF.DAYS, 'npday')}${N.days.length !== N.sessions ? `<div class="small warn">Pick ${N.sessions} days.</div>` : ''}</div>
         <div class="field"><label for="npstart">Start date</label><input class="inp" type="date" id="npstart" value="${esc(N.start)}" data-in="npstart"><div class="small muted">Default: Monday next week.</div></div></div>
+      ${mgCard(N.skip, 'npmg', 'For this block. Tap a group to leave it out. You can change it later in Setup.')}
       ${preview(N)}
       <button type="button" class="btn primary" data-createplan="1" ${N.days.length !== N.sessions ? 'disabled' : ''}>Create plan</button>`;
   };
   function preview(N) {
-    const s = PF.db.settings; const cfg = { sessions: N.sessions, minutes: N.minutes, days: N.days.slice(), eq: clone(s.eq) };
+    const s = PF.db.settings; const cfg = { sessions: N.sessions, minutes: N.minutes, days: N.days.slice(), eq: clone(s.eq), skip: (N.skip || s.skip || []).slice() };
     const pl = { id: '_preview', block: (P.current() ? P.current().block : 0) + (N.block ? 0 : 1), start: N.start, cfgHist: [{ from: 1, cfg }], base: N.base || P.baseFrom(P.lastAssessment() || P.DEF_ASSESS), swaps: [] };
     if (N.block) pl.block = N.block;
     return `<div class="card stack"><h3>Week 1 preview</h3>${P.sessionKeys(pl, 1).map((k, i) => { const x = P.session(pl, 1, i); return `<div class="stack" style="gap:4px"><b>${esc(x.name)} · ${fmtD(x.date)}</b>${W.budget(x)}<div class="small muted">${x.items.map(r => esc(EX[r.id].n) + ' (' + PF.w.rxText(r) + ')').join(' · ')}</div></div>`; }).join('<hr class="sep">')}</div>`;
   }
   PF.on.npsess = v => { const N = PF.ui.np; N.sessions = clamp(N.sessions + +v, 2, 6); N.days = (PRESET[N.sessions] || N.days).slice(); PF.rerender(); };
+  PF.on.npmg = v => { mgTog(PF.ui.np.skip, v); PF.rerender(); };
   PF.on.npmin = v => { PF.ui.np.minutes = +v; PF.rerender(); };
   PF.on.npday = v => { tog(PF.ui.np.days, v); PF.ui.np.days.sort((a, b) => PF.DAYS.indexOf(a) - PF.DAYS.indexOf(b)); PF.rerender(); };
   PF.onInput.npstart = el => { if (el.value) { PF.ui.np.start = el.value; } };
@@ -356,8 +367,8 @@
   PF.on.createplan = async () => {
     if (!PF.guard()) return; const N = PF.ui.np; const s = PF.db.settings; const cur = P.current();
     if (cur && P.weekNo(cur) <= 12 && !(await PF.confirm('Replace the current plan?', `Block ${cur.block} is still running. Your logged sets stay saved; the new plan becomes the current one.`, 'Create new plan'))) return;
-    const cfg = { sessions: N.sessions, minutes: N.minutes, days: N.days.slice(), eq: clone(s.eq) };
-    Object.assign(s, { sessions: N.sessions, minutes: N.minutes, days: N.days.slice() }); PF.save();
+    const cfg = { sessions: N.sessions, minutes: N.minutes, days: N.days.slice(), eq: clone(s.eq), skip: N.skip.slice() };
+    Object.assign(s, { sessions: N.sessions, minutes: N.minutes, days: N.days.slice(), skip: N.skip.slice() }); PF.save();
     const a = P.lastAssessment();
     P.create({ start: N.start, cfg, base: P.baseFrom(a || P.DEF_ASSESS), block: cur ? cur.block + 1 : 1, prev: cur ? cur.id : null, assessment: a ? a.id : null });
     PF.ui.np = null; PF.ui.planW = null; PF.toast('Plan created'); PF.go('#plan');
@@ -372,7 +383,7 @@
     const an = P.analyze(pl, P.weekNo(pl) - 1); const cfg = P.cfgAt(pl, clamp(P.weekNo(pl), 1, 12));
     if (!PF.ui.nb || PF.ui.nb._pl !== pl.id) {
       const st = addDays(P.planEnd(pl), 1);
-      PF.ui.nb = { _pl: pl.id, sessions: an.prop.sessions, minutes: an.prop.minutes, days: an.prop.sessions === cfg.sessions ? cfg.days.slice() : PRESET[an.prop.sessions].slice(), steps: clone(an.prop.steps), start: iso(st < today() ? PF.nextMonday() : st) };
+      PF.ui.nb = { _pl: pl.id, sessions: an.prop.sessions, minutes: an.prop.minutes, days: an.prop.sessions === cfg.sessions ? cfg.days.slice() : PRESET[an.prop.sessions].slice(), skip: (cfg.skip || []).slice(), steps: clone(an.prop.steps), start: iso(st < today() ? PF.nextMonday() : st) };
     }
     const NB = PF.ui.nb; const early = P.weekNo(pl) <= 12; const lvl = { '-1': 'Easier', '0': 'Same', '1': 'Harder' };
     const eq = PF.db.settings.eq;
@@ -385,6 +396,7 @@
         <div class="field"><span class="lbl">Sessions per week ${NB.sessions !== cfg.sessions ? '<span class="pill ex">changed</span>' : ''}</span>${W.stepper(NB.sessions, 'nbsess', 'Sessions per week')}</div>
         <div class="field"><span class="lbl">Minutes per session ${NB.minutes !== cfg.minutes ? '<span class="pill ex">changed</span>' : ''}</span>${W.chips([NB.minutes], [20, 30, 45, 60, 75, 90], 'nbmin', v => v + ' min')}</div>
         <div class="field"><span class="lbl">Training days</span>${W.chips(NB.days, PF.DAYS, 'nbday')}${NB.days.length !== NB.sessions ? `<div class="small warn">Pick ${NB.sessions} days.</div>` : ''}</div></div>
+      ${mgCard(NB.skip, 'nbmg', `For block ${pl.block + 1}. Pre-selected as in block ${pl.block}; tap a group to leave it out or take it back in.`)}
       <div class="card stack"><h3>Starting level per movement</h3><div class="small muted">Compared with where block ${pl.block} started. Proposed values are pre-selected; change any of them.</div>
         ${P.LEVEL_PATTERNS.map(p => { const st = NB.steps[p] || 0; const nb = P.stepBase(P.base(pl), p, st, eq); const prop = an.prop.steps[p];
           return `<div class="stack" style="gap:6px;padding-top:8px;border-top:1px solid var(--line)"><div class="row"><b>${esc(P.PAT_NAMES[p])}</b><span class="spacer"></span><span class="small">${esc(P.baseText(p, P.base(pl)[p]))} → <b>${esc(P.baseText(p, nb))}</b></span></div>
@@ -394,6 +406,7 @@
       <div class="row wrap"><button type="button" class="btn primary" data-acceptnext="1" ${NB.days.length !== NB.sessions ? 'disabled' : ''}>Accept and create block ${pl.block + 1}</button><a class="btn" href="#assess">Redo the assessment instead</a></div>`;
   };
   PF.on.nbsess = v => { const N = PF.ui.nb; N.sessions = clamp(N.sessions + +v, 2, 6); N.days = (PRESET[N.sessions] || N.days).slice(); PF.rerender(); };
+  PF.on.nbmg = v => { mgTog(PF.ui.nb.skip, v); PF.rerender(); };
   PF.on.nbmin = v => { PF.ui.nb.minutes = +v; PF.rerender(); };
   PF.on.nbday = v => { tog(PF.ui.nb.days, v); PF.ui.nb.days.sort((a, b) => PF.DAYS.indexOf(a) - PF.DAYS.indexOf(b)); PF.rerender(); };
   PF.on.nbstep = v => { const [p, s] = v.split('|'); PF.ui.nb.steps[p] = +s; PF.rerender(); };
@@ -401,8 +414,8 @@
   PF.on.acceptnext = () => {
     if (!PF.guard()) return; const pl = P.current(); const NB = PF.ui.nb; const s = PF.db.settings;
     const base = clone(P.base(pl)); for (const p of P.LEVEL_PATTERNS) base[p] = P.stepBase(P.base(pl), p, NB.steps[p] || 0, s.eq);
-    const cfg = { sessions: NB.sessions, minutes: NB.minutes, days: NB.days.slice(), eq: clone(s.eq) };
-    Object.assign(s, { sessions: NB.sessions, minutes: NB.minutes, days: NB.days.slice() }); PF.save();
+    const cfg = { sessions: NB.sessions, minutes: NB.minutes, days: NB.days.slice(), eq: clone(s.eq), skip: NB.skip.slice() };
+    Object.assign(s, { sessions: NB.sessions, minutes: NB.minutes, days: NB.days.slice(), skip: NB.skip.slice() }); PF.save();
     P.create({ start: NB.start, cfg, base, block: pl.block + 1, prev: pl.id });
     PF.ui.nb = null; PF.ui.planW = null; PF.toast(`Block ${pl.block + 1} created`); PF.go('#plan');
   };

@@ -56,6 +56,22 @@
     return w[clamp(i + step, 0, w.length - 1)];
   };
 
+  /* ---------- muscle groups the user can leave out (per block; settings change asks: this block or new blocks) ---------- */
+  P.MGROUPS = [
+    { k: 'chest', n: 'Chest', m: ['chest'] }, { k: 'back', n: 'Back', m: ['upperback', 'lats'] }, { k: 'shoulders', n: 'Shoulders', m: ['shoulders'] },
+    { k: 'arms', n: 'Arms', m: ['biceps', 'triceps'] }, { k: 'forearms', n: 'Forearms & grip', m: ['forearms'] }, { k: 'core', n: 'Core', m: ['abs', 'obliques', 'lowerback'] },
+    { k: 'hips', n: 'Glutes & hips', m: ['glutes', 'hipflex', 'adductors'] }, { k: 'thighs', n: 'Thighs', m: ['quads', 'hamstrings'] },
+    { k: 'calves', n: 'Calves & shins', m: ['calves', 'shins'] }, { k: 'neck', n: 'Neck & traps', m: ['neck', 'traps'] }
+  ];
+  P.MG_NAME = k => (P.MGROUPS.find(g => g.k === k) || { n: k }).n;
+  /* an exercise is left out when at least half of its main muscles belong to groups that are not targeted */
+  P.skipEx = (id, skip) => {
+    if (!skip || !skip.length || !EX[id]) return false;
+    const off = new Set(P.MGROUPS.filter(g => skip.includes(g.k)).flatMap(g => g.m)); const pr = EX[id].prim || [];
+    return pr.length > 0 && pr.filter(m => off.has(m)).length * 2 >= pr.length;
+  };
+  P.targetText = skip => !skip || !skip.length ? 'All muscle groups' : 'All except ' + skip.map(P.MG_NAME).join(', ');
+
   /* ---------- assessment ---------- */
   P.TESTS = [
     { k: 'swingKg', ex: 'kb_swing', t: 'Kettlebell swing', how: 'Heaviest bell you can swing for 15 clean reps to chest height.', type: 'kg' },
@@ -118,17 +134,18 @@
   P.exFor = (pl, w, key, slot, occ) => {
     const sk = key + '.' + slot;
     let sw = null; for (const s of (pl.swaps || [])) if (s.slot === sk && s.from <= w && EX[s.ex]) sw = s.ex;
-    const eq = P.cfgAt(pl, w).eq;
-    if (sw && P.available(eq, sw)) return sw;
+    const cfg = P.cfgAt(pl, w), eq = cfg.eq;
+    if (sw && P.available(eq, sw) && !P.skipEx(sw, cfg.skip)) return sw;
     const list = P.options(pl, w, slot);
     if (!list.length) return null;
     const n = Math.min(3, list.length);
     return list[((occ || 0) + (pl.block - 1)) % n];
   };
   P.options = (pl, w, slot) => {
-    const eq = P.cfgAt(pl, w).eq; const b = P.base(pl);
+    const cfg = P.cfgAt(pl, w), eq = cfg.eq; const b = P.base(pl);
     return P.candidates(slot).filter(id => {
       const e = EX[id]; if (!P.available(eq, id)) return false;
+      if (P.skipEx(id, cfg.skip)) return false;
       if (e.lvl > P.allowedLvl(pl, slot)) return false;
       if ((id === 'pullup' || id === 'chinup') && (b.vpull.max || 0) < 3) return false;
       if (id === 'legraise' && (b.vpull.max || 0) < 1) return false;
@@ -187,7 +204,7 @@
       const sameBefore = P.sessionKeys(pl, w).slice(0, i).reduce((n, k) => n + P.SESS[k].slots.filter(s => s === slot).length, 0);
       let id = P.exFor(pl, w, key, slot, occ + sameBefore);
       if (id && seen.has(id)) { const alt = P.options(pl, w, slot).find(x => !seen.has(x)); id = alt || null; }
-      if (!id) { skipped.push({ slot, why: 'equipment' }); continue; }
+      if (!id) { skipped.push({ slot, why: (cfg.skip || []).length && P.candidates(slot).some(x => P.available(cfg.eq, x) && P.skipEx(x, cfg.skip)) ? 'muscles' : 'equipment' }); continue; }
       const r = P.rx(pl, w, key, slot, id, idx);
       const per = r.min / r.sets, fit = Math.floor((budget - used + 0.5) / per);
       if (fit < r.sets) { if (fit >= 2) r.sets = fit; else if (idx < 2) r.sets = 2; else { skipped.push({ slot, why: 'time' }); continue; } r.min = per * r.sets; }

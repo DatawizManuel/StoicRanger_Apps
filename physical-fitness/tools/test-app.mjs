@@ -60,6 +60,17 @@ async function run(theme) {
   await go('#setup'); await click('[data-mins="60"]'); await click('[data-savesetup]'); await shot('15-ask');
   await click('[data-apply=cur]');
   ok(await p.evaluate(() => PF.plan.current().cfgHist.slice(-1)[0].cfg.minutes === 60 && PF.plan.session(PF.plan.current(), 1, 0).cfg.minutes === 60), 'settings applied to current plan from this week');
+  // muscle groups: leave chest + arms out during the block → asks, then no chest/arm-dominant exercise from this week on
+  await go('#setup'); await click('[data-mg="chest"]'); await click('[data-mg="arms"]'); await shot('15b-muscles'); await click('[data-savesetup]');
+  ok(await p.evaluate(() => /No longer targeted: Chest, Arms/.test(document.body.innerText)), 'muscle-group change listed in the question');
+  await click('[data-apply=cur]');
+  ok(await p.evaluate(() => { const P = PF.plan, pl = P.current(), w = P.curW(pl); const c = P.cfgAt(pl, w);
+    if (c.skip.join() !== 'chest,arms') return false;
+    for (let i = 0; i < P.sessionKeys(pl, w).length; i++) for (const r of P.session(pl, w, i).items) if (P.skipEx(r.id, c.skip)) return false;
+    return P.session(pl, w, 0).items.length >= 3 && PF.db.settings.skip.join() === 'chest,arms'; }), 'not-targeted muscle groups left out of the current block');
+  await go('#new'); ok(await p.evaluate(() => !!document.querySelector('[data-npmg="chest"]:not(.on)')), 'new plan starts with the saved muscle groups');
+  await go('#setup'); await click('[data-mg="chest"]'); await click('[data-mg="arms"]'); await click('[data-savesetup]'); await click('[data-apply=new]');
+  ok(await p.evaluate(() => PF.db.settings.skip.length === 0 && PF.plan.cfgAt(PF.plan.current(), PF.plan.curW(PF.plan.current())).skip.join() === 'chest,arms'), '"only new plans" keeps the running block as it was');
   // every view renders without errors
   for (const h of ['#today', '#plan', '#plan/12', '#mobility', '#library', '#dashboard', '#setup', '#assess', '#new', '#next', '#act', '#s/12/0', '#s/6/1']) await go(h);
   for (const e of await p.evaluate(() => EXLIST.map(e => e.id))) { await p.evaluate(h => location.hash = h, '#ex/' + e); }
@@ -77,6 +88,32 @@ async function run(theme) {
   ok(rt.same && rt.planOk, 'Excel round trip keeps every row (' + JSON.stringify(rt.c) + ')');
   ok(rt.edited === 42 && rt.c2.updated === 1, 'Excel edit is imported ' + (rt.edited === 42 ? '' : rt.dbg + JSON.stringify(rt.c2)));
   ok(rt.again.added === 0 && rt.again.updated === 0, 'importing the same file twice adds nothing');
+  // shared-file layout: only PF_ sheets + hidden _PF_Data; other apps' sheets kept; 0.1.x files still import
+  const lay = await p.evaluate(() => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['ID', 'Name'], ['g1', 'Rifle']]), 'Weapons');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x']]), '_StoicRanger');
+    wb.Workbook = { Sheets: [{ name: 'Weapons', Hidden: 0 }, { name: '_StoicRanger', Hidden: 1 }] };
+    const other = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+    const out = new Uint8Array(PF.xls.build(PF.db, other)); const w2 = XLSX.read(out, { type: 'array' });
+    const twice = XLSX.read(new Uint8Array(PF.xls.build(PF.db, out)), { type: 'array' });
+    const names = w2.SheetNames; const hid = Object.fromEntries(w2.Workbook.Sheets.map(x => [x.name, x.Hidden]));
+    const own = names.filter(n => n !== 'Weapons' && n !== '_StoicRanger').every(n => n.startsWith('PF_') || n === '_PF_Data');
+    const kept = XLSX.utils.sheet_to_json(w2.Sheets.Weapons)[0].Name === 'Rifle' && hid._StoicRanger === 1 && hid._PF_Data === 1;
+    const d = PF.xls.parse(out); const full = d.full && d.full.db.sets.length === PF.db.sets.length;
+    // a 0.1.x file: sheets without prefix and a hidden _PF meta sheet
+    const ow = XLSX.utils.book_new(); const set0 = PF.db.sets[0];
+    XLSX.utils.book_append_sheet(ow, XLSX.utils.aoa_to_sheet([['id', 'plan', 'week', 'sess', 'slot', 'ex', 'set', 'reps', 'done', 'at'], ['old1', set0.plan, 1, 0, 'squat', 'goblet', 9, 7, 'yes', '2026-11-04T10:00:00.000Z']]), 'Sets');
+    XLSX.utils.book_append_sheet(ow, XLSX.utils.aoa_to_sheet([['key', 'value'], ['app', 'sr-physical-fitness'], ['schema', 1]]), '_PF');
+    const od = PF.xls.parse(new Uint8Array(XLSX.write(ow, { bookType: 'xlsx', type: 'array' })));
+    const legacyOk = od.tables.Sets.length === 1 && od.tables.Sets[0].reps === 7;
+    const settingsSkip = (() => { const c = PF.clone(PF.db); c.settings.skip = ['neck']; c.settings.at = '2099-01-01T00:00:00.000Z'; const dd = PF.xls.parse(new Uint8Array(PF.xls.build(c))); const e = PF.normalize(PF.emptyDb()); PF.xls.merge(e, dd); return e.settings.skip.join(); })();
+    return { own, kept, full, legacyOk, settingsSkip, n: names.join(), twice: twice.SheetNames.length === names.length };
+  });
+  ok(lay.own && lay.kept && lay.twice, 'only PF_ sheets written, other apps\' sheets kept (' + lay.n + ')');
+  ok(lay.full, 'hidden _PF_Data holds the full copy');
+  ok(lay.legacyOk, '0.1.x Excel files still import');
+  ok(lay.settingsSkip === 'neck', 'muscle groups travel in the Excel settings');
   // persistence: reload keeps data
   await p.reload(); await p.waitForTimeout(300);
   ok(await p.evaluate(() => PF.db.sets.length >= 1 && PF.db.plans.length === 1 && PF.db.activities.length === 1), 'data survives reload');

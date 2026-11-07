@@ -177,7 +177,7 @@
     const wkCls = x => { const ks = P.sessionKeys(pl, x); const d = ks.filter((k, i) => P.status(pl, x, i).done).length; return [d === ks.length ? 'done' : d ? 'part' : '', x === P.weekNo(pl) ? 'cur' : '', x === w ? 'sel' : ''].join(' '); };
     const hist = pl.cfgHist.length > 1 ? `<div class="small muted">Settings changed from week ${pl.cfgHist.slice(1).map(h => h.from).join(', ')} on.</div>` : '';
     return `<div class="stack"><div class="eyebrow">${fmtD(pl.start)} – ${fmtDY(P.planEnd(pl))}</div><h1>12-week block ${pl.block}</h1>
-        <div class="small muted">${c.sessions} × ${c.minutes} min · ${c.days.join(', ')}</div>${hist}</div>
+        <div class="small muted">${c.sessions} × ${c.minutes} min · ${c.days.join(', ')}</div><div class="small muted">Targets: ${esc(P.targetText(c.skip))} · <a href="#setup">change</a></div>${hist}</div>
       <div class="card stack"><div class="weeks" role="group" aria-label="Weeks">${Array.from({ length: 12 }, (_, i) => `<button type="button" data-pw="${i + 1}" class="${wkCls(i + 1)}" aria-label="Week ${i + 1}">${i + 1}</button>`).join('')}</div>
         <div class="phases">${P.PHASES.map(p => `<span>${p.n}</span>`).join('')}</div></div>
       <div class="stack"><div class="row"><h3>Week ${w} · ${P.PHASES[P.phaseOf(w)].n}${P.isDeload(w) ? ' · lighter week' : ''}</h3></div>
@@ -203,7 +203,7 @@
     return `<div class="stack"><div class="eyebrow">Block ${pl.block} · week ${w} · ${P.PHASES[P.phaseOf(w)].n}${P.isDeload(w) ? ' · lighter week' : ''}</div><h1>${esc(s.name)}</h1>${PF.w.budget(s)}
         <div class="small muted">Warm-up ${s.warm} min: easy movement, then 1–2 light sets of the first exercise. Cool-down ${s.cool} min: walk, breathe, stretch.</div></div>
       ${s.items.map(r => exBlock(pl, w, i, s.key, r)).join('')}
-      ${s.skipped.length ? `<div class="card small muted">Not in this session: ${s.skipped.map(x => `${esc(P.PAT_NAMES[x.slot])} (${x.why === 'time' ? 'no time left' : 'no equipment'})`).join(', ')}.</div>` : ''}
+      ${s.skipped.length ? `<div class="card small muted">Not in this session: ${s.skipped.map(x => `${esc(P.PAT_NAMES[x.slot])} (${x.why === 'time' ? 'no time left' : x.why === 'muscles' ? 'muscle group not targeted' : 'no equipment'})`).join(', ')}.</div>` : ''}
       <div class="card stack"><div class="field"><label for="snote">Note (optional)</label><textarea id="snote" class="inp" rows="2" data-ch="snote">${esc(row && row.note || '')}</textarea></div>
         <button class="btn ${row && row.done ? '' : 'primary'} block" data-sdone="1">${row && row.done ? '✓ Session done · tap to reopen' : 'Finish session'}</button></div>`;
   };
