@@ -61,8 +61,8 @@ TL.recordDoc = (f, o = {}) => {
   const list = TL.filtered(f).slice().reverse();                 // printed oldest first, like a logbook
   const s = TL.summary(list, f);
   const ft = TL.filterText(f);
-  const showShooter = !f.shooter;
-  const title = f.shooter ? TL.nameOf('shooters', f.shooter) : 'All shooters';
+  const showShooter = new Set(list.map(t => t.shooterId).filter(Boolean)).size > 1;   // only when older trainings of others are in it
+  const title = f.shooter ? TL.nameOf('shooters', f.shooter) : (TL.meId() ? TL.nameOf('shooters', TL.meId()) : 'Training record');
   const trainers = Array.from(new Set(list.map(t => t.trainerId).filter(Boolean))).map(TL.trainer).filter(Boolean);
   const ws = t => t.weapons.filter(w => !f.weapon || w.weaponId === f.weapon)
     .map(w => `<span>${esc(TL.nameOf('weapons', w.weaponId))}${w.rounds ? ' · ' + fmtInt(w.rounds) + (TL.isDry(t) ? ' reps' : '') : ''}</span>`).join('<br>');

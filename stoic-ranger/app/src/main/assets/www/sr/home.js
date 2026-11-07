@@ -77,6 +77,7 @@ function home(el) {
       <a class="btn pri" href="training/index.html#/training/new">+ Training</a>
       <a class="btn pri" href="gun/index.html#/dash?srAdd=1">+ Datasheet</a>
       <a class="btn pri" href="drills/index.html#/result/new">+ Drill result</a>
+      <a class="btn pri" href="gun/index.html#/db/roundsLog/new">+ Rounds</a>
     </div>
     <a class="choice srpart" href="gun/index.html"><div class="ic">⌖</div><div><h3>Gun Database</h3>
       <p>Guns, barrels, ammunition, datasheets, analyse, dope cards</p>
@@ -152,6 +153,7 @@ async function bringIn() {
 function data(el) {
   const d = SR.db, info = (() => { try { return JSON.parse(window.SRNative.appInfo()); } catch (e) { return {}; } })();
   el.innerHTML = `
+    ${storageCard()}
     ${xlsxCard()}
     <div class="card"><h3>Backup</h3>
       <p class="note">Guns, datasheets, trainings and drill results live in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …); it is also how you move to a new phone.</p>
@@ -170,6 +172,7 @@ function data(el) {
       <p class="note">No account, no tracking: all entries stay on this device unless you export or share them.</p>
       <div class="row"><button class="btn warn" id="dWipe">Delete all data on this device</button></div></div>`;
   SR.wireData(el, toast);
+  wireStorage(el);
   wireXlsx(el);
   $('#dIn', el).onclick = bringIn;
   if ($('#dThoughts', el)) $('#dThoughts', el).onclick = async () => { const r = await SR.saveThoughtsFile(); if (r.ok) toast('Saved: ' + r.msg); else if (r.msg !== 'cancelled') toast('Not saved: ' + r.msg, true); };
@@ -189,7 +192,53 @@ const statsText = s => {
   const parts = a.map(([t, n]) => `${n} ${lab[t] || t}`);
   return (parts.length ? 'new: ' + parts.join(', ') : 'nothing new') + (c ? `; ${c} changed` : '');
 };
+/* ---------- where the data lives (1.3.0, remarks #13 and #15) ---------- */
+const ncOn = () => { const st = SR.storage.available() && SR.storage.state(); return !!(st && st.mode === 'nextcloud'); };
+function storageCard() {
+  if (!SR.storage.available()) return `<div class="card"><h3>Where your data is stored</h3>
+    <p class="note">On this device. Syncing with Nextcloud is in the Android and Windows apps: the iPhone web app cannot reach Nextcloud itself (Nextcloud does not let other websites in). On iPhone, use <b>Save database.xlsx</b> below and choose the Nextcloud app as the place, and <b>Open database.xlsx</b> to bring a newer file back (merged, nothing here is deleted).</p></div>`;
+  const st = SR.storage.state(), on = st.mode === 'nextcloud', s = SR.xlsx.state();
+  const last = s.lastOut || s.lastIn ? when(s.lastOut > (s.lastIn || '') ? s.lastOut : s.lastIn) : '';
+  const v = k => esc(st[k] || '');
+  return `<div class="card" id="stCard"><h3>Where your data is stored</h3>
+    <div class="seg" id="stMode"><a href="javascript:void 0" data-m="local" class="${on ? '' : 'on'}">${st.windows ? 'On this PC only' : 'On this phone only'}</a><a href="javascript:void 0" data-m="nextcloud" class="${on ? 'on' : ''}">Synced to my Nextcloud</a></div>
+    ${on ? `<p>Synced with <b>${v('url')}</b>, folder <b>${v('folder')}</b>${last ? ` · last sync ${esc(last)}` : ''}</p>
+      <p class="note">This ${st.windows ? 'PC' : 'phone'} keeps its own copy and works offline. database.xlsx is synced when the app opens, when you leave a part or the app, and with Sync now. Changes made elsewhere are merged, never overwritten, and a copy goes to <b>${v('folder')}backups</b> before every upload (the newest 30 are kept).</p>
+      <div class="stack"><button class="btn pri" id="stSync">Sync now</button><button class="btn" id="stLocal">Stop syncing (keep the data ${st.windows ? 'on this PC' : 'on this phone'})</button></div>` : ''}
+    <div id="stForm" ${on ? 'hidden' : 'hidden'}>
+      <label class="fld"><span>Nextcloud address</span><input id="stUrl" type="url" inputmode="url" placeholder="https://cloud.example.com" value="${v('url')}"></label>
+      <label class="fld"><span>User name</span><input id="stUser" autocapitalize="off" autocomplete="username" value="${v('user')}"></label>
+      <label class="fld"><span>App password</span><input id="stPw" type="password" autocomplete="new-password" placeholder="${st.hasPassword ? 'stored (leave empty to keep it)' : 'Nextcloud › Settings › Security › App passwords'}"></label>
+      <label class="fld"><span>Folder</span><input id="stFolder" value="${v('folder') || '/Stoic Ranger/'}"></label>
+      <p class="note">Use an app password, not your normal one (Nextcloud › Settings › Security). It stays encrypted on this ${st.windows ? 'PC' : 'phone'} only. The first sync merges what is on Nextcloud with the data here: nothing is lost on either side.</p>
+      <div class="stack"><button class="btn pri" id="stGo">Connect and sync</button></div></div>
+    ${st.windows ? `<p class="note">If the Nextcloud desktop app already syncs a folder on this PC, you can also simply use the database.xlsx in that folder (below).</p>`
+      : `<p class="note">Stoic Ranger apps you linked on this phone (e.g. SR GunSafe, after you allowed the link there) use the same database file and this same setting: switching here switches them too, and the other way round.</p>`}
+  </div>`;
+}
+function wireStorage(el) {
+  if (!SR.storage.available()) return;
+  const q = s => $(s, el), form = q('#stForm');
+  el.querySelectorAll('#stMode [data-m]').forEach(a => a.onclick = () => {
+    if (a.dataset.m === 'nextcloud') { form.hidden = false; el.querySelectorAll('#stMode a').forEach(x => x.classList.toggle('on', x === a)); q('#stUrl').focus(); }
+    else if (ncOn()) q('#stLocal').click(); else { form.hidden = true; el.querySelectorAll('#stMode a').forEach(x => x.classList.toggle('on', x === a)); }
+  });
+  q('#stGo').onclick = () => {
+    q('#stGo').disabled = true; q('#stGo').textContent = 'Connecting …';
+    setTimeout(() => {
+      SR.flush();
+      const r = SR.storage.connect({ url: q('#stUrl').value, user: q('#stUser').value, folder: q('#stFolder').value }, q('#stPw').value);
+      if (r.ok) { toast('Connected: database.xlsx is now synced with your Nextcloud' + (r.merged && r.merged.stats ? ' (' + statsText(r.merged.stats) + ')' : '') + '.'); route(); }
+      else { toast(r.msg || 'Not connected.', true); q('#stGo').disabled = false; q('#stGo').textContent = 'Connect and sync'; if (r.saved) route(); }
+    }, 30);
+  };
+  if (q('#stSync')) q('#stSync').onclick = () => { q('#stSync').disabled = true; setTimeout(() => { SR.flush(); const a = SR.xlsx.syncIn(), b = SR.xlsx.syncOut(); const e = (a && a.error) || (b && b.error); if (e) toast(e, true); else toast('Synced' + (a && a.stats ? ' (' + statsText(a.stats) + ')' : '') + '.'); route(); }, 30); };
+  if (q('#stLocal')) armed(q('#stLocal'), () => { SR.storage.local(); toast('Not syncing any more. Everything stays on this device; nothing was deleted on Nextcloud.'); route(); });
+}
 function xlsxCard() {
+  if (ncOn()) return `<div class="card"><h3>database.xlsx by hand</h3>
+    <p class="note">Your database.xlsx is synced with Nextcloud (above). You can still save a copy or bring a file in by hand.</p>
+    <div class="stack"><button class="btn" id="xSave">Save database.xlsx</button><button class="btn" id="xIn">Open database.xlsx</button></div></div>`;
   const can = SR.xlsx.canLink(), i = can ? SR.xlsx.info() : {}, s = SR.xlsx.state();
   const linked = can && i.linked;
   return `<div class="card"><h3>Shared database (database.xlsx)</h3>

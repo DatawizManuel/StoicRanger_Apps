@@ -7,6 +7,6 @@ TOOLS="${TOOLS:-/home/user/tools}"
 OUT="$(mktemp -d)"
 J="$ROOT/app/src/main/java/at/rangebook/app"
 java -jar "$TOOLS/ecj-3.45.0.jar" -nowarn -8 -cp "$TOOLS/json-20240303.jar:$TOOLS/android.jar" -d "$OUT" \
-  "$J/LinkProvider.java" "$J/MainActivity.java" "$J/SharedFileProvider.java" "$ROOT/tools/link-test/LinkProviderTest.java" >/dev/null
+  "$J/LinkProvider.java" "$J/Nextcloud.java" "$J/MainActivity.java" "$J/SharedFileProvider.java" "$ROOT/tools/link-test/LinkProviderTest.java" >/dev/null
 # org.json first: android.jar only has stubs of it
 java -cp "$TOOLS/json-20240303.jar:$OUT:$TOOLS/android.jar" LinkProviderTest

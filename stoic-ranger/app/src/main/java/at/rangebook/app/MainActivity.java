@@ -514,6 +514,88 @@ public class MainActivity extends Activity {
             xlsxPrefs().edit().remove("uri").apply();
         }
 
+        /* ---------- where the data lives: this phone or Nextcloud (1.3.0, see Nextcloud.java) ---------- */
+        @JavascriptInterface
+        public String ncState() { return Nextcloud.state(MainActivity.this).toString(); }
+
+        /** Stores the setting (password empty = keep the stored one). */
+        @JavascriptInterface
+        public boolean ncSet(String json, String password) {
+            try { Nextcloud.set(MainActivity.this, new JSONObject(json), password); return true; } catch (Exception e) { return false; }
+        }
+
+        /** One WebDAV request in the stored folder (runs on the bridge thread, not the UI thread). */
+        @JavascriptInterface
+        public String ncRequest(String method, String name, String headers, String bodyB64) {
+            return Nextcloud.request(MainActivity.this, method, name, headers, bodyB64, null);
+        }
+
+        /** The same with a setting that is not stored yet (the "Connect" check). */
+        @JavascriptInterface
+        public String ncTry(String json, String password, String method, String name, String headers) {
+            try {
+                JSONObject o = new JSONObject(json);
+                o.put("password", password == null ? "" : password);
+                return Nextcloud.request(MainActivity.this, method, name, headers, "", o);
+            } catch (Exception e) { return "{\"status\":0,\"error\":\"bad setting\"}"; }
+        }
+
+        /** The storage setting of the other Stoic Ranger apps on this phone (only apps signed with the same key answer). */
+        @JavascriptInterface
+        public String linkStorage() {
+            org.json.JSONArray out = new org.json.JSONArray();
+            for (String pkg : LinkProvider.APPS) {
+                try {
+                    Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "storage", null, null);
+                    if (b == null || b.getString("json") == null) continue;
+                    JSONObject o = new JSONObject(b.getString("json"));
+                    if (o.has("error")) continue;
+                    o.remove("password");                       // the page never sees a password
+                    o.put("app", pkg);
+                    out.put(o);
+                } catch (Exception ignored) { }
+            }
+            return out.toString();
+        }
+
+        /** Barrel changes SR GunSafe queued through the link (LinkProvider.putBarrels). Read once: the file is kept as link-inbox-<time>.done. */
+        @JavascriptInterface
+        public String takeLinkInbox() {
+            File f = new File(getFilesDir(), "link-inbox.json");
+            if (!f.exists()) return "";
+            try (FileInputStream is = new FileInputStream(f)) {
+                String t = new String(readAll(is), StandardCharsets.UTF_8);
+                f.renameTo(new File(getFilesDir(), "link-inbox-" + System.currentTimeMillis() + ".done"));
+                return t;
+            } catch (Exception e) { return ""; }
+        }
+
+        /** Takes over a newer setting from a linked app (with its password, which stays encrypted on this phone). */
+        @JavascriptInterface
+        public boolean linkAdopt(String pkg) {
+            try {
+                Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "storage", null, null);
+                JSONObject o = new JSONObject(b.getString("json"));
+                o.remove("share");
+                Nextcloud.set(MainActivity.this, o, o.optString("password", ""));
+                return true;
+            } catch (Exception e) { return false; }
+        }
+
+        /** Pushes this app's setting (password included) to the linked apps; each decides by its own consent. */
+        @JavascriptInterface
+        public String linkPush() {
+            org.json.JSONArray done = new org.json.JSONArray();
+            String json = Nextcloud.stateWithPassword(MainActivity.this).toString();
+            for (String pkg : LinkProvider.APPS) {
+                try {
+                    Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "setStorage", json, null);
+                    if (b != null && b.getString("json") != null && !b.getString("json").contains("error")) done.put(pkg);
+                } catch (Exception ignored) { }
+            }
+            return done.toString();
+        }
+
         @JavascriptInterface
         public boolean isNight() { return MainActivity.this.isNight(); }
 

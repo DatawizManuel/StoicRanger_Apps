@@ -65,14 +65,17 @@ try {
     try { $j = [System.IO.File]::ReadAllText($cfgFile).TrimStart([char]0xFEFF) | ConvertFrom-Json; $j.PSObject.Properties | ForEach-Object { $cfg[$_.Name] = $_.Value } } catch { }
   }
   $db = $null
-  if ($cfg['xlsx'] -and (Test-Path $cfg['xlsx'])) {
+  $onNc = $cfg['nc'] -and ($cfg['nc'].mode -eq 'nextcloud')
+  if ($onNc) { Write-Host "The app syncs database.xlsx with your Nextcloud ($($cfg['nc'].url)). That setting is kept." }
+  if (-not $onNc -and $cfg['xlsx'] -and (Test-Path $cfg['xlsx'])) {
     $a = Ask "The app works with`n$($cfg['xlsx'])`n`nKeep using this database.xlsx?`n(No = choose another folder)" 'YesNoCancel'
     if ($a -eq 'Cancel') { throw 'cancelled' }
     if ($a -eq 'Yes') { $db = $cfg['xlsx'] }
   }
-  if (-not $db) {
+  if (-not $db -and -not $onNc) {
     $guess = @()
     foreach ($b in @([Environment]::GetFolderPath('Desktop'), (Join-Path $env:USERPROFILE 'OneDrive\Desktop'), [Environment]::GetFolderPath('MyDocuments'))) {
+      $guess += Join-Path $b 'Wichtig\Claude\12_Stoic Ranger Apps\01_SR Shooting\02_Data\pc-dashboard\03_registry'
       $guess += Join-Path $b 'Wichtig\Claude\12_Stoic Ranger Apps\02_shared\pc-dashboard\03_registry'
     }
     if ($cfg['folder']) { $guess += Join-Path $cfg['folder'] '03_registry' }
@@ -98,7 +101,7 @@ try {
   Remove-Item $zip -Force
   Copy-Item (Join-Path $here 'uninstall.ps1') $dest -Force
 
-  if ($cfg['xlsx'] -ne $db) { $cfg['pending'] = $db }       # the app links it at its next start (and merges, nothing lost)
+  if ($db -and $cfg['xlsx'] -ne $db) { $cfg['pending'] = $db }       # the app links it at its next start (and merges, nothing lost)
   New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
   [System.IO.File]::WriteAllText($cfgFile, ($cfg | ConvertTo-Json -Depth 5), $utf8)
 

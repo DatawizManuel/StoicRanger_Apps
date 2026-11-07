@@ -3,7 +3,7 @@
 One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
 phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Name "Stoic Ranger Shooting" (from 1.2.0), launcher
 label "SR_Shooting", package id `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0
-and keeps its data). Version 1.2.1, versionCode 12.
+and keeps its data). Version 1.3.0, versionCode 13.
 
 ## How it fits together
 
@@ -52,6 +52,24 @@ from a newer version is never written. Must pass before a release.
 
 ## Versions
 
+- **1.3.0** (versionCode 13; Android, web, Windows 1.3.0; 2026-11-07): remarks 12 to 15.
+  - **Where the data is stored** (Data): this device only, or synced to the user's **Nextcloud** (address, user, app
+    password, folder). The device keeps its own copy and works offline; database.xlsx is synced over WebDAV when the
+    app opens, when a part or the app is left, and with Sync now: three-way merge, upload with If-Match (412 → read,
+    merge, retry), a copy to `<folder>/backups/database-YYYYMMDD-HHMMSS.xlsx` before each upload (newest 30 kept).
+    Android: `Nextcloud.java` (plain HTTP/1.1 over TLS, because HttpURLConnection refuses WebDAV methods; password
+    AES-GCM with an Android Keystore key). Windows: `main.js` (fetch in the main process, password with
+    safeStorage/DPAPI). The sync logic is shared: `www/sr/nextcloud.js` + `sr/hub.js`. The iPhone web app cannot reach
+    Nextcloud (Nextcloud blocks other websites): there database.xlsx is saved/opened by hand, e.g. in the Nextcloud app.
+  - **Shared contract** (`00_docs/SHARED-DB-CONTRACT.md`): database.xlsx keeps every sheet Shooting does not own
+    (FK_, PF_, GS_, DT_ and hidden `_XX_Data`); Rounds_Log has an optional `Munition ID` column; the link provider
+    answers `gunsafe`, `putBarrels` (queued in `files/link-inbox.json`, applied when the app opens), `storage` and
+    `setStorage` (one storage setting for linked apps, newest `changed` wins; on start the app takes a newer one).
+  - **One shooter** (#14): the Training Log has no shooter choice any more (own shooter; older trainings of others
+    stay theirs, rounds kept). **+ Rounds** on the home page: rounds for a gun/barrel without a training, with
+    ammunition and a note ("Shot by shooter xy"); they count in the round totals and the home overview.
+  - Windows (#12): the installer and first start look for database.xlsx in `01_SR Shooting\02_Data\pc-dashboard\03_registry`
+    first (the old `02_shared\…` second); an update keeps the Nextcloud setting.
 - **1.2.1** (versionCode 12, Android only): the phone's Back button works (and saving/sharing files): the cloud build
   crashed on Java lambdas, now replaced by anonymous classes; the build checks for it.
 - **1.2.0** (versionCode 11): renamed **Stoic Ranger Shooting** (launcher "SR_Shooting"; package id, data files and

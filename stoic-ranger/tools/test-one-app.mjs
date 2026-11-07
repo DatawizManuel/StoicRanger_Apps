@@ -53,6 +53,34 @@ const MOCK = () => {
     saveFile: (n, m, b64, id) => { s('m.saved.' + n, b64); cb(id, { ok: true, msg: n }); },
     openFile: (m, id) => { const f = g('m.open'); cb(id, f ? { ok: true, msg: 'pick.json', data: btoa(unescape(encodeURIComponent(f))) } : { ok: false, msg: 'cancelled' }); },
     shareFile() { }, shareText() { }, print() { }, printSized() { },
+    // 1.3.0: Nextcloud. m.nc = the stored setting; m.dav = a small WebDAV server {files:{name:{b64,etag,t}}, dirs:[], n}
+    ncState: () => g('m.nc') || JSON.stringify({ mode: 'local', folder: '/Stoic Ranger/', hasPassword: false, share: false }),
+    ncSet: (json, pw) => { const o = JSON.parse(json), cur = JSON.parse(g('m.nc') || '{}'); Object.assign(cur, o); if (pw) cur.hasPassword = true; s('m.nc', JSON.stringify(cur)); return true; },
+    ncTry: (json, pw) => JSON.stringify(JSON.parse(json).url === 'https://cloud.test' && pw === 'app-pw' ? { status: 207, headers: {} } : { status: 401, headers: {} }),
+    ncRequest: (m, name, hj, body) => {
+      const D = JSON.parse(g('m.dav') || '{"files":{},"dirs":[],"n":0}'), h = JSON.parse(hj || '{}'), F = D.files;
+      if (g('m.davdown')) return JSON.stringify({ status: 0, error: 'offline' });
+      const put = (n, b64) => { D.n++; F[n] = { b64, etag: '"e' + D.n + '"', t: 1700000000000 + D.n * 1000 }; };
+      const hdr = f => ({ etag: f.etag, 'last-modified': new Date(f.t).toUTCString(), 'content-length': String(atob(f.b64).length) });
+      let r;
+      if (D.bump && m === 'PUT' && name === 'database.xlsx' && F[name]) { D.bump = 0; put(name, F[name].b64); D.bumped = (D.bumped || 0) + 1; }   // someone else saved just now
+      if (m === 'HEAD') r = F[name] ? { status: 200, headers: hdr(F[name]) } : { status: 404, headers: {} };
+      else if (m === 'GET') r = F[name] ? { status: 200, headers: hdr(F[name]), body: F[name].b64 } : { status: 404, headers: {} };
+      else if (m === 'MKCOL') { r = { status: D.dirs.includes(name) ? 405 : 201, headers: {} }; if (!D.dirs.includes(name)) D.dirs.push(name); }
+      else if (m === 'COPY') { if (F[name]) { F[h['X-Dest-Name']] = Object.assign({}, F[name]); r = { status: 201, headers: {} }; } else r = { status: 404, headers: {} }; }
+      else if (m === 'DELETE') { delete F[name]; r = { status: 204, headers: {} }; }
+      else if (m === 'PROPFIND') r = { status: 207, headers: {}, body: btoa('<d:multistatus xmlns:d="DAV:">' + Object.keys(F).filter(n => n.startsWith(name + '/')).map(n => `<d:response><d:href>/remote.php/dav/files/u/Stoic%20Ranger/${encodeURIComponent(n).replace('%2F', '/')}</d:href></d:response>`).join('') + '</d:multistatus>') };
+      else if (m === 'PUT') {
+        if ((h['If-Match'] && (!F[name] || F[name].etag !== h['If-Match'])) || (h['If-None-Match'] === '*' && F[name])) r = { status: 412, headers: {} };
+        else { put(name, body); r = { status: 201, headers: { etag: F[name].etag } }; }
+      } else r = { status: 405, headers: {} };
+      s('m.dav', JSON.stringify(D));
+      return JSON.stringify(r);
+    },
+    takeLinkInbox: () => { const v = g('m.inbox') || ''; localStorage.removeItem('m.inbox'); return v; },
+    linkStorage: () => g('m.linked') || '[]',
+    linkAdopt: pkg => { const o = JSON.parse(g('m.linked') || '[]').find(x => x.app === pkg); if (!o) return false; const cur = JSON.parse(g('m.nc') || '{}'); Object.assign(cur, o); delete cur.app; s('m.nc', JSON.stringify(cur)); s('m.adopted', pkg); return true; },
+    linkPush: () => { s('m.pushed', String(+(g('m.pushed') || 0) + 1)); return '["at.stoicranger.gunsafe"]'; },
   };
 };
 
@@ -262,13 +290,12 @@ await page.click('[data-ov="dope"]'); await page.waitForTimeout(150);
 const dopeLinks = await page.locator('#ovBody a.item').count(), wantDope = await page.evaluate(() => new Set(SR.db.sheets.filter(s => s.weaponId && s.munitionId && SR.db.weapons.some(w => w.id === s.weaponId) && SR.db.munitions.some(m => m.id === s.munitionId)).map(s => s.weaponId + '|' + s.munitionId)).size);
 ok(dopeLinks === wantDope && dopeLinks > 0, `dope cards: one per gun and ammunition on the datasheets (${dopeLinks})`);
 await page.click('[data-ov="training"]'); await page.waitForTimeout(150);
-await page.selectOption('#ovShooter', await page.evaluate(() => SR.db.shooters.find(s => s.name === 'Test Friend').id)); await page.waitForTimeout(150);
-const trOne = await page.evaluate(() => document.querySelector('#ovBody .tile .v').textContent);
-ok(trOne === '1', 'the shooter filter narrows the training overview');
+ok(await page.locator('#ovShooter').count() === 0, 'one shooter only: the overview has no shooter filter (1.3.0)');
+const trAll = await page.evaluate(() => document.querySelector('#ovBody .tile .v').textContent);
+ok(+trAll === await page.evaluate(() => SR.db.trainings.filter(t => !t.example).length), 'and counts every training, older ones of other shooters included');
 ok(await page.evaluate(() => localStorage.getItem('m.db')) === dbBefore && await page.evaluate(() => localStorage.getItem('m.saves')) === '0', 'the overview never changes the database');
 await open('index.html', 600);
 ok(await page.evaluate(() => document.querySelector('[data-ov="training"]').classList.contains('on')), 'the overview keeps its tab on this device');
-await page.selectOption('#ovShooter', ''); await page.waitForTimeout(150);
 await page.click('[data-ov="dope"]'); await page.waitForTimeout(150);
 const first = await page.locator('#ovBody a.item').first().getAttribute('href');
 await open(first, 900);
@@ -281,6 +308,104 @@ ok(!!pdf && atob(pdf).startsWith('%PDF'), 'the empty datasheet is saved as a PDF
 ok(await page.locator('a[href="gun/index.html#/analyse/scan"]').count() === 1, 'and a filled-in sheet can be brought back from the home page');
 const bk = await page.evaluate(async () => { await SR.saveBackup(); return Object.keys(localStorage).filter(k => k.startsWith('m.saved.sr-shooting-backup_')).length; });
 ok(bk === 1, 'backups are named sr-shooting-backup_<date>.json');
+
+// 10. 1.3.0: one shooter, rounds entries, sheets of other apps, Nextcloud, the link with SR GunSafe
+await open('training/index.html#/training/new', 700);
+ok(await page.locator('#fShooter').count() === 0, 'the training form has no shooter choice any more');
+await page.fill('#fDate', '2026-11-07'); await page.fill('#fDesc', 'One shooter test');
+await page.click('#tSaveTop'); await page.waitForTimeout(400);
+const tr13 = await page.evaluate(() => { const t = TL.db.trainings.find(x => x.desc === 'One shooter test'); return t && { sh: t.shooterId, me: TL.meId() }; });
+ok(tr13 && tr13.sh && tr13.sh === tr13.me, 'a new training goes to the own shooter');
+const other = await page.evaluate(() => { const f = TL.db.shooters.find(s => s.name === 'Test Friend'); const t = TL.db.trainings.find(x => x.shooterId === f.id); return t ? t.id : ''; });
+if (other) {
+  await open('training/index.html#/training/' + other, 700);
+  ok(/Logged for/.test(await page.evaluate(() => document.body.innerText)), 'an older training of another shooter says whose it is');
+  await page.click('#tSaveTop'); await page.waitForTimeout(400);
+  ok(await page.evaluate(id => { const t = TL.db.trainings.find(x => x.id === id); return TL.nameOf('shooters', t.shooterId) === 'Test Friend'; }, other), 'and keeps that shooter when saved');
+}
+await open('index.html', 600);
+ok(await page.locator('.srnew a[href="gun/index.html#/db/roundsLog/new"]').count() === 1, 'home has + Rounds');
+await open('gun/index.html#/db/roundsLog/new', 900);
+const rlBefore = await page.evaluate(() => RB.db.roundsLog.length);
+await page.fill('[data-k="rounds"]', '40'); await page.fill('[data-k="note"]', 'Shot by shooter xy');
+ok(await page.locator('[data-k="munitionId"]').count() === 1, 'a rounds entry can name the ammunition');
+await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^save$/i.test(x.textContent.trim()) || x.id === 'saveTop' || x.getAttribute('aria-label') === 'Save'); b.click(); });
+await page.waitForTimeout(400);
+ok(await page.evaluate(n => { const L = JSON.parse(localStorage.getItem('m.db')).roundsLog; return L.length === n + 1 && L.some(r => r.note === 'Shot by shooter xy' && r.rounds === 40); }, rlBefore), 'rounds without a training are saved with their note');
+await open('index.html', 600);
+await page.click('[data-ov="guns"]'); await page.selectOption('#ovYear', ''); await page.waitForTimeout(200);
+ok(/Extra rds/i.test(await page.evaluate(() => document.querySelector('#ovBody').innerText)), 'the guns overview counts the extra rounds');
+
+// sheets of the other apps stay in database.xlsx (shared contract A)
+const kept = await page.evaluate(() => {
+  const X = window.XLSX, wb = X.read(SRX.write(SR.db, { by: 'test' }), { type: 'array' });
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Gun', 'Owner'], ['W001', 'Manuel']]), 'GS_Owners');
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['{"x":1}']]), '_GS_Data');
+  wb.Workbook = { Sheets: wb.SheetNames.map(n => ({ name: n, Hidden: n.startsWith('_') ? 1 : 0 })) };
+  const keep = new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' }));
+  const out = X.read(SRX.write(SR.db, { by: 'test', keep }), { type: 'array' });
+  const vis = Object.fromEntries((out.Workbook.Sheets || []).map(x => [x.name, x.Hidden || 0]));
+  return { gs: !!out.Sheets.GS_Owners && X.utils.sheet_to_json(out.Sheets.GS_Owners)[0].Owner === 'Manuel', hid: vis._GS_Data === 1 && vis._StoicRanger === 1, once: out.SheetNames.filter(n => n === 'Weapons').length === 1 };
+});
+ok(kept.gs && kept.hid && kept.once, 'writing database.xlsx keeps the sheets of other apps (hidden ones stay hidden), its own sheets once');
+
+// Nextcloud
+await page.evaluate(() => { localStorage.removeItem('m.xlinked'); localStorage.removeItem('m.dav'); localStorage.removeItem('m.nc'); });
+await open('index.html#/data', 600);
+ok(await page.locator('#stMode').count() === 1, 'Data shows where the data is stored, with the Nextcloud choice');
+await page.click('#stMode [data-m="nextcloud"]');
+await page.fill('#stUrl', 'https://cloud.test'); await page.fill('#stUser', 'u'); await page.fill('#stPw', 'wrong');
+await page.click('#stGo'); await page.waitForTimeout(300);
+ok(await page.evaluate(() => JSON.parse(localStorage.getItem('m.nc') || '{}').mode !== 'nextcloud'), 'a wrong app password is refused and nothing is stored');
+await page.fill('#stPw', 'app-pw'); await page.click('#stGo'); await page.waitForTimeout(500);
+let dav = await page.evaluate(() => JSON.parse(localStorage.getItem('m.dav')));
+ok(dav.files['database.xlsx'] && dav.dirs.includes('') && dav.dirs.includes('backups'), 'connecting uploads database.xlsx into the folder (and makes backups/)');
+ok(await page.evaluate(() => { const n = JSON.parse(localStorage.getItem('m.nc')); return n.mode === 'nextcloud' && !('password' in n) && !JSON.stringify(SR.db).includes('app-pw'); }), 'the password is never in the setting the page keeps or in the database');
+ok(/Synced with/.test(await page.evaluate(() => document.querySelector('#stCard').innerText)), 'Data shows the sync status');
+// someone else adds a gun on Nextcloud (another phone / the PC)
+await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('m.dav')), u = JSON.parse(JSON.stringify(SR.db));
+  u.weapons.push({ id: 'W900', uid: 'uid-nc-gun', name: 'Cloud Rifle', type: 'Rifle' });
+  const b = SRX.write(u, { by: 'other', keep: Uint8Array.from(atob(d.files['database.xlsx'].b64), c => c.charCodeAt(0)) });
+  let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  d.n++; d.files['database.xlsx'] = { b64: btoa(s), etag: '"e' + d.n + '"', t: 1700000000000 + d.n * 1000 }; localStorage.setItem('m.dav', JSON.stringify(d));
+});
+const inR = await page.evaluate(() => { const r = SR.xlsx.syncIn(); return { ok: !r || !r.error, gun: SR.db.weapons.some(w => w.name === 'Cloud Rifle') }; });
+ok(inR.ok && inR.gun, 'a change made elsewhere comes in from Nextcloud (merged)');
+// a save on Nextcloud between the look and the upload: 412, read, merge, upload again
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('m.dav')); d.bump = 1; localStorage.setItem('m.dav', JSON.stringify(d)); SR.db.weapons.push({ id: 'W901', uid: 'uid-local-gun', name: 'Local Rifle', type: 'Rifle' }); SR.save(); });
+const outR = await page.evaluate(() => SR.xlsx.syncOut());
+dav = await page.evaluate(() => JSON.parse(localStorage.getItem('m.dav')));
+const remote = await page.evaluate(b64 => { const F = SRX.read(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); return F.db.weapons.map(w => w.name); }, dav.files['database.xlsx'].b64);
+ok(outR && outR.ok && dav.bumped === 1 && remote.includes('Local Rifle') && remote.includes('Cloud Rifle'), 'a conflicting save on Nextcloud (412) is merged and uploaded again, nothing lost');
+ok(Object.keys(dav.files).some(n => /^backups\/database-\d{8}-\d{6}\.xlsx$/.test(n)), 'a copy goes to backups/ before each upload');
+await page.evaluate(() => { const d = JSON.parse(localStorage.getItem('m.dav')); for (let i = 0; i < 35; i++) d.files['backups/database-20250101-' + String(1000000 + i).slice(1) + '.xlsx'] = d.files['database.xlsx']; localStorage.setItem('m.dav', JSON.stringify(d)); SR.db.weapons[0].notes = 'prune'; SR.save(); SR.xlsx.syncOut(); });
+dav = await page.evaluate(() => JSON.parse(localStorage.getItem('m.dav')));
+ok(Object.keys(dav.files).filter(n => n.startsWith('backups/')).length === 30, 'only the newest 30 backups are kept');
+// offline: the app keeps working, the change goes out later
+await page.evaluate(() => { localStorage.setItem('m.davdown', '1'); SR.db.weapons[0].notes = 'offline edit'; SR.save(); });
+const off = await page.evaluate(() => SR.flush());
+ok(off && off.offline && await page.evaluate(() => !!SR.xlsx.state().dirty), 'offline: nothing is lost, the change waits');
+await page.evaluate(() => localStorage.removeItem('m.davdown'));
+await page.evaluate(() => SR.xlsx.syncOut());
+ok(await page.evaluate(() => !SR.xlsx.state().dirty), 'and goes out when Nextcloud is back');
+// back to this phone only
+const davFiles = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('m.dav')).files).length);
+const lr = await page.evaluate(() => SR.storage.local());
+ok(lr.ok && await page.evaluate(n => JSON.parse(localStorage.getItem('m.nc')).mode === 'local' && Object.keys(JSON.parse(localStorage.getItem('m.dav')).files).length === n && SR.db.weapons.some(w => w.name === 'Local Rifle'), davFiles), 'stop syncing: data stays here, nothing deleted on Nextcloud');
+// shared storage setting with linked apps (contract C)
+await page.evaluate(() => { localStorage.setItem('m.linked', JSON.stringify([{ app: 'at.stoicranger.gunsafe', mode: 'nextcloud', url: 'https://cloud.test', user: 'u', folder: '/Stoic Ranger/', file: 'database.xlsx', changed: '2099-01-01T00:00:00.000Z' }])); });
+await open('nothing.html', 100).catch(() => { }); await open('index.html', 600);
+ok(await page.evaluate(() => localStorage.getItem('m.adopted') === 'at.stoicranger.gunsafe' && JSON.parse(localStorage.getItem('m.nc')).mode === 'nextcloud'), 'a newer setting of a linked app (SR GunSafe switched to Nextcloud) is taken over when the app opens');
+await page.evaluate(() => SR.storage.local());
+ok(await page.evaluate(() => +localStorage.getItem('m.pushed') >= 1), 'switching here is pushed to the linked apps');
+await page.evaluate(() => { localStorage.setItem('m.nc', JSON.stringify({ mode: 'local' })); localStorage.removeItem('m.linked'); });
+// barrels from SR GunSafe (contract D)
+const wid = await page.evaluate(() => SR.db.weapons.find(w => !w.example).id);
+const oldB = await page.evaluate(w => { const b = SR.db.barrels.find(x => x.weaponId === w && !x.removed); return b ? b.id : ''; }, wid);
+await page.evaluate(([w, ob]) => localStorage.setItem('m.inbox', JSON.stringify([{ barrels: [{ id: 'B-777', isNew: true, weaponId: w, name: 'GunSafe barrel', installed: '2026-11-07', removed: '' }].concat(ob ? [{ id: ob, removed: '2026-11-07' }] : []) }])), [wid, oldB]);
+await open('index.html', 600);
+ok(await page.evaluate(ob => SR.db.barrels.some(b => b.name === 'GunSafe barrel' && b.id === 'B-777' && b.uid) && (!ob || SR.db.barrels.find(b => b.id === ob).removed === '2026-11-07') && !localStorage.getItem('m.inbox'), oldB), 'a barrel switch made in SR GunSafe arrives when the app opens (new barrel in, old one removed)');
 
 await browser.close();
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');

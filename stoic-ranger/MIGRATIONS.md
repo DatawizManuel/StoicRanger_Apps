@@ -45,6 +45,21 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger Shooting 1.3.0: Nextcloud, one shooter, the SR GunSafe link
+
+Add-only, no conversion: installs over 1.2.x / 1.1.0 with everything kept.
+- Trainings keep their `shooterId`; new trainings get the own shooter (the one used last, else the first active one,
+  else a new "Me"). Trainings of other shooters stay theirs and their rounds stay in every total.
+- Rounds_Log rows may carry `munitionId` (new optional column "Munition ID" at the end of the sheet; older files read
+  as before).
+- database.xlsx: sheets of other apps and the user's own sheets are written back unchanged (before 1.3.0 a save kept
+  only Shooting's sheets).
+- Where the data is stored is a device setting (Android SharedPreferences "storage", Windows config.json `nc`), not in
+  the database. The app password is stored encrypted only (Android Keystore / Windows DPAPI). Switching to Nextcloud
+  first merges what is there with the device's data (nothing lost on either side); switching back keeps everything on
+  the device and deletes nothing on Nextcloud.
+- Barrel changes from SR GunSafe are added (never deleted); the inbox file is kept as `link-inbox-<time>.done`.
+
 ## Stoic Ranger Shooting 1.2.1 (Android only): Back button fix
 
 No change to the data; installs over 1.2.0 (or 1.1.0) with everything kept. The Java code had lambdas, and the cloud

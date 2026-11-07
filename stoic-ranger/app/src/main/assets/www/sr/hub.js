@@ -41,6 +41,7 @@ const PART = document.documentElement.dataset.part || 'home';
 
 const parse = t => { try { const j = JSON.parse(t); return j && typeof j === 'object' && !Array.isArray(j) ? j : null; } catch (e) { return null; } };
 const arr = a => Array.isArray(a) ? a : [];
+const run = f => { try { return f(); } catch (e) { console.error(e); } };
 const clone = o => JSON.parse(JSON.stringify(o));
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const now = () => new Date().toISOString();
@@ -105,7 +106,51 @@ function load() {
   normalize(U);
   if (converted && !newer) writeRaw();
   loadThoughts();
-  xlsxIn();
+  linkInbox();
+  if (PART === 'home') run(adoptLinked);
+  if (!ncRecent()) xlsxIn();
+}
+/* On Nextcloud every page start would ask the server: once in 20 s is enough (Sync now and leaving a page still do). */
+function ncRecent() {
+  if (!NC()) return false;
+  try { const t = +sessionStorage.getItem('sr.nc.at') || 0; if (Date.now() - t < 20000) return true; sessionStorage.setItem('sr.nc.at', String(Date.now())); } catch (e) { }
+  return false;
+}
+/* SR GunSafe changes barrels through the link (LinkProvider putBarrels): {add:[barrel]} adds a barrel (a free id if
+   its id is taken), {set:[{id, installed, removed}]} changes those dates. Applied once, when the app opens. */
+function linkInbox() {
+  if (newer || !RAW.takeLinkInbox) return;
+  let ops = null;
+  try { ops = parse('{"a":' + (RAW.takeLinkInbox() || 'null') + '}'); } catch (e) { ops = null; }
+  ops = ops && Array.isArray(ops.a) ? ops.a : [];
+  if (!ops.length) return;
+  let added = 0, changed = 0;
+  ops.forEach(op => {
+    arr(op && op.barrels).forEach(b => {                    // {barrels:[…]}: an existing id gets its dates, a new one is added
+      if (!b || typeof b !== 'object') return;
+      const cur = b.id && U.barrels.find(x => x.id === b.id);
+      if (cur && !b.isNew) { ['installed', 'removed'].forEach(k => { if (k in b) cur[k] = b[k] || ''; }); cur.updated = now(); changed++; return; }
+      if (!b.weaponId) return;
+      const r = Object.assign({}, b); delete r.isNew; delete r.at;
+      if (!r.id || U.barrels.some(x => x.id === r.id)) r.id = SRX.nextId(U.barrels, 'B');
+      r.uid = r.uid || uuid(); r.updated = now(); r.notes = r.notes || 'Added in SR GunSafe';
+      U.barrels.push(r); added++;
+    });
+    arr(op && op.add).forEach(b => {
+      if (!b || typeof b !== 'object' || !b.weaponId) return;
+      const r = Object.assign({}, b); delete r.at;
+      if (!r.id || U.barrels.some(x => x.id === r.id)) r.id = SRX.nextId(U.barrels, 'B');
+      r.uid = r.uid || uuid(); r.updated = now();
+      U.barrels.push(r); added++;
+    });
+    arr(op && op.set).forEach(c => {
+      const b = c && U.barrels.find(x => x.id === c.id);
+      if (!b) return;
+      ['installed', 'removed'].forEach(k => { if (k in c) b[k] = c[k] || ''; });
+      b.updated = now(); changed++;
+    });
+  });
+  if (added || changed) { U.history.push({ at: now(), part: 'stoic-ranger', note: 'barrels from SR GunSafe', added: { barrels: added }, changed: { barrels: changed } }); writeRaw(); }
 }
 function writeRaw(quiet) {
   if (newer) return false;
@@ -171,14 +216,34 @@ function writeThoughts() {
    permission), Windows a path. The web app has none of these: there the file is opened and saved by hand (Data).
    settings.common.xlsx = {dirty, mtime, size, hash, lastIn, lastOut}; xlsxbase.json = the tables at the last
    sync (the merge base, see sr/xlsxdb.js). */
-const canLink = () => !!(RAW.xlsxInfo && window.SRX);
+const NC = () => window.SRNC && SRNC.active() ? SRNC : null;   // 1.3.0: database.xlsx on Nextcloud instead of a file here
+const canLink = () => !!(window.SRX && (RAW.xlsxInfo || NC()));
 let LINKED = null;
 /* The file can bring news while a part is open (the app goes to the background, the window loses focus). The part
    still holds the tables it loaded, so until the page is opened again (SR.onResume reloads it) a save of that
    part adds to the tables instead of replacing them: nothing that came from the file is lost. */
 let LOADED = false, STALE = false;
-const xlsxInfo = () => { if (!canLink()) return { available: false }; try { return Object.assign({ available: true }, parse(RAW.xlsxInfo()) || {}); } catch (e) { return { available: true }; } };
-const xlsxLinked = () => LINKED != null ? LINKED : (LINKED = canLink() && !!xlsxInfo().linked);
+const xlsxInfo = () => {
+  if (!canLink()) return { available: false };
+  const nc = NC();
+  if (nc) return Object.assign({ available: true }, nc.info());
+  try { return Object.assign({ available: true }, parse(RAW.xlsxInfo()) || {}); } catch (e) { return { available: true }; }
+};
+/** The file's bytes (base64) from wherever it is; the Nextcloud ETag of what was read goes to the sync state. */
+const readFile = () => {
+  const nc = NC();
+  if (nc) { const r = nc.read(); if (r.etag) xlsxState().etag = r.etag; return r.b64 || ''; }
+  try { return RAW.xlsxRead() || ''; } catch (e) { return ''; }
+};
+const writeFile = b64 => {
+  const nc = NC();
+  if (nc) return nc.write(b64, xlsxState().etag || '');
+  try { return parse(RAW.xlsxWrite(b64)); } catch (e) { return null; }
+};
+/* The file as last read or written: its sheets that belong to other Stoic Ranger apps (FK_, PF_, GS_, DT_ …) or to
+   the user are written back unchanged (shared contract, section A). */
+let KEEP = null;
+const xlsxLinked = () => LINKED != null ? LINKED : (LINKED = !!NC() || (canLink() && !!xlsxInfo().linked));
 function xlsxState() { const c = U.settings.common; return (c.xlsx = c.xlsx && typeof c.xlsx === 'object' ? c.xlsx : {}); }
 const bytesB64 = u => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const b64Bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
@@ -210,33 +275,44 @@ function xlsxIn(force) {
   const info = xlsxInfo(), S = xlsxState();
   if (!info.linked || !info.size) return null;
   if (!force && info.mtime && S.mtime === info.mtime && S.size === info.size) return null;
-  let b = '';
-  try { b = RAW.xlsxRead() || ''; } catch (e) { b = ''; }
+  if (info.error) return null;                           // offline: the copy here stays in use, the next start tries again
+  const b = readFile();
   if (!b) return { error: 'The linked database.xlsx could not be read.' };
   const bytes = b64Bytes(b), h = hashBytes(bytes);
+  KEEP = bytes;
   if (!force && S.hash === h) { S.mtime = info.mtime || 0; S.size = info.size; writeRaw(true); return null; }
   const r = mergeIn(bytes, { info, hash: h, first: !S.hash });
   SR_LAST.xlsx = r;
   return r;
 }
-/** The app's changes go out to the linked file (after a look whether it was changed meanwhile). */
+/** The app's changes go out to the linked file (after a look whether it was changed meanwhile). On Nextcloud the
+    upload names the version it is based on; if someone saved in between (412) the file is read and merged again,
+    up to 3 times (shared contract, section B). */
 function xlsxOut(force) {
   if (newer || !xlsxLinked()) return null;
   let S = xlsxState();
   if (!S.dirty && !force) return null;
-  const info = xlsxInfo(); if (!info.linked) return null;
-  if (info.size && S.hash && (info.mtime !== S.mtime || info.size !== S.size)) { const r = xlsxIn(); if (r && r.error) return r; }
-  else if (info.size && !S.hash) { const r = xlsxIn(true); if (r && r.error) return r; }   // first sync with a file that has data
-  S = xlsxState();                                       // a merge above made a new U
-  let bytes;
-  try { bytes = SRX.write(U, { by: xlsxBy() }); } catch (e) { return { error: 'database.xlsx could not be made: ' + e.message }; }
-  let res = null;
-  try { res = parse(RAW.xlsxWrite(bytesB64(bytes))); } catch (e) { res = null; }
-  if (!res || !res.ok) return { error: (res && res.msg) || 'database.xlsx could not be saved.' };
-  S.mtime = res.mtime || 0; S.size = res.size || bytes.length; S.hash = hashBytes(bytes); S.dirty = ''; S.lastOut = now();
-  saveBase(SRX.dbPart(U));
-  writeRaw(true);
-  return { ok: true };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const info = xlsxInfo(); if (!info.linked) return null;
+    if (info.error) return { error: info.error, offline: true };   // stays dirty: goes out next time
+    if (info.size && S.hash && (info.mtime !== S.mtime || info.size !== S.size || (info.etag && S.etag && info.etag !== S.etag))) { const r = xlsxIn(true); if (r && r.error) return r; }
+    else if (info.size && !S.hash) { const r = xlsxIn(true); if (r && r.error) return r; }   // first sync with a file that has data
+    else if (info.size && !KEEP) { const b = readFile(); if (b) KEEP = b64Bytes(b); }
+    if (!info.size) S.etag = '';
+    S = xlsxState();                                     // a merge above made a new U
+    let bytes;
+    try { bytes = SRX.write(U, { by: xlsxBy(), keep: info.size ? KEEP : null }); } catch (e) { return { error: 'database.xlsx could not be made: ' + e.message }; }
+    const res = writeFile(bytesB64(bytes));
+    if (res && res.conflict) { S.mtime = 0; continue; }   // changed on Nextcloud meanwhile: read, merge, try again
+    if (!res || !res.ok) return { error: (res && res.msg) || 'database.xlsx could not be saved.' };
+    S.mtime = res.mtime || 0; S.size = res.size || bytes.length; S.hash = hashBytes(bytes); S.dirty = ''; S.lastOut = now();
+    if (res.etag !== undefined) S.etag = res.etag || '';
+    KEEP = bytes;
+    saveBase(SRX.dbPart(U));
+    writeRaw(true);
+    return { ok: true };
+  }
+  return { error: 'database.xlsx kept changing on Nextcloud while saving: try Sync now again.' };
 }
 const SR_LAST = {};
 /** Link a database.xlsx on this device: 'create' a new one (never over an existing file) or 'open' one. */
@@ -251,7 +327,7 @@ const xlsxLink = mode => new Promise(res => {
     res(out && out.error ? { ok: false, msg: out.error } : { ok: true, msg: r.msg, merged: SR_LAST.xlsx || null });
   }));
 });
-function xlsxUnlink() { try { RAW.xlsxUnlink(); } catch (e) { } LINKED = false; U.settings.common.xlsx = {}; saveBase(null); writeRaw(true); }
+function xlsxUnlink() { try { RAW.xlsxUnlink(); } catch (e) { } LINKED = false; KEEP = null; U.settings.common.xlsx = {}; saveBase(null); writeRaw(true); }
 /** By hand (all devices, the only way on iPhone): save the whole database as database.xlsx … */
 const saveXlsx = () => new Promise(res => {
   SR.flush();
@@ -541,6 +617,52 @@ const openJson = () => new Promise(res => RAW.openFile('application/json,text/pl
   res(j && typeof j === 'object' ? { ok: true, name: r.msg, json: j } : { ok: false, msg: 'This is not a backup file.' });
 })));
 
+/* ---------- where the data lives: this device, or synced to the user's Nextcloud (1.3.0) ----------
+   Shared rule (Manuel 2026-11-07): linked apps use one database file and one storage setting; switching in one app
+   switches all of them. On Android the setting goes between the apps through their link providers (only apps signed
+   with the same key; each app answers only apps its user linked there, e.g. SR GunSafe after "Allow"); the newest
+   change wins. */
+const ncState = () => (window.SRNC && SRNC.available() && SRNC.state()) || null;
+function resetSync() { const c = U.settings.common; c.xlsx = { dirty: now() }; saveBase(null); KEEP = null; LINKED = null; try { sessionStorage.removeItem('sr.nc.at'); } catch (e) { } if (window.SRNC) SRNC.resetDirs(); }
+const pushLinked = () => { try { const a = JSON.parse(RAW.linkPush ? RAW.linkPush() || '[]' : '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+/** Connect to Nextcloud: check the login, store the setting (password only in the device's encrypted store), then
+    the first sync merges what is on Nextcloud with this device and uploads. */
+function ncConnect(setting, password) {
+  if (newer) return { ok: false, msg: 'This data is read-only until you update the app.' };
+  const st = ncState(); if (!st) return { ok: false, msg: 'Not available on this device.' };
+  const s = { mode: 'nextcloud', url: String(setting.url || '').trim().replace(/\/+$/, ''), user: String(setting.user || '').trim(),
+    folder: '/' + String(setting.folder || 'Stoic Ranger').trim().replace(/^\/+|\/+$/g, '') + '/', file: 'database.xlsx', changed: now() };
+  if (!s.url || !s.user) return { ok: false, msg: 'Enter the Nextcloud address and your user name.' };
+  if (!password && !st.hasPassword) return { ok: false, msg: 'Enter an app password (Nextcloud › Settings › Security).' };
+  const c = SRNC.check(s, password); if (!c.ok) return c;
+  if (!RAW.ncSet(JSON.stringify(s), password || '')) return { ok: false, msg: 'The app password could not be stored safely on this device, so nothing was changed.' };
+  if (RAW.xlsxInfo) { try { RAW.xlsxUnlink(); } catch (e) { } }      // one place for the file: Nextcloud replaces a linked file here
+  resetSync();
+  const out = xlsxOut(true);
+  const pushed = pushLinked();
+  return out && out.error ? { ok: false, msg: out.error, saved: true } : { ok: true, merged: SR_LAST.xlsx || null, pushed };
+}
+/** Back to this device only: everything stays here, nothing is deleted on Nextcloud. */
+function ncLocal() {
+  const st = ncState(); if (!st) return { ok: false };
+  if (st.mode === 'nextcloud') { const out = run(() => xlsxOut()); if (out && out.error && !out.offline) SR_LAST.xlsxOut = out; }
+  RAW.ncSet(JSON.stringify({ mode: 'local', changed: now() }), '');
+  U.settings.common.xlsx = {}; saveBase(null); KEEP = null; LINKED = null; writeRaw(true);
+  return { ok: true, pushed: pushLinked() };
+}
+/** A linked app switched storage more recently: take its setting (Android, sharing switched on). */
+function adoptLinked() {
+  const st = ncState(); if (!st || !RAW.linkStorage) return null;
+  let list = []; try { list = JSON.parse(RAW.linkStorage() || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  const best = list.filter(o => o && o.changed && o.changed > (st.changed || '')).sort((a, b) => b.changed.localeCompare(a.changed))[0];
+  if (!best || !RAW.linkAdopt(best.app)) return null;
+  const moved = best.mode !== st.mode || best.url !== st.url || best.folder !== st.folder || best.user !== st.user;
+  if (moved) { if (best.mode === 'nextcloud') { if (RAW.xlsxInfo) { try { RAW.xlsxUnlink(); } catch (e) { } } resetSync(); } else { U.settings.common.xlsx = {}; saveBase(null); KEEP = null; LINKED = null; } writeRaw(true); }
+  SR_LAST.adopted = { app: best.app, mode: best.mode };
+  return SR_LAST.adopted;
+}
+
 /* ---------- public ---------- */
 load(); LOADED = true;
 const SR = window.SR = {
@@ -557,6 +679,7 @@ const SR = window.SR = {
   xlsx: { canLink, info: xlsxInfo, linked: () => xlsxLinked(), state: () => xlsxState(), link: xlsxLink, unlink: xlsxUnlink,
     syncIn: () => { LINKED = null; return xlsxIn(true); }, syncOut: () => xlsxOut(true), sync: () => { LINKED = null; const a = xlsxIn(); if (a && a.error) return a; return xlsxOut(true) || a; },
     save: saveXlsx, open: openXlsx },
+  storage: { available: () => !!ncState(), state: ncState, connect: ncConnect, local: ncLocal, adopted: () => SR_LAST.adopted || null },
   saveThoughtsFile, hasThoughtFavs: () => arr(TH && TH.favs).length > 0,
   uuid, clone, now, arr,
 };
@@ -575,7 +698,6 @@ SR.wireData = (el, toast) => {
 
 /* ---------- Android hooks (MainActivity calls these) and the way home ---------- */
 const T = () => (PARTS[PART] ? window[PARTS[PART].prefix] : null) || {};
-const run = f => { try { return f(); } catch (e) { console.error(e); } };
 SR.flush = () => {
   run(() => T().flush && T().flush());
   const r = run(() => xlsxOut());

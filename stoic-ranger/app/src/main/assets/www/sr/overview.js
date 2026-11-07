@@ -1,6 +1,6 @@
 /* Stoic Ranger Shooting — home page overviews (1.2.0, remarks #8 and #9, Manuel 2026-10-29 / 2026-11-01).
    What the PC dashboard shows, on every platform (Android, iPhone web app, Windows): guns, training and drills with
-   filters (year, shooter, gun), the dope cards that can be made from the datasheets, and the paper datasheet
+   filters (year, gun; one shooter only from 1.3.0), the dope cards that can be made from the datasheets, and the paper datasheet
    (save the blank PDF, bring a filled-in sheet back). Read-only: it never changes the database.
    The filter is a view setting of this device: kept in localStorage, never in the database (so it never sends a
    changed database.xlsx round just for a tab). */
@@ -24,7 +24,7 @@ let FIL = null;
 function filter() {
   if (FIL) return FIL;
   let s = {}; try { s = JSON.parse(localStorage.getItem(FKEY) || '{}') || {}; } catch (e) { }
-  return FIL = Object.assign({ tab: 'guns', year: String(new Date().getFullYear()), shooter: '', weapon: '' }, s);
+  return FIL = Object.assign({ tab: 'guns', year: String(new Date().getFullYear()), weapon: '' }, s, { shooter: '' });
 }
 const inYear = (d, y) => !y || String(d || '').startsWith(y);
 const real = t => arr(SR.db[t]).filter(r => r && !r.example);
@@ -36,7 +36,9 @@ function data(F) {
   const trainings = real('trainings').filter(t => inYear(t.date, F.year) && shooterOk(t) && (!F.weapon || arr(t.weapons).some(w => w.weaponId === F.weapon)));
   const sheets = real('sheets').filter(s => inYear(s.date, F.year) && shooterOk(s) && (!F.weapon || s.weaponId === F.weapon));
   const results = real('results').filter(r => inYear(r.date, F.year) && shooterOk(r) && (!F.weapon || r.weaponId === F.weapon));
-  return { trainings, sheets, results };
+  // rounds entries made by hand (e.g. "Shot by shooter xy", 1.3.0); the ones the Training Log sends are its trainings
+  const extra = real('roundsLog').filter(r => !r.link && inYear(r.date, F.year) && (!F.weapon || r.weaponId === F.weapon));
+  return { trainings, sheets, results, extra };
 }
 function years() {
   const ys = new Set([String(new Date().getFullYear())]);
@@ -67,15 +69,17 @@ function guns(D, F) {
   const per = new Map();
   const at = id => per.get(id) || (per.set(id, { tr: 0, sh: 0, rounds: 0, last: '', v: [] }), per.get(id));
   D.trainings.filter(t => t.fire !== 'dry').forEach(t => arr(t.weapons).forEach(w => { if (!w.weaponId) return; const g = at(w.weaponId); g.tr++; g.rounds += num(w.rounds); if ((t.date || '') > g.last) g.last = t.date; }));
+  D.extra.forEach(r => { if (!r.weaponId) return; const g = at(r.weaponId); g.ex = (g.ex || 0) + num(r.rounds); g.rounds += num(r.rounds); if ((r.date || '') > g.last) g.last = r.date; });
   D.sheets.forEach(s => { if (!s.weaponId) return; const g = at(s.weaponId); g.sh++; if ((s.date || '') > g.last) g.last = s.date; if (num(s.v0) > 0) g.v.push([num(s.v0), Math.max(1, sheetRounds(s)), s.munitionId]); });
   const rows = [...per.entries()].filter(([id]) => !F.weapon || id === F.weapon).map(([id, g]) => ({ id, name: (W.get(id) || {}).name || id, ...g })).sort((a, b) => b.rounds - a.rounds);
-  if (!rows.length) return none('No trainings or datasheets with a gun for this selection.');
+  if (!rows.length) return none('No trainings, datasheets or rounds entries with a gun for this selection.');
   const v0 = g => { const n = g.v.reduce((a, x) => a + x[1], 0); return n ? fmtInt(g.v.reduce((a, x) => a + x[0] * x[1], 0) / n) + ' m/s' : '–'; };
   // ammunition used on the datasheets of the selection
   const ammo = new Map();
   D.sheets.forEach(s => { if (!s.munitionId) return; const a = ammo.get(s.munitionId) || { n: 0, rounds: 0 }; a.n++; a.rounds += sheetRounds(s); ammo.set(s.munitionId, a); });
   return `<h3>Rounds per gun</h3>${hbars(rows.map(g => ({ l: g.name, v: g.rounds })), 'rds')}
-    ${table(['Gun', 'Trainings', 'Sheets', 'Rounds', 'V0', 'Last'], rows.map(g => [esc(g.name), g.tr, g.sh, fmtInt(g.rounds), v0(g), esc(fmtDate(g.last))]))}
+    ${table(['Gun', 'Trainings', 'Sheets', 'Extra rds', 'Rounds', 'V0', 'Last'], rows.map(g => [esc(g.name), g.tr, g.sh, fmtInt(g.ex || 0), fmtInt(g.rounds), v0(g), esc(fmtDate(g.last))]))}
+    <p class="note">Rounds: trainings plus rounds entries made by hand (Extra, e.g. shot by someone else). Add them with <b>+ Rounds</b> above.</p>
     ${ammo.size ? `<h3>Ammunition on datasheets</h3>${table(['Ammunition', 'Sheets', 'Rounds'], [...ammo.entries()].sort((a, b) => b[1].rounds - a[1].rounds).map(([id, a]) => [esc((M.get(id) || {}).name || id), a.n, fmtInt(a.rounds)]))}` : ''}
     <div class="row"><a class="btn sm" href="gun/index.html#/dash">Gun Database › Dashboard</a><a class="btn sm" href="gun/index.html#/analyse">Analyse</a></div>`;
 }
@@ -92,7 +96,7 @@ function training(D, F) {
       <div class="tile"><div class="l">Live rounds</div><div class="v">${fmtInt(live.reduce((a, x) => a + roundsOf(x), 0))}</div><div class="s">from trainings</div></div></div>
     ${F.year ? `<h3>Training hours per month</h3>${bars(month, 'h')}` : ''}
     <h3>Last trainings</h3>
-    ${table(['Date', 'Shooter', 'Fire', 'h', 'Rounds', 'Trainer'], last.map(x => [esc(fmtDate(x.date)), esc((S.get(x.shooterId) || {}).name || ''), x.fire === 'dry' ? 'dry' : 'live', fmt1(num(x.durationH)), x.fire === 'dry' ? '–' : fmtInt(roundsOf(x)), esc((Tr.get(x.trainerId) || {}).name || '')]))}
+    ${table(['Date', 'Fire', 'h', 'Rounds', 'Trainer'], last.map(x => [esc(fmtDate(x.date)), x.fire === 'dry' ? 'dry' : 'live', fmt1(num(x.durationH)), x.fire === 'dry' ? '–' : fmtInt(roundsOf(x)), esc((Tr.get(x.trainerId) || {}).name || '')]))}
     <div class="row"><a class="btn sm" href="training/index.html#/dash">Training Log › Dashboard</a></div>`;
 }
 function drills(D, F) {
@@ -142,13 +146,12 @@ async function saveBlank(toast) {
 /* ---------- public ---------- */
 O.html = () => {
   const F = filter(), D = data(F);
-  const sh = real('shooters'), ws = real('weapons');
+  const ws = real('weapons');
   const body = F.tab === 'training' ? training(D, F) : F.tab === 'drills' ? drills(D, F) : F.tab === 'dope' ? dope(D) : guns(D, F);
   return `<h2>Overview</h2>
     <div class="seg scroll" id="ovTabs">${TABS.map(([k, l]) => `<a href="javascript:void 0" data-ov="${k}" class="${F.tab === k ? 'on' : ''}">${l}</a>`).join('')}</div>
     <div class="ovf">
       <label><span>Year</span><select id="ovYear">${opt('', 'All years', F.year)}${years().map(y => opt(y, y, F.year)).join('')}</select></label>
-      <label><span>Shooter</span><select id="ovShooter">${opt('', 'All shooters', F.shooter)}${sh.map(s => opt(s.id, s.name || s.id, F.shooter)).join('')}</select></label>
       <label><span>Gun</span><select id="ovWeapon">${opt('', 'All guns', F.weapon)}${ws.map(w => opt(w.id, w.name || w.id, F.weapon)).join('')}</select></label>
     </div>
     <div id="ovBody">${body}</div>
@@ -159,7 +162,7 @@ O.wire = (el, redraw, toast) => {
   const F = filter();
   const keep = () => { try { localStorage.setItem(FKEY, JSON.stringify(F)); } catch (e) { } redraw(); };
   el.querySelectorAll('[data-ov]').forEach(a => a.onclick = () => { F.tab = a.dataset.ov; keep(); });
-  [['ovYear', 'year'], ['ovShooter', 'shooter'], ['ovWeapon', 'weapon']].forEach(([id, k]) => { const s = $('#' + id, el); if (s) s.onchange = () => { F[k] = s.value; keep(); }; });
+  [['ovYear', 'year'], ['ovWeapon', 'weapon']].forEach(([id, k]) => { const s = $('#' + id, el); if (s) s.onchange = () => { F[k] = s.value; keep(); }; });
   const b = $('#ovBlank', el); if (b) b.onclick = () => saveBlank(toast);
 };
 })();

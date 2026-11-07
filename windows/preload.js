@@ -29,6 +29,7 @@ window.SRNative = {
   saveFile: (name, mime, b64, cb) => { ipcRenderer.invoke('sr:saveFile', name, b64).then(r => answer(cb, r), e => answer(cb, { ok: false, msg: e.message })); },
   shareFile: (name, mime, b64) => { ipcRenderer.invoke('sr:saveFile', name, b64); },
   shareText: sync('shareText'),
+  ncState: sync('ncState'), ncSet: sync('ncSet'), ncRequest: sync('ncRequest'), ncTry: sync('ncTry'),
   openFile: (mimes, cb) => {
     const exts = [...new Set(String(mimes || '').split(',').map(m => EXT[m.trim()]).filter(Boolean))];
     ipcRenderer.invoke('sr:openFile', exts).then(r => answer(cb, r), e => answer(cb, { ok: false, msg: e.message }));

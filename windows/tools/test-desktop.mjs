@@ -28,8 +28,9 @@ fs.cpSync(path.join(ROOT, 'stoic-ranger/app/src/main/assets/www'), path.join(STA
 const USERDATA = path.join(CONF, 'Stoic Ranger');
 const XLSX_FILE = path.join(DATA, 'database.xlsx');
 
-const launch = async () => {
-  const app = await pw._electron.launch({ executablePath: ELECTRON, args: [STAGE, '--no-sandbox'], env: Object.assign({}, process.env, { XDG_CONFIG_HOME: CONF }) });
+const launch = async (extra = {}) => {
+  // --password-store=basic: Linux has no DPAPI; safeStorage then works without a keyring (Windows always has DPAPI)
+  const app = await pw._electron.launch({ executablePath: ELECTRON, args: [STAGE, '--no-sandbox', '--password-store=basic'], env: Object.assign({}, process.env, { XDG_CONFIG_HOME: CONF }, extra) });
   const page = await app.firstWindow();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -103,6 +104,43 @@ const fin = await (async () => { const b2 = await pw.chromium.launch(), p = awai
   for (const f of ['gun/lib/xlsx.mini.min.js', 'sr/drill-names.js', 'sr/xlsxdb.js']) await p.addScriptTag({ path: path.join(STAGE, 'www', f) });
   const r = await p.evaluate(b64 => SRX.read(Uint8Array.from(atob(b64), c => c.charCodeAt(0))).db.shooters.map(s => s.name), fs.readFileSync(XLSX_FILE).toString('base64')); await b2.close(); return r; })();
 ok(['Desk Shooter', 'Blur Shooter', 'Locked Shooter', 'Excel Shooter'].every(n => fin.includes(n)), 'at the end database.xlsx holds every shooter (the failed write was done again later): ' + fin.join(', '));
+
+// 1.3.0: database.xlsx on Nextcloud (remark #15): a small WebDAV server over https on this machine
+{
+  const https = require('node:https');
+  execSync(`openssl req -x509 -newkey rsa:2048 -nodes -keyout ${T}/k.pem -out ${T}/c.pem -days 1 -subj /CN=127.0.0.1 2>/dev/null`);
+  const files = {}, dirs = new Set(), auth = []; let n = 0;
+  const srv = https.createServer({ key: fs.readFileSync(`${T}/k.pem`), cert: fs.readFileSync(`${T}/c.pem`) }, (req, res) => {
+    const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => {
+      auth.push(req.headers.authorization || '');
+      const name = decodeURIComponent(req.url.replace(/^\/remote\.php\/dav\/files\/u\/Stoic Ranger\/?|^\/remote\.php\/dav\/files\/u\/Stoic%20Ranger\/?/, '')).replace(/\/$/, '');
+      const f = files[name], hd = x => ({ ETag: x.etag, 'Last-Modified': new Date(x.t).toUTCString(), 'Content-Length': x.b.length });
+      if (req.method === 'PROPFIND') { res.writeHead(207); return res.end('<d:multistatus xmlns:d="DAV:"></d:multistatus>'); }
+      if (req.method === 'MKCOL') { res.writeHead(dirs.has(name) ? 405 : 201); dirs.add(name); return res.end(); }
+      if (req.method === 'HEAD' || req.method === 'GET') { if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, hd(f)); return res.end(req.method === 'GET' ? f.b : undefined); }
+      if (req.method === 'COPY') { const d = decodeURIComponent(new URL(req.headers.destination).pathname).replace(/^.*Stoic Ranger\//, ''); if (f) files[d] = f; res.writeHead(f ? 201 : 404); return res.end(); }
+      if (req.method === 'PUT') {
+        if ((req.headers['if-match'] && (!f || f.etag !== req.headers['if-match'])) || (req.headers['if-none-match'] === '*' && f)) { res.writeHead(412); return res.end(); }
+        n++; files[name] = { b: Buffer.concat(chunks), etag: '"w' + n + '"', t: 1700000000000 + n * 1000 }; res.writeHead(201, { ETag: files[name].etag }); return res.end();
+      }
+      res.writeHead(405); res.end();
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const url = 'https://127.0.0.1:' + srv.address().port;
+  a = await launch({ NODE_TLS_REJECT_UNAUTHORIZED: '0', SR_TEST: '1' });
+  ok(await a.page.evaluate(() => SR.storage.available() && SR.storage.state().windows === true), 'Windows: Data offers Nextcloud');
+  const r = await a.page.evaluate(u => SR.storage.connect({ url: u, user: 'u', folder: 'Stoic Ranger' }, 'app-pw-123'), url);
+  ok(r.ok && files['database.xlsx'] && dirs.has('backups'), 'Windows: connecting uploads database.xlsx to Nextcloud ' + JSON.stringify(r).slice(0, 200));
+  ok(auth.includes('Basic ' + Buffer.from('u:app-pw-123').toString('base64')), 'Windows: the requests log in with the app password');
+  const c = cfg();
+  ok(c.nc && c.nc.mode === 'nextcloud' && !JSON.stringify(c).includes('app-pw-123'), 'Windows: the password is not in config.json in clear text (DPAPI / safeStorage)');
+  await a.page.evaluate(() => { SR.db.shooters.push({ id: 'S-990', uid: 'u-nc-990', name: 'Cloud Shooter' }); SR.save(); });
+  const o = await a.page.evaluate(() => SR.xlsx.syncOut());
+  ok(o && o.ok && Object.keys(files).some(k => /^backups\/database-\d{8}-\d{6}\.xlsx$/.test(k)), 'Windows: the next upload makes a backup copy first');
+  await close(a);
+  srv.close();
+}
 
 fs.rmSync(T, { recursive: true, force: true });
 console.log(fails ? `${fails} FAILED` : 'ALL PASSED');

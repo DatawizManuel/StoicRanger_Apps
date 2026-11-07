@@ -31,6 +31,15 @@ app data are not removed.
   Data and database.xlsx (link another file, create a new one, unlink).
 - Mouse back button or Alt+Left = the phone's Back button.
 
+## database.xlsx on Nextcloud (1.3.0)
+- Home page › Data storage › "Synced to my Nextcloud": address (https://…), user name, an app password (Nextcloud ›
+  Settings › Security › Devices & sessions) and the folder. The password is kept encrypted by Windows for this user
+  only (never in a file you can read).
+- The app keeps its own copy and works offline; it loads database.xlsx from Nextcloud and saves it back (same merge as
+  above). If someone else saved in between, the app merges and tries again.
+- Before each save the file on Nextcloud is copied to `<folder>/backups/` (newest 30 kept).
+- Linked Stoic Ranger apps on a phone take over the same setting (each device still needs the app password once).
+
 ## Build (Claude, on Linux)
 `windows/tools/build-win.sh` → `windows/dist/vX.Y.Z` (Electron 33.2.1 for Windows x64, the page code from
 `stoic-ranger/app/src/main/assets/www`, icon and version set with resedit, app zip split into 20 MB parts, installer,

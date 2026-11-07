@@ -43,7 +43,7 @@ const REG = {
     ['Primer', 'primer'], ['Brass', 'brass'], ['CBTO mm', 'cbtoMm', 'n'], ['COAL mm', 'coalMm', 'n'], ['Lot', 'lot'], ['Added', 'added', 'd'], ['Status', 'status'], ['Notes', 'notes'],
     ['BC G1', 'bcG1', 'n'], ['Bullet diameter mm', 'bulletDiaMm', 'n'], ['Bullet length mm', 'bulletLengthMm', 'n'], ['Manufacturer test barrel mm', 'mfrBarrelMm', 'n']]],
   shooters: ['Shooters', 'S', [['ID', 'id'], ['Name', 'name'], ['Aliases (as written on sheets)', 'aliases'], ['Added', 'added', 'd'], ['Status', 'status'], ['Notes', 'notes']]],
-  roundsLog: ['Rounds_Log', 'R', [['Date', 'date', 'd'], ['Weapon ID', 'weaponId'], ['Barrel ID', 'barrelId'], ['Rounds', 'rounds', 'i'], ['Note', 'note'], ['ID', 'id']]],
+  roundsLog: ['Rounds_Log', 'R', [['Date', 'date', 'd'], ['Weapon ID', 'weaponId'], ['Barrel ID', 'barrelId'], ['Rounds', 'rounds', 'i'], ['Note', 'note'], ['ID', 'id'], ['Munition ID', 'munitionId']]],
   targets: ['Targets', 'TG', [['ID', 'id'], ['Name', 'name'], ['Type', 'type'], ['Scoring rings', 'rings', 'i'], ['10-ring or plate diameter mm', 'd10', 'n'], ['Ring width mm', 'w', 'n'],
     ['Inner ten (X) diameter mm', 'xd', 'n'], ['Intended distance m', 'distM', 'n'], ['Card / plate size', 'sizeMm'], ['Source', 'source'], ['Notes', 'notes']]],
   trainers: ['Trainers', 'T', [['ID', 'id'], ['Name', 'name'], ['Contact person', 'contact'], ['Phone', 'phone'], ['E-mail', 'email'], ['Website', 'website'], ['Notes', 'notes']]],
@@ -124,7 +124,19 @@ function write(u, info = {}) {
   const rows = [[MARK, FORMAT, 'Do not edit: a copy of the whole database for the Stoic Ranger apps. The sheets before this one win over it.']];
   for (let i = 0; i < full.length; i += CHUNK) rows.push([full.slice(i, i + CHUNK)]);
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), HIDDEN);
-  wb.Workbook = wb.Workbook || {}; wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: n === HIDDEN ? 1 : 0 }));
+  // every sheet this app does not own stays as it was (other Stoic Ranger apps: FK_, PF_, GS_, DT_ and their hidden
+  // _XX_Data sheets; the user's own sheets), hidden ones stay hidden (shared contract 2026-11-07)
+  const hidden = { [HIDDEN]: 1 };
+  if (info.keep && info.keep.length) {
+    let old = null;
+    try { old = X.read(info.keep, { type: 'array', cellDates: true }); } catch (e) { old = null; }
+    if (old) {
+      const mine = new Set(wb.SheetNames), vis = {};
+      ((old.Workbook && old.Workbook.Sheets) || []).forEach(x => { if (x && x.name) vis[x.name] = x.Hidden || 0; });
+      old.SheetNames.forEach(n => { if (mine.has(n) || !old.Sheets[n]) return; X.utils.book_append_sheet(wb, old.Sheets[n], n); if (vis[n]) hidden[n] = vis[n]; });
+    }
+  }
+  wb.Workbook = wb.Workbook || {}; wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: hidden[n] || 0 }));
   return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
 }
 /** What of the one file goes into database.xlsx: the tables, favourites and the shared settings (not the history). */

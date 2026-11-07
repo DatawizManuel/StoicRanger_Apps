@@ -211,6 +211,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) TL.fl
 
 TL.byId = (list, id) => list.find(r => r.id === id) || null;
 TL.shooter = id => TL.byId(TL.db.shooters, id);
+/** One shooter only (1.3.0, Manuel 2026-11-07: logging other shooters' trainings makes no sense). The user's own
+    shooter: the one used last, else the first active one; null if there is none yet (made on the first save).
+    Trainings of other shooters logged before 1.3.0 stay as they were, with their rounds. */
+TL.meId = () => { const db = TL.db, l = TL.shooter(db.settings.lastShooter); if (l) return l.id; const a = TL.sorted('shooters').find(s => !s.example); return a ? a.id : null; };
+TL.ensureMe = () => TL.meId() || TL.addRecord('shooters', { name: 'Me', status: 'Active', notes: 'Your own entry (rename it in the Gun Database › Shooters)' }).id;
+TL.isOther = t => !!(t && t.shooterId && TL.meId() && t.shooterId !== TL.meId());
 TL.weapon = id => TL.byId(TL.db.weapons, id);
 TL.trainer = id => TL.byId(TL.db.trainers, id);
 TL.training = id => TL.byId(TL.db.trainings, id);
@@ -243,7 +249,7 @@ TL.hasExamples = () => TL.LISTS.some(t => (TL.db[t] || []).some(r => r.example))
 /* ---------- filters + aggregation (dashboard and printed sheet use the same numbers) ---------- */
 TL.years = () => Array.from(new Set(TL.db.trainings.map(t => (t.date || '').slice(0, 4)).filter(Boolean))).sort().reverse();
 TL.filtered = f => TL.db.trainings.filter(t =>
-  (!f.shooter || t.shooterId === f.shooter) &&
+  (!f.shooter || t.shooterId === f.shooter) &&   // f.shooter stays '' from 1.3.0 (no shooter filter)
   (!f.year || (t.date || '').startsWith(f.year)) &&
   (!f.trainer || t.trainerId === f.trainer) &&
   (!f.weapon || t.weapons.some(w => w.weaponId === f.weapon)) &&

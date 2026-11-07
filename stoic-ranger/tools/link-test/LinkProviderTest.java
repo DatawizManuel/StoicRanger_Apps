@@ -26,6 +26,21 @@ public class LinkProviderTest {
         JSONObject v = r.getJSONObject("v0").getJSONObject("W-001|M-001");
         ok(Math.abs(v.getDouble("v") - (800 * 10 + 810 * 5) / 15.0) < 0.06 && v.getInt("n") == 2, "measured V0 weighted by rounds, n = sheets with a V0: " + v);
         ok(at.rangebook.app.LinkProvider.ballistics(new JSONObject()).getJSONArray("weapons").length() == 0, "an empty database gives empty lists");
+        // SR GunSafe (contract D)
+        JSONObject db2 = new JSONObject(db.toString());
+        db2.put("barrels", new JSONArray("[{\"id\":\"B-001\",\"weaponId\":\"W-001\",\"name\":\"Factory\",\"installed\":\"2024-01-01\",\"removed\":\"\",\"roundsAtInstall\":0}]"));
+        db2.put("roundsLog", new JSONArray("[{\"id\":\"R-0001\",\"date\":\"2026-11-07\",\"weaponId\":\"W-001\",\"barrelId\":\"\",\"munitionId\":\"M-001\",\"rounds\":40,\"note\":\"Shot by shooter xy\"}]"));
+        JSONObject gs = at.rangebook.app.LinkProvider.gunsafe(db2);
+        JSONArray rd = gs.getJSONArray("rounds");
+        int sheetRounds = 0, logRounds = 0;
+        for (int i = 0; i < rd.length(); i++) { JSONObject o = rd.getJSONObject(i); if ("sheet".equals(o.getString("source"))) sheetRounds += o.getInt("rounds"); else logRounds += o.getInt("rounds"); }
+        ok(gs.getJSONArray("weapons").length() == 1 && gs.getJSONArray("barrels").length() == 1 && gs.getJSONArray("munitions").length() == 1, "gunsafe: guns, barrels and ammunition");
+        ok(sheetRounds == 10 + 5 + 5 && logRounds == 40, "gunsafe: rounds fired from datasheets and the rounds log (examples left out): " + sheetRounds + " + " + logRounds);
+        ok(rd.getJSONObject(rd.length() - 1).getString("munitionId").equals("M-001") && rd.getJSONObject(rd.length() - 1).getString("ref").equals("R-0001"), "gunsafe: a rounds entry carries its ammunition and id");
+        JSONArray inbox = new JSONArray("[{\"barrels\":[{\"id\":\"B-002\",\"isNew\":true,\"weaponId\":\"W-001\",\"name\":\"New\",\"installed\":\"2026-11-07\"},{\"id\":\"B-001\",\"removed\":\"2026-11-07\"}]}]");
+        at.rangebook.app.LinkProvider.applyInbox(db2, inbox);
+        JSONArray bs = db2.getJSONArray("barrels");
+        ok(bs.length() == 2 && bs.getJSONObject(0).getString("removed").equals("2026-11-07") && bs.getJSONObject(1).getString("name").equals("New"), "a queued barrel switch shows at once (old removed, new added)");
         System.out.println(fails == 0 ? "ALL PASSED" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
