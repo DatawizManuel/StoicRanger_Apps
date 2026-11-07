@@ -54,7 +54,7 @@ DT.print = (html, job) => {
   f.srcdoc = html; f.onload = () => { setTimeout(() => { f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300); };
 };
 /** App version: Android reads it from the APK, the web app (iPhone / iPad) from DT.VERSION. Bump both together. */
-DT.VERSION = '0.2.0';
+DT.VERSION = '0.3.0';
 DT.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: DT.VERSION, android: '-', device: navigator.userAgent.slice(0, 60) }; } catch (e) { return {}; } };
 /** Web app started from the home screen (iPhone "Add to Home Screen", or an installed app on Android / desktop). */
 DT.standalone = () => !N && (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches);
@@ -73,7 +73,8 @@ DT.SCHEMA = 1;
 DT.APP_ID = 'sr-daily-thoughts';
 DT.emptyDb = () => ({
   app: DT.APP_ID, schema: DT.SCHEMA, created: new Date().toISOString(), updated: new Date().toISOString(),
-  favs: [],            // [{ id: quote id, at: ISO time }], newest last
+  favs: [],            // [{ id: quote id, at: ISO time, note? }], newest last
+  tomb: {},            // { quote id: ISO time } favourites removed in the app (0.3.0: a sync must not bring them back)
   settings: { theme: 'auto' },
   history: [],
 });
@@ -85,6 +86,7 @@ DT.normalize = db => {
   if (!Array.isArray(db.favs)) db.favs = [];
   db.favs = db.favs.map(f => typeof f === 'string' ? { id: f, at: '' } : f).filter(f => f && f.id);
   const seen = new Set(); db.favs = db.favs.filter(f => !seen.has(f.id) && seen.add(f.id));
+  if (!db.tomb || typeof db.tomb !== 'object' || Array.isArray(db.tomb)) db.tomb = {};
   return db;
 };
 DT.migrate = db => {
@@ -160,7 +162,9 @@ DT.isFav = id => DT.db.favs.some(f => f.id === id);
 DT.toggleFav = id => {
   if (DT.readOnly) { DT.toast('Read-only: update the app first.', true); return DT.isFav(id); }
   const i = DT.db.favs.findIndex(f => f.id === id);
-  if (i < 0) DT.db.favs.push({ id, at: new Date().toISOString() }); else DT.db.favs.splice(i, 1);
+  if (!DT.db.tomb || typeof DT.db.tomb !== 'object') DT.db.tomb = {};
+  if (i < 0) { DT.db.favs.push({ id, at: new Date().toISOString() }); delete DT.db.tomb[id]; }
+  else { DT.db.favs.splice(i, 1); DT.db.tomb[id] = new Date().toISOString(); }   // remembered, so a sync does not bring it back
   DT.save(true);
   return i < 0;
 };

@@ -17,6 +17,7 @@ import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -48,6 +49,16 @@ public class MainActivity extends Activity {
     private String pendingCb;
     private byte[] pendingBytes;
     private WebView printView;   // kept alive until the print job has been laid out
+    private static MainActivity current;   // for a storage setting pushed by a linked app while the app is open
+
+    /** A linked Stoic Ranger app pushed a newer storage setting (LinkProvider): tell the page. */
+    static void storageChangedElsewhere() {
+        final MainActivity a = current;
+        if (a == null || a.web == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() {
+            a.web.evaluateJavascript("window.DT && DT.sync && DT.sync.storageChanged && DT.sync.storageChanged()", null);
+        }});
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -55,6 +66,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         web = new WebView(this);
         setContentView(web);
+        current = this;
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -75,6 +87,12 @@ public class MainActivity extends Activity {
         });
         if (state != null) web.restoreState(state);
         else web.loadUrl(ORIGIN + "/www/index.html");
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (current == this) current = null;
+        super.onDestroy();
     }
 
     @Override
@@ -107,8 +125,11 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        web.evaluateJavascript("(window.DT && DT.back) ? DT.back() : false", value -> {
-            if ("false".equals(value)) finish();      // only a plain false closes the app
+        // an anonymous class, not a lambda: the cloud dx build has no lambda support (0.2.0 crashed here)
+        web.evaluateJavascript("(window.DT && DT.back) ? DT.back() : false", new ValueCallback<String>() {
+            @Override public void onReceiveValue(String value) {
+                if ("false".equals(value)) finish();      // only a plain false closes the app
+            }
         });
     }
 
@@ -154,8 +175,25 @@ public class MainActivity extends Activity {
             o.put("ok", ok); o.put("msg", msg == null ? "" : msg);
             if (data != null) o.put("data", data);
             final String js = "window.DTNativeCallback && DTNativeCallback(" + JSONObject.quote(cb) + "," + o.toString() + ")";
-            runOnUiThread(() -> web.evaluateJavascript(js, null));
+            runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
         } catch (Exception ignored) { }
+    }
+
+    /** Pushes this phone's setting (with the password) to every linked app that is installed, in the background. */
+    private void pushStorage() {
+        new Thread(new Runnable() { @Override public void run() {
+            Storage st = new Storage(MainActivity.this);
+            String json = st.toJson(true).toString();
+            for (String pkg : st.linked()) callPeer(pkg, "setStorage", json);
+        }}).start();
+    }
+
+    /** call() on another Stoic Ranger app's link provider; null when it is not installed or has no such link. */
+    private JSONObject callPeer(String pkg, String method, String arg) {
+        try {
+            Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), method, arg, null);
+            return b == null ? null : new JSONObject(b.getString("json", "{}"));
+        } catch (Exception e) { return null; }
     }
 
     static byte[] readAll(InputStream is) throws IOException {
@@ -253,7 +291,7 @@ public class MainActivity extends Activity {
             } catch (IOException e) { return false; }
             File[] all = dir.listFiles();
             if (all != null && all.length > 10) {
-                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                java.util.Arrays.sort(all, new java.util.Comparator<File>() { @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); } });
                 for (int i = 10; i < all.length; i++) all[i].delete();
             }
             return true;
@@ -287,7 +325,7 @@ public class MainActivity extends Activity {
         /** Let the user pick where to save (Downloads, Drive, …). */
         @JavascriptInterface
         public void saveFile(String name, String mime, String base64, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 pendingBytes = Base64.decode(base64, Base64.DEFAULT);
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -295,24 +333,24 @@ public class MainActivity extends Activity {
                 i.setType(mime);
                 i.putExtra(Intent.EXTRA_TITLE, name);
                 try { startActivityForResult(i, REQ_CREATE); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void openFile(String mimes, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
                 if (mimes != null && !mimes.isEmpty()) i.putExtra(Intent.EXTRA_MIME_TYPES, mimes.split(","));
                 try { startActivityForResult(i, REQ_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void shareFile(String name, String mime, String base64, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try {
                     File dir = new File(getCacheDir(), "shared");
                     dir.mkdirs();
@@ -325,25 +363,110 @@ public class MainActivity extends Activity {
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(i, "Share"));
                 } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Share plain text (a quote) through the Android share sheet. */
         @JavascriptInterface
         public void shareText(String subject, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 Intent i = new Intent(Intent.ACTION_SEND);
                 i.setType("text/plain");
                 if (subject != null && !subject.isEmpty()) i.putExtra(Intent.EXTRA_SUBJECT, subject);
                 i.putExtra(Intent.EXTRA_TEXT, text);
                 try { startActivity(Intent.createChooser(i, "Share")); } catch (Exception ignored) { }
-            });
+            }});
+        }
+
+        /* ---------- storage setting, links and Nextcloud (0.3.0, shared contract v1) ---------- */
+
+        /** The setting without the password, the link consent and which Stoic Ranger apps are installed. */
+        @JavascriptInterface
+        public String storageGet() {
+            Storage st = new Storage(MainActivity.this);
+            JSONObject o = st.toJson(false);
+            try {
+                org.json.JSONArray peers = new org.json.JSONArray();
+                for (String pkg : Storage.PEERS) {
+                    JSONObject x = new JSONObject();
+                    x.put("pkg", pkg); x.put("linked", st.isLinked(pkg));
+                    try {
+                        android.content.pm.ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
+                        x.put("installed", true); x.put("name", String.valueOf(getPackageManager().getApplicationLabel(ai)));
+                    } catch (Exception e) { x.put("installed", false); x.put("name", ""); }
+                    peers.put(x);
+                }
+                o.put("peers", peers);
+            } catch (Exception ignored) { }
+            return o.toString();
+        }
+
+        /** The user changed the setting here: save it (password "" keeps the stored one) and push it to linked apps. */
+        @JavascriptInterface
+        public String storageSet(String json, String password) {
+            try {
+                Storage st = new Storage(MainActivity.this);
+                if (!st.apply(new JSONObject(json), password, null, false)) return "{\"error\":\"not saved\"}";
+                pushStorage();
+            } catch (Exception e) { return "{\"error\":\"not saved\"}"; }
+            return storageGet();
+        }
+
+        /** Consent for one Stoic Ranger app (standing rule 6). A new link also gets this phone's setting pushed. */
+        @JavascriptInterface
+        public String linkSet(String pkg, boolean on) {
+            new Storage(MainActivity.this).setLinked(pkg, on);
+            if (on) pushStorage();
+            return storageGet();
+        }
+
+        /** On start: ask the linked apps for their setting and take a newer one. Returns true if it changed. */
+        @JavascriptInterface
+        public boolean storageRefresh() {
+            Storage st = new Storage(MainActivity.this);
+            boolean took = false;
+            for (String pkg : st.linked()) {
+                JSONObject o = callPeer(pkg, "storage", null);
+                if (o == null || o.has("error") || o.optString("changed", "").isEmpty()) continue;
+                if (st.apply(o, o.optString("password", ""), o.optString("changed"), true)) took = true;
+            }
+            return took;
+        }
+
+        @JavascriptInterface
+        public void ncTest(final String cb) { nc(cb, 0, null, null); }
+        @JavascriptInterface
+        public void ncDownload(final String cb) { nc(cb, 1, null, null); }
+        @JavascriptInterface
+        public void ncUpload(final String base64, final String etag, final String cb) { nc(cb, 2, base64, etag); }
+
+        /** Network off the UI thread; answers {ok, msg, data: JSON {status, etag, error, b64}}. */
+        private void nc(final String cb, final int op, final String base64, final String etag) {
+            new Thread(new Runnable() { @Override public void run() {
+                Storage st = new Storage(MainActivity.this);
+                WebDav.Res r;
+                if (!"nextcloud".equals(st.mode()) || st.url().isEmpty() || st.user().isEmpty()) {
+                    r = new WebDav.Res(); r.status = 0; r.error = "Nextcloud is not set up";
+                } else if (!st.url().startsWith("https://")) {
+                    r = new WebDav.Res(); r.status = 0; r.error = "The address must start with https://";
+                } else {
+                    NcFile f = new NcFile(new WebDav(st.url(), st.user(), st.password()), st.folder(), st.file());
+                    r = op == 0 ? f.test() : op == 1 ? f.download()
+                            : f.upload(Base64.decode(base64, Base64.DEFAULT), etag, NcFile.stamp(new java.util.Date()));
+                }
+                try {
+                    JSONObject o = new JSONObject();
+                    o.put("status", r.status); o.put("etag", r.etag); o.put("error", r.error);
+                    if (op == 1 && r.status == 200) o.put("b64", Base64.encodeToString(r.body, Base64.NO_WRAP));
+                    callback(cb, r.ok(), r.error, o.toString());
+                } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
+            }}).start();
         }
 
         /** Print (or "Save as PDF") an HTML document rendered by the web app; A4 portrait. */
         @JavascriptInterface
         public void print(String html, String jobName) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 printView = new WebView(MainActivity.this);
                 printView.getSettings().setJavaScriptEnabled(false);
                 printView.setWebViewClient(new WebViewClient() {
@@ -363,7 +486,7 @@ public class MainActivity extends Activity {
                     }
                 });
                 printView.loadDataWithBaseURL(ORIGIN + "/www/", html, "text/html", "utf-8", null);
-            });
+            }});
         }
     }
 }

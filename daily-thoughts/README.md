@@ -1,8 +1,8 @@
 # Stoic Ranger - Daily Thoughts (Android)
 
 Shown as **SR_Daily Thoughts** under the launcher icon (Stoic Ranger emblem in ranger green on tan; Gun Database
-black, Training Log olive, Shooting Drills coyote brown). Package id `at.stoicranger.dailythoughts`. Offline, no
-internet permission, data stays on the phone. Same look and architecture as the other Stoic Ranger apps, in the
+black, Training Log olive, Shooting Drills coyote brown). Package id `at.stoicranger.dailythoughts`. Offline; the
+data stays on the phone unless you choose to sync it with your own Nextcloud (0.3.0, the only use of the internet). Same look and architecture as the other Stoic Ranger apps, in the
 Stoic Ranger Web V1.0 colours (stone and ranger green in light, charcoal and tan in dark, seal watermark).
 
 - **Today**: the Quote of the day as a one-pager: the quote, author (tap for the author page) and source,
@@ -15,14 +15,33 @@ Stoic Ranger Web V1.0 colours (stone and ranger green in light, charcoal and tan
 - **Author page**: big coin, school, dates, origin, summary, facts (born, died, from, school), the life story in
   sections, all quotes (each opens its one-pager), image credit for the coin portrait.
 - **One-pager**: as on Today, with *Previous / Next* through the author's quotes.
-- **Favourites**: newest first, share the list as text. Favourites of a quote that a later version drops stay saved.
+- **Favourites**: newest first, share the list as text, your own **note** under each saved quote (0.3.0). Favourites of a quote that a later version drops stay saved.
 - **More**: backup save / share / restore, **bring in favourites** from Stoic Ranger (0.2.0: the favourites file
   Stoic Ranger 1.1.0 saves, or a Stoic Ranger 1.0.x backup; added to yours, nothing replaced), light / dark / follow
   phone, about (translations, image credits, fonts).
+- **Where your data lives** (0.3.0, shared contract v1 `00_docs/SHARED-DB-CONTRACT.md`): *This phone only* (the
+  default) or *Synced to Nextcloud* (address, user name, app password, folder `/Stoic Ranger/`, file). Works offline,
+  syncs on open, after each change and with *Sync now*; a status line shows the last sync. Before each upload a copy
+  goes to `<folder>/backups/<file>-YYYYMMDD-HHMMSS.xlsx` (newest 30 kept). Upload with `If-Match` on the ETag; on 412
+  download, merge, retry (3 tries). The app password is encrypted with the Android Keystore and never leaves the phone
+  except to a linked Stoic Ranger app (same signing key, after consent).
+  - Workbook: Daily Thoughts writes only `DT_Favourites` (Quote ID, Author, Quote, Saved at, Note) and the hidden
+    `_DT_Data` (settings and app deletions as JSON) and keeps every other sheet. Linked apps share `database.xlsx`,
+    alone it is `dailythoughts.xlsx`. (The Excel library rewrites the other sheets' cells and keeps hidden sheets
+    hidden, but not cell formatting or charts.)
+  - Merge: three-way against the last sync. A favourite on either side is kept; a row missing in the file (deleted in
+    Excel) is not a deletion. Only a removal in the app (a tombstone, synced so every phone learns of it) removes a
+    favourite saved before that time. Notes and settings: the side that changed wins.
+  - **Linked apps**: tick SR Shooting / Gun Safe / Physical Fitness / Field Kit to share the storage setting
+    (provider `at.stoicranger.dailythoughts.link`: `status`, `storage`, `setStorage`; newest `changed` wins).
+    Switching here switches the linked apps; back to *This phone only* deletes nothing.
+  - **Excel file by hand** (also the iPhone / iPad way, Nextcloud blocks web apps): *Update an Excel file* opens
+    database.xlsx or dailythoughts.xlsx, merges both ways and saves it with every other sheet kept;
+    *Save as a new Excel file*.
 
 ## Install the test build
 
-1. Copy `sr-daily-thoughts-0.2.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
+1. Copy `sr-daily-thoughts-0.3.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
 2. Play Protect may warn about an unknown app: *Install anyway* (debug build signed with the test key).
 3. Open **SR_Daily Thoughts** and tap *Read today's thought*.
 
@@ -72,9 +91,16 @@ the build kit (see its README), copy `authors.json`, `bios/`, `quotes/` and `coi
 `debug.keystore` (not in the GitHub repo; it is in the source zip on Manuel's PC): it is the same key as the other
 Stoic Ranger test builds.
 
-Before each release: `DT_PASS=… node tools/test-data-safety.js` must print only PASS.
+Before each release, all must print only PASS: `DT_PASS=… node tools/test-data-safety.js`, `node tools/test-sync.js`
+(sync and Excel file against an in-page Nextcloud stand-in) and `tools/test-nc.sh` (WebDav.java + NcFile.java on the
+JVM against `tools/webdav-mock.js`). The build stops if `classes.dex` references `LambdaMetafactory` (the cloud dx
+build has no lambda support: use anonymous classes).
 
 ## Changes
+
+- **0.3.0** (2026-11-07): optional Nextcloud sync of favourites, notes and settings (shared contract v1), link
+  consent and the shared storage setting with the other Stoic Ranger apps, Excel file update / save (web too), notes
+  on favourites. Back button: the last Java lambda replaced (it crashed with the dx build); the build checks for it.
 
 - **0.1.2** (2026-10-28): password screen for the web app, asked once per device and remembered across updates.
   Android unchanged apart from the version.

@@ -12,6 +12,16 @@ const wireFav = el => $$('[data-fav]', el).forEach(b => b.onclick = () => {
   const on = DT.toggleFav(b.dataset.fav);
   b.setAttribute('aria-pressed', on); b.lastChild.textContent = on ? 'Saved' : 'Favourite';
   DT.toast(on ? 'Saved to Favourites.' : 'Removed from Favourites.');
+  const n = $(`[data-note-for="${b.dataset.fav}"]`, el); if (n) { n.outerHTML = noteBox(b.dataset.fav); wireNote(el); }
+});
+/* your own note on a favourite (0.3.0; also the Note column of the Excel file) */
+const favOf = id => DT.db.favs.find(f => f.id === id);
+const noteBox = id => { const f = favOf(id); return `<div class="fnote" data-note-for="${id}"${f ? '' : ' hidden'}><label>Your note<textarea rows="2" maxlength="2000" placeholder="Why this one matters to you …">${esc(f && f.note || '')}</textarea></label></div>`; };
+const wireNote = el => $$('[data-note-for] textarea', el).forEach(t => t.oninput = () => {
+  if (DT.readOnly) return;
+  const f = favOf(t.closest('[data-note-for]').dataset.noteFor); if (!f) return;
+  if (t.value.trim()) f.note = t.value; else delete f.note;
+  DT.save();
 });
 
 /** The one-pager: quote, citation row, context with the round coin, event, practice, author card, source. */
@@ -24,6 +34,7 @@ DT.onePager = (q, { eyebrow = '', nav = true } = {}) => {
       <div class="eyebrow">${eyebrow || `${esc(a.name)} · ${k + 1} of ${list.length}`}</div>
       <blockquote class="${sizeCls(q)}">${q.q.map(x => `<p>${esc(x)}</p>`).join('')}</blockquote>
       <div class="cite"><a class="author" href="#/author/${a.slug}">${esc(a.name)}</a><span class="src">${esc(q.ref)}</span>${favBtn(q.id)}</div>
+      ${noteBox(q.id)}
     </div>
     <section><h2>In context</h2><div class="context">
       <a class="ccoin" href="#/author/${a.slug}" aria-label="Author page: ${esc(a.name)}">${DT.coin(a.slug)}</a>
@@ -39,7 +50,7 @@ DT.onePager = (q, { eyebrow = '', nav = true } = {}) => {
   </article>`;
 };
 const wireOne = el => {
-  wireFav(el);
+  wireFav(el); wireNote(el);
   $$('[data-share]', el).forEach(b => b.onclick = () => DT.shareQuote(DT.quote(b.dataset.share)));
   $$('[data-print]', el).forEach(b => b.onclick = () => DT.printQuote(DT.quote(b.dataset.print)));
 };
@@ -90,9 +101,9 @@ DT.views.today = {
 };
 
 /** Quote line for lists: text, author and source, star when it is a favourite. */
-DT.quoteItem = (q, date = '', coin = true) => {
+DT.quoteItem = (q, date = '', coin = true, note = '') => {
   const a = DT.author(q.a);
-  return `<a class="qitem" href="#/q/${q.id}">${coin ? DT.coin(a.slug, 'sm') : ''}<div class="main">${date ? `<div class="date">${esc(date)}</div>` : ''}<div class="q">${esc(DT.quoteText(q))}</div><div class="r">${esc(a.name)} · ${esc(q.ref)}${DT.isFav(q.id) ? ' <span class="star">★</span>' : ''}</div></div></a>`;
+  return `<a class="qitem" href="#/q/${q.id}">${coin ? DT.coin(a.slug, 'sm') : ''}<div class="main">${date ? `<div class="date">${esc(date)}</div>` : ''}<div class="q">${esc(DT.quoteText(q))}</div><div class="r">${esc(a.name)} · ${esc(q.ref)}${DT.isFav(q.id) ? ' <span class="star">★</span>' : ''}</div>${note ? `<div class="r fn">${esc(note)}</div>` : ''}</div></a>`;
 };
 DT.views.q = {
   tab: 'authors',
@@ -112,9 +123,10 @@ DT.views.favourites = {
   render(el) {
     DT.header('Favourites');
     const favs = DT.db.favs.slice().reverse(), list = favs.map(f => DT.quote(f.id)).filter(Boolean), gone = favs.length - list.length;
+    const notes = {}; favs.forEach(f => { if (f.note) notes[f.id] = f.note; });
     el.innerHTML = `
-      <p class="note">Saved on this phone, newest first. Tap Favourite on any quote to keep it here.</p>
-      <div class="list">${list.map(q => DT.quoteItem(q)).join('') || '<div class="empty">No favourites yet. Open a quote and tap <b>☆ Favourite</b>.</div>'}</div>
+      <p class="note">Saved on this phone${DT.sync && DT.sync.enabled() ? ' and synced to your Nextcloud' : ''}, newest first. Tap Favourite on any quote to keep it here; add your own note under the quote.</p>
+      <div class="list">${list.map(q => DT.quoteItem(q, '', true, notes[q.id])).join('') || '<div class="empty">No favourites yet. Open a quote and tap <b>☆ Favourite</b>.</div>'}</div>
       ${gone ? `<p class="note">${gone} saved quote${gone === 1 ? ' is' : 's are'} not in this app version; ${gone === 1 ? 'it stays' : 'they stay'} saved and come back if the quote returns.</p>` : ''}
       ${list.length ? `<div class="row"><button class="btn sm" id="fShare">Share the list</button></div>` : ''}`;
     const s = $('#fShare', el);

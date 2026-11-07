@@ -15,7 +15,7 @@ AAPT2="$TOOLS/aapt2"; [ -x "$AAPT2" ] || AAPT2=aapt2
 sed "s#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"$PKG\">#; s#\${applicationId}#$PKG#g" "$M/AndroidManifest.xml" > "$OUT/AndroidManifest.xml"
 "$AAPT2" link -o "$OUT/base.apk" -I "$TOOLS/android.jar" --manifest "$OUT/AndroidManifest.xml" \
    -A "$M/assets" --java "$OUT/gen" --min-sdk-version 26 --target-sdk-version 34 \
-   --version-code "${VERSION_CODE:-4}" --version-name "${VERSION_NAME:-0.2.0}" --debug-mode \
+   --version-code "${VERSION_CODE:-5}" --version-name "${VERSION_NAME:-0.3.0}" --debug-mode \
    -0 woff2 -0 png -0 jpg "$OUT/res/res.zip"
 # Eclipse compiler: D8 builds trip over some javac 21 class files
 java -jar "$TOOLS/ecj-3.45.0.jar" -nowarn -8 -cp "$TOOLS/android.jar" -d "$OUT/classes" \
@@ -27,6 +27,11 @@ if [ -f "$TOOLS/d8.jar" ]; then
 else
   (cd "$OUT/classes" && dalvik-exchange --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" .)
 fi
+# dx does not desugar Java lambdas: it emits calls to java.lang.invoke.LambdaMetafactory, which Android does not
+# have, so the app crashes at the first lambda (0.2.0: the Back button). Use anonymous classes; stop the build if one slipped in.
+if grep -a -q LambdaMetafactory "$OUT/dex/classes.dex"; then
+  echo "classes.dex references LambdaMetafactory: replace the Java lambdas/method references with anonymous classes" >&2; exit 1
+fi
 cp "$OUT/base.apk" "$OUT/unaligned.apk"
 (cd "$OUT/dex" && zip -q -0 ../unaligned.apk classes.dex)
 python3 "$ROOT/tools/zipalign.py" "$OUT/unaligned.apk" "$OUT/aligned.apk"
@@ -34,7 +39,7 @@ KS="${KEYSTORE:-$ROOT/debug.keystore}"
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \
    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 mkdir -p "$ROOT/build/outputs"
-APK="$ROOT/build/outputs/sr-daily-thoughts-${VERSION_NAME:-0.2.0}-debug.apk"
+APK="$ROOT/build/outputs/sr-daily-thoughts-${VERSION_NAME:-0.3.0}-debug.apk"
 if [ -f "$TOOLS/apksigner.jar" ]; then SIGN=(java -jar "$TOOLS/apksigner.jar"); else SIGN=(apksigner); fi
 "${SIGN[@]}" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
    --ks-key-alias androiddebugkey --min-sdk-version 26 --out "$APK" "$OUT/aligned.apk"

@@ -21,3 +21,4 @@ Manuel's rule: an app update must never lose data on the phone.
 | 0.1.1 | 2 | 1 | web app for iPhone / iPad, no data change |
 | 0.1.2 | 3 | 1 | web password (marker `dt.unlocked`, outside db), no data change |
 | 0.2.0 | 4 | 1 | own app again after Stoic Ranger 1.0.x; More › Bring in favourites (Stoic Ranger files, merged, backup first); double Back on Today closes; no data change |
+| 0.3.0 | 5 | 1 | added only: `favs[].note`, `tomb` (favourites removed in the app, with time), `sync` (last sync, base of the three-way merge). Older files load unchanged (normalize adds an empty `tomb`). The storage setting and the app password are not in db.json (private prefs, Keystore). Updating an Excel file makes a copy of db.json first. |

@@ -16,7 +16,7 @@ DT.restoreBackup = async () => {
   if (!DT.isOurs(j)) { DT.toast(j && j.app ? 'That is a backup of another Stoic Ranger app.' : 'This is not a Daily Thoughts backup.', true); return; }
   if (+j.schema > DT.SCHEMA) { DT.toast(`This backup comes from a newer app version (data format ${j.schema}). Update the app first.`, true); return; }
   const m = DT.sheet('Restore backup', `<p>${esc(f.name)}: ${j.favs.length} favourites.</p>
-    <p class="note">This replaces the favourites on this phone (now ${DT.db.favs.length}). A copy of the current data is saved on the phone first.</p>
+    <p class="note">This replaces the favourites on this phone (now ${DT.db.favs.length}). A copy of the current data is saved on the phone first.${DT.sync && DT.sync.enabled() ? ' Favourites that are in your Nextcloud file but not in this backup come back with the next sync (a sync never deletes).' : ''}</p>
     <div class="stack"><button class="btn pri big" id="rGo">Replace data with this backup</button></div>`);
   $('#rGo', m.body).onclick = () => {
     DT.flush(); DT.backupDb(`db-before-restore-${Date.now()}.json`);
@@ -77,12 +77,13 @@ DT.views.more = {
       ${!DT.native && !DT.standalone() ? `<h2>Install on iPhone / iPad</h2>
       <p class="note">In Safari tap <b>Share</b> (the square with the arrow), then <b>Add to Home Screen</b>. Daily Thoughts then opens full-screen from its own icon, works offline and keeps your favourites safe. On Android use the APK.</p>` : ''}
       <h2>Backup</h2>
-      <p class="note">Your favourites live only on this phone. Save a backup now and then (Google Drive, e-mail to yourself …); it is also how you move them to a new phone. Quotes, authors and coins come with the app.</p>
+      <p class="note">Your favourites live on this phone${DT.sync && DT.sync.enabled() ? ' (and in your Nextcloud)' : ''}. Save a backup now and then (Google Drive, e-mail to yourself …); it is also how you move them to a new phone. Quotes, authors and coins come with the app.</p>
       <div class="stack">
         <button class="btn pri" id="mSave">Save a backup file</button>
         <button class="btn" id="mShare">Share a backup file</button>
         <button class="btn" id="mRestore">Restore a backup</button>
       </div>
+      <div id="mStorage">${DT.sync ? DT.sync.section() : ''}</div>
       <h2>Favourites from Stoic Ranger</h2>
       <p class="note">Had favourite quotes in Stoic Ranger (1.0)? In Stoic Ranger save them (home › Data › Daily Thoughts favourites), or use a Stoic Ranger backup, and bring them in here. They are added to yours; nothing here is replaced.</p>
       <div class="stack"><button class="btn" id="mBring">Bring in favourites</button></div>
@@ -101,6 +102,7 @@ DT.views.more = {
     $('#mShare', el).onclick = () => { DT.flush(); DT.shareFile(backupName(), 'application/json', backupText(), 'Stoic Ranger - Daily Thoughts backup'); };
     $('#mRestore', el).onclick = DT.restoreBackup;
     $('#mBring', el).onclick = DT.bringInFavs;
+    if (DT.sync) DT.sync.wire($('#mStorage', el));
     el.querySelectorAll('[data-theme]').forEach(a => a.onclick = () => { s.theme = a.dataset.theme; DT.save(); DT.applyTheme(); DT.route(); });
   },
 };
