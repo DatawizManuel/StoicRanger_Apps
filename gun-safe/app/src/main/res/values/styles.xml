@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SR GunSafe colours (same as assets/www/css/app.css): black header band, olive accent in light mode. -->
+    <color name="band">#111111</color>
+    <color name="paper">#FFFFFF</color>
+    <color name="olive">#4B5320</color>
+    <color name="night">#121512</color>
+    <color name="gold">#C9B46A</color>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@color/band</item>
+        <item name="android:navigationBarColor">@color/band</item>
+        <item name="android:colorAccent">@color/olive</item>
+        <item name="android:colorPrimary">@color/olive</item>
+    </style>
+</resources>
