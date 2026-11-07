@@ -153,7 +153,15 @@
     }
     const s = data.settings;
     if (s && (String(s.changed || '') > String(db.settings.at || '') || !db.plans.length && !db.sets.length)) {
-      const S = db.settings, yes = v => /^(yes|y|true|1|ja|x)$/i.test(String(v).trim());
+      Object.assign(db.settings, X.settingsFrom(s, db.settings)); c.settings = true;
+    }
+    PF.normalize(db);
+    return c;
+  };
+  /** PF_Settings rows {key: value} → settings fields (only the keys the sheet has) */
+  X.settingsFrom = (s, cur) => {
+    const S = { eq: PF.clone((cur || PF.DEFAULT_SETTINGS()).eq) }, yes = v => /^(yes|y|true|1|ja|x)$/i.test(String(v).trim());
+    {
       if (+s.sessions) S.sessions = PF.clamp(+s.sessions, 2, 6); if (+s.minutes) S.minutes = +s.minutes;
       if (s.days) S.days = listN(s.days).filter(d => PF.DAYS.includes(d));
       if ('kettlebells_kg' in s) S.eq.kb = listN(s.kettlebells_kg).map(Number).filter(n => n > 0);
@@ -162,11 +170,11 @@
       if ('bands' in s) S.eq.bands = listN(s.bands);
       for (const [k, e] of [['pullup_bar', 'bar'], ['mini_band', 'mini'], ['bench', 'bench'], ['gripper', 'gripper'], ['wrist_roller', 'roller']]) if (k in s) S.eq[e] = yes(s[k]);
       if ('not_targeted' in s) S.skip = listN(s.not_targeted).map(x => { x = x.toLowerCase(); const g = PF.plan.MGROUPS.find(g => g.k === x || g.n.toLowerCase() === x); return g && g.k; }).filter(Boolean);
-      if (s.theme) S.theme = String(s.theme); S.at = s.changed || S.at; c.settings = true;
+      if (s.theme) S.theme = String(s.theme); if (s.changed) S.at = String(s.changed);
     }
-    PF.normalize(db);
-    return c;
+    return S;
   };
+  X.COLS = COLS; X.TABLE = TABLE; X.HELPER = HELPER;
   X.import = async () => {
     if (!PF.guard()) return;
     const f = await PF.openFile('.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); if (!f.ok) return;

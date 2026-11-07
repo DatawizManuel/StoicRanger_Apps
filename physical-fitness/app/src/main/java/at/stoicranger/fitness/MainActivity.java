@@ -48,11 +48,22 @@ public class MainActivity extends Activity {
     private String pendingCb;
     private byte[] pendingBytes;
     private WebView printView;   // kept alive until the print job has been laid out
+    private static MainActivity current;   // for a storage setting pushed by a linked app while the app is open
+
+    /** A linked Stoic Ranger app pushed a newer storage setting (LinkProvider): tell the page. */
+    static void storageChangedElsewhere() {
+        final MainActivity a = current;
+        if (a == null || a.web == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() {
+            a.web.evaluateJavascript("window.PF && PF.sync && PF.sync.storageChanged && PF.sync.storageChanged()", null);
+        }});
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        current = this;
         web = new WebView(this);
         setContentView(web);
 
@@ -75,6 +86,29 @@ public class MainActivity extends Activity {
         });
         if (state != null) web.restoreState(state);
         else web.loadUrl(ORIGIN + "/www/index.html");
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (current == this) current = null;
+        super.onDestroy();
+    }
+
+    /** Pushes this phone's storage setting (with the password) to every linked app that is installed, in the background. */
+    private void pushStorage() {
+        new Thread(new Runnable() { @Override public void run() {
+            Storage st = new Storage(MainActivity.this);
+            String json = st.toJson(true).toString();
+            for (String pkg : st.linked()) callPeer(pkg, "setStorage", json);
+        }}).start();
+    }
+
+    /** call() on another Stoic Ranger app's link provider; null when it is not installed or has no such link. */
+    private JSONObject callPeer(String pkg, String method, String arg) {
+        try {
+            Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), method, arg, null);
+            return b == null ? null : new JSONObject(b.getString("json", "{}"));
+        } catch (Exception e) { return null; }
     }
 
     @Override
@@ -254,7 +288,10 @@ public class MainActivity extends Activity {
                 os.write(readAll(is));
                 os.getFD().sync();
             } catch (IOException e) { return false; }
-            File[] all = dir.listFiles();
+            // keep the newest 10 of this kind (db-schema…, db-before-import…, db-before-sync…), so frequent sync
+            // backups never push out the copy made before a migration
+            final String kind = name.replaceAll("[-_]?\\d.*$", "");
+            File[] all = dir.listFiles(new java.io.FileFilter() { @Override public boolean accept(File f) { return f.getName().replaceAll("[-_]?\\d.*$", "").equals(kind); } });
             if (all != null && all.length > 10) {
                 java.util.Arrays.sort(all, new java.util.Comparator<File>() {
                     @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); }
@@ -343,6 +380,91 @@ public class MainActivity extends Activity {
                 i.putExtra(Intent.EXTRA_TEXT, text);
                 try { startActivity(Intent.createChooser(i, "Share")); } catch (Exception ignored) { }
             }});
+        }
+
+        /* ---------- storage setting, links and Nextcloud (0.2.0, shared contract v1, 00_docs/SHARED-DB-CONTRACT.md) ---------- */
+
+        /** The setting without the password, the link consent and which Stoic Ranger apps are installed. */
+        @JavascriptInterface
+        public String storageGet() {
+            Storage st = new Storage(MainActivity.this);
+            JSONObject o = st.toJson(false);
+            try {
+                org.json.JSONArray peers = new org.json.JSONArray();
+                for (String pkg : Storage.PEERS) {
+                    JSONObject x = new JSONObject();
+                    x.put("pkg", pkg); x.put("linked", st.isLinked(pkg));
+                    try {
+                        android.content.pm.ApplicationInfo ai = getPackageManager().getApplicationInfo(pkg, 0);
+                        x.put("installed", true); x.put("name", String.valueOf(getPackageManager().getApplicationLabel(ai)));
+                    } catch (Exception e) { x.put("installed", false); x.put("name", ""); }
+                    peers.put(x);
+                }
+                o.put("peers", peers);
+            } catch (Exception ignored) { }
+            return o.toString();
+        }
+
+        /** The user changed the setting here: save it (password "" keeps the stored one) and push it to linked apps. */
+        @JavascriptInterface
+        public String storageSet(String json, String password) {
+            try {
+                Storage st = new Storage(MainActivity.this);
+                if (!st.apply(new JSONObject(json), password, null, false)) return "{\"error\":\"not saved\"}";
+                pushStorage();
+            } catch (Exception e) { return "{\"error\":\"not saved\"}"; }
+            return storageGet();
+        }
+
+        /** Consent for one Stoic Ranger app (standing rule 6). A new link also gets this phone's setting pushed. */
+        @JavascriptInterface
+        public String linkSet(String pkg, boolean on) {
+            new Storage(MainActivity.this).setLinked(pkg, on);
+            if (on) pushStorage();
+            return storageGet();
+        }
+
+        /** On start: ask the linked apps for their setting and take a newer one. Returns true if it changed. */
+        @JavascriptInterface
+        public boolean storageRefresh() {
+            Storage st = new Storage(MainActivity.this);
+            boolean took = false;
+            for (String pkg : st.linked()) {
+                JSONObject o = callPeer(pkg, "storage", null);
+                if (o == null || o.has("error") || o.optString("changed", "").isEmpty()) continue;
+                if (st.apply(o, o.optString("password", ""), o.optString("changed"), true)) took = true;
+            }
+            return took;
+        }
+
+        @JavascriptInterface
+        public void ncTest(final String cb) { nc(cb, 0, null, null); }
+        @JavascriptInterface
+        public void ncDownload(final String cb) { nc(cb, 1, null, null); }
+        @JavascriptInterface
+        public void ncUpload(final String base64, final String etag, final String cb) { nc(cb, 2, base64, etag); }
+
+        /** Network off the UI thread; answers {ok, msg, data: JSON {status, etag, error, b64}}. */
+        private void nc(final String cb, final int op, final String base64, final String etag) {
+            new Thread(new Runnable() { @Override public void run() {
+                Storage st = new Storage(MainActivity.this);
+                WebDav.Res r;
+                if (!"nextcloud".equals(st.mode()) || st.url().isEmpty() || st.user().isEmpty()) {
+                    r = new WebDav.Res(); r.status = 0; r.error = "Nextcloud is not set up";
+                } else if (!st.url().startsWith("https://")) {
+                    r = new WebDav.Res(); r.status = 0; r.error = "The address must start with https://";
+                } else {
+                    NcFile f = new NcFile(new WebDav(st.url(), st.user(), st.password()), st.folder(), st.file());
+                    r = op == 0 ? f.test() : op == 1 ? f.download()
+                            : f.upload(Base64.decode(base64, Base64.DEFAULT), etag, NcFile.stamp(new java.util.Date()));
+                }
+                try {
+                    JSONObject o = new JSONObject();
+                    o.put("status", r.status); o.put("etag", r.etag); o.put("error", r.error);
+                    if (op == 1 && r.status == 200) o.put("b64", Base64.encodeToString(r.body, Base64.NO_WRAP));
+                    callback(cb, r.ok(), r.error, o.toString());
+                } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
+            }}).start();
         }
 
         /** Print (or "Save as PDF") an HTML document rendered by the web app; A4 portrait. */

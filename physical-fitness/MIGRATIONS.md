@@ -19,7 +19,7 @@ Rules (Stoic Ranger standing rule 1, never lose device data):
 
 | table | fields |
 | --- | --- |
-| settings | sessions, minutes, days[], eq {kb[], db[], sb[], bands[], bar, mini, bench, gripper, roller}, theme, at |
+| settings | sessions, minutes, days[], eq {kb[], db[], sb[], bands[], bar, mini, bench, gripper, roller}, skip[] (0.2.0), theme, at |
 | assessments | id, at, date, swingKg, gobletKg, pressKg, pullup, pushup, situp, hang, toe, squat, reachR, reachL, note |
 | plans | id, at, block, start, status, prev, assessment, created, cfgHist [{from, cfg}], base {pattern: {kg, max, sec}}, swaps [{from, slot, ex}] |
 | sessions | id, at, plan, week, sess, date, done, note |
@@ -28,6 +28,7 @@ Rules (Stoic Ranger standing rule 1, never lose device data):
 | mobility | id, at, date, item |
 | deleted | table, id, at |
 | ui | small view state (not exported) |
+| sync | (0.2.0) last Nextcloud sync: target, base (state of the last sync), last, msg (not exported) |
 | history | migrations done on this file |
 
 Exercise ids (`js/ex/*.js`) and mobility ids (`MOB` in `js/ex/mob.js`) are permanent: they are never renamed
@@ -38,3 +39,7 @@ or reused, so logged sets keep pointing at the right exercise.
 None yet (first format).
 
 - 0.1.1 (format 1): no data change.
+- 0.2.0 (format 1): adds `settings.skip` (muscle groups not targeted; missing = all targeted) and `sync`. Both are
+  filled in by `normalize` when missing, so no migration step is needed and 0.1.x data opens unchanged. The Excel
+  sheets got the `PF_` prefix (shared contract v1); 0.1.x files (no prefix) are still read. The Nextcloud storage
+  setting and password are not in db.json (Android SharedPreferences, password encrypted with the Keystore).
