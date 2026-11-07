@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.1.4
+# SR Field Kit (Android) — 0.2.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the

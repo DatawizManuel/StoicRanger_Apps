@@ -220,7 +220,12 @@ public class MainActivity extends Activity {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
             Uri u = r.getUrl();
-            if (!"appassets.androidplatform.net".equals(u.getHost())) return null;
+            // the page stays offline: only the Java side talks to the user's Nextcloud (sync), the WebView loads nothing else
+            if (!"appassets.androidplatform.net".equals(u.getHost())) {
+                String sc = u.getScheme();
+                if ("http".equals(sc) || "https".equals(sc)) return new WebResourceResponse("text/plain", "utf-8", 403, "Blocked", null, null);
+                return null;
+            }
             String path = u.getPath();
             if (path == null || !path.startsWith("/www/") || path.contains("..")) return null;
             try {
@@ -406,6 +411,72 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 try { return "{\"error\":" + JSONObject.quote(String.valueOf(e.getMessage())) + "}"; } catch (Exception x) { return "{\"error\":\"failed\"}"; }
             }
+        }
+
+        // ---------- where the data is stored: phone only, or phone + Nextcloud (SHARED-DB-CONTRACT) ----------
+        /** {mode, url, user, folder, file, changed, hasPassword}. The password never goes to the page. */
+        @JavascriptInterface
+        public String syncGet() { return SyncStore.get(MainActivity.this, false).toString(); }
+
+        /** Save the storage setting. password: null/undefined keeps the saved one, "" removes it. */
+        @JavascriptInterface
+        public boolean syncSet(String json, String password, String changed) {
+            try { return SyncStore.set(MainActivity.this, new JSONObject(json), password, changed); }
+            catch (Exception e) { return false; }
+        }
+
+        /** One WebDAV request to the saved Nextcloud, off the UI thread. Result to FKNativeCallback(cb, {status, etag, body, error}). */
+        @JavascriptInterface
+        public void ncRequest(final String method, final String path, final String b64, final String ifMatch, final String depth, final String cb) {
+            new Thread(new Runnable() { @Override public void run() {
+                JSONObject cfg = SyncStore.get(MainActivity.this, true);
+                byte[] body = b64 == null || b64.isEmpty() ? null : Base64.decode(b64, Base64.DEFAULT);
+                JSONObject r;
+                if (!"GET".equals(method) && !"PUT".equals(method) && !"MKCOL".equals(method) && !"PROPFIND".equals(method) && !"DELETE".equals(method)) {
+                    r = new JSONObject(); try { r.put("status", 0).put("error", "method not allowed"); } catch (Exception ignored) { }
+                } else if (path == null || path.contains("..")) {
+                    r = new JSONObject(); try { r.put("status", 0).put("error", "bad path"); } catch (Exception ignored) { }
+                } else r = NcClient.request(cfg, method, path, body, ifMatch, depth);
+                final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + r.toString() + ")";
+                runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+            } }).start();
+        }
+
+        /** Storage setting of a linked app (call "storage" / "setStorage" on <package>.link). Only after the user's consent. */
+        @JavascriptInterface
+        public String linkCall(String pkg, String method, String arg) {
+            if (!SR_PACKAGE.equals(pkg)) return "{\"error\":\"unknown app\"}";
+            if (!"storage".equals(method) && !"setStorage".equals(method)) return "{\"error\":\"unknown method\"}";
+            try {
+                if ("setStorage".equals(method)) {     // push our setting including the password (same signature only)
+                    JSONObject mine = SyncStore.get(MainActivity.this, true);
+                    arg = mine.toString();
+                }
+                Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), method, arg, null);
+                String j = b == null ? null : b.getString("json");
+                if (j == null) return "{\"error\":\"no-provider\"}";
+                if ("storage".equals(method)) {        // the page never sees the password
+                    JSONObject o = new JSONObject(j); o.put("hasPassword", o.optString("password").length() > 0); o.remove("password"); return o.toString();
+                }
+                return j;
+            } catch (IllegalArgumentException e) { return "{\"error\":\"no-provider\"}"; }
+            catch (SecurityException e) { return "{\"error\":\"not-permitted\"}"; }
+            catch (Exception e) { return "{\"error\":\"failed\"}"; }
+        }
+
+        /** Adopt a linked app's newer storage setting, password included, without passing it through the page. */
+        @JavascriptInterface
+        public boolean linkAdoptStorage(String pkg) {
+            if (!SR_PACKAGE.equals(pkg)) return false;
+            try {
+                Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "storage", null, null);
+                String j = b == null ? null : b.getString("json");
+                if (j == null) return false;
+                JSONObject o = new JSONObject(j);
+                if (o.has("error")) return false;
+                String pw = o.has("password") ? o.optString("password", "") : null;
+                return SyncStore.set(MainActivity.this, o, pw, o.optString("changed", ""));
+            } catch (Exception e) { return false; }
         }
 
         /** Let the user pick where to save (Downloads, Drive, …). */

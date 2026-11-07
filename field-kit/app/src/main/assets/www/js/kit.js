@@ -694,6 +694,7 @@ window.__solve = solve;
     return fromMGRS(s);
   }
   const fmtMGRS = (g, sp = true) => g ? (sp ? `${g.gzd} ${g.sq} ${g.e} ${g.n}` : g.gzd+g.sq+g.e+g.n) : "outside MGRS";
+  window.FKmgrs = (lat, lon) => fmtMGRS(toMGRS(lat, lon));   // for the FK_Points sheet (js/sync.js)
   const dms = (v, pos, neg) => { const a = Math.abs(v), d = Math.floor(a), mm = (a-d)*60, m = Math.floor(mm), s = (mm-m)*60;
     return `${d}° ${String(m).padStart(2,"0")}′ ${s.toFixed(1).padStart(4,"0")}″ ${v >= 0 ? pos : neg}`; };
   function bearing(a, b){
@@ -826,7 +827,7 @@ window.__solve = solve;
   $("posIn").addEventListener("change", () => { const p = parsePos($("posIn").value); if (p){ $("posMsg").textContent = ""; setHere(p, "typed"); renderPts(); } else $("posMsg").textContent = "Can't read that. Use MGRS like 30U YC 08213 07235, or lat, lon like 51.4779, -0.0015."; });
   ["tgtIn","decl"].forEach(id => $(id).addEventListener("input", () => { renderBrg(); renderPts(); }));
   $("tgtPick").onchange = () => { $("tgtIn").value = ""; renderBrg(); };
-  $("ptSave").onclick = () => { if (!here) return; points.push({ name: $("ptName").value.trim() || "Point " + (points.length+1), lat: here.lat, lon: here.lon }); store.set("sr-points", points); $("ptName").value = ""; renderPts(); };
+  $("ptSave").onclick = () => { if (!here) return; points.push({ uid: "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), name: $("ptName").value.trim() || "Point " + (points.length+1), lat: here.lat, lon: here.lon }); store.set("sr-points", points); $("ptName").value = ""; renderPts(); };
   $("ptTable").onclick = e => { const b = e.target.closest("[data-del]"); if (b){ points.splice(+b.dataset.del, 1); store.set("sr-points", points); renderPts(); renderBrg(); } };
   document.querySelectorAll("[data-ntab]").forEach(b => b.onclick = () => {
     document.querySelectorAll("[data-ntab]").forEach(x => x.setAttribute("aria-pressed", x === b));

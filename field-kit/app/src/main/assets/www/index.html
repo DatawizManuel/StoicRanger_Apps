@@ -297,6 +297,21 @@
     <p class="note">Imperial shows yards, inches, fps, grains, ft·lb, mph, feet and °F. MIL and MOA stay as they are.</p>
     <label class="check setrow"><input type="checkbox" id="setLink" checked> Offer Stoic Ranger data in Drop &amp; wind</label>
     <p class="note">Off: the link box in Shooting helpers stays hidden and nothing is read from Stoic Ranger.</p>
+    <h3>Where your data is stored</h3>
+    <div class="storage" id="storageBox">
+      <label class="check setrow"><input type="radio" name="stm" value="local" checked> <span><b>On this phone only</b><br><small>As before. Nothing leaves the phone.</small></span></label>
+      <label class="check setrow"><input type="radio" name="stm" value="nextcloud"> <span><b>On this phone, synced to my Nextcloud</b><br><small>The phone keeps working offline and syncs when it is online.</small></span></label>
+      <div class="ncform" id="ncForm" hidden>
+        <div class="field"><label for="ncUrl">Nextcloud address</label><input id="ncUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://cloud.example.com"></div>
+        <div class="field"><label for="ncUser">User name</label><input id="ncUser" type="text" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label for="ncPw">App password</label><input id="ncPw" type="password" autocomplete="off" placeholder=""></div>
+        <p class="note">Make an app password in Nextcloud under Settings › Security › Devices &amp; sessions. It is kept encrypted on this phone only and never leaves it except to log in to your Nextcloud.</p>
+        <div class="field"><label for="ncFolder">Folder on Nextcloud</label><input id="ncFolder" type="text" autocomplete="off" spellcheck="false" placeholder="/Stoic Ranger/"></div>
+      </div>
+      <p class="note" id="ncFileNote"></p>
+      <div class="actions start"><button type="button" class="button" id="ncSave">Save</button><button type="button" class="button ghost" id="ncSync" hidden>Sync now</button></div>
+      <p class="note" id="ncStatus" aria-live="polite"></p>
+    </div>
     <h3>Your data</h3>
     <p class="note">Breathing minutes and streak, breathing settings, Drop &amp; wind values, last position, saved points, settings. A copy is kept on the phone before anything is deleted.</p>
     <div class="actions start"><button type="button" class="button ghost" id="wipeBtn">Delete all my data</button></div>
@@ -314,6 +329,8 @@
 <script src="js/kit.js"></script>
 <script src="js/link.js"></script>
 <script src="js/wsheet.js"></script>
+<script src="js/xlsx.mini.min.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

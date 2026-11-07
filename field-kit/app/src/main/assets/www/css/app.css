@@ -221,6 +221,10 @@ body { display: block; padding: 0; min-height: 0; overflow: hidden; -webkit-tap-
 .backlog { margin-top: 20px; font-size: .85rem; color: var(--muted); }
 .backlog summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .backlog pre { font: 12px/1.45 var(--f-mono); white-space: pre-wrap; background: var(--raised); padding: 8px; margin: 0; color: var(--fg); }
+.storage .setrow { align-items: flex-start; gap: 10px; }
+.storage .setrow small { color: var(--muted); }
+.ncform { display: grid; gap: 10px; margin: 8px 0; }
+#ncStatus.bad { color: var(--bronze); }
 .toast { position: fixed; left: 50%; bottom: max(28px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50; background: var(--fg); color: var(--bg); padding: 10px 16px; font: 600 .95rem/1.2 var(--f-body); max-width: calc(100% - 32px); text-align: center; }
 
 /* ---------- printing (Android print screen: print or Save as PDF) ---------- */

@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
-     No internet permission: every tool works offline and nothing leaves the phone.
+     Internet only for the optional Nextcloud sync (0.2.0, off by default): every tool works offline, and nothing
+     leaves the phone unless the user turns on sync to their own Nextcloud.
      Location only when the user taps "Use my position". The Stoic Ranger signature permission is declared in every
      Stoic Ranger app (same signing key), so the install order does not matter; Field Kit uses it to read guns and
      ammunition from Stoic Ranger, read-only and only after the user allowed it. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <permission android:name="at.stoicranger.permission.LINK" android:protectionLevel="signature"
@@ -44,5 +46,13 @@
             android:authorities="${applicationId}.files"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <!-- Link between Stoic Ranger apps: storage setting (SHARED-DB-CONTRACT C); same signing key only -->
+        <provider
+            android:name=".LinkProvider"
+            android:authorities="${applicationId}.link"
+            android:exported="true"
+            android:readPermission="at.stoicranger.permission.LINK"
+            android:writePermission="at.stoicranger.permission.LINK" />
     </application>
 </manifest>

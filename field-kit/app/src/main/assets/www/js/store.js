@@ -4,7 +4,8 @@
    db.json = { app: "sr-field-kit", format: 1, created, updated, data: { <key>: <value>, … } }
    Keys used by 0.1.0: sr-breath (seconds per day), sr-custom (custom pattern), sr-pos (last position),
    sr-points (saved points), sr-ball (Drop & wind inputs, metric), settings (units, theme), link (Stoic Ranger
-   link state). Unknown keys are kept as they are, so a newer app's data survives an older one.
+   link state). 0.2.0: sync-base (state of the last Nextcloud sync), sync-state (last sync, message),
+   sr-points-deleted (uids deleted on this phone, so a sync does not bring them back). Unknown keys are kept as they are, so a newer app's data survives an older one.
 
    Standing rule (Manuel): device data is never lost. A file from a newer app version (format > FORMAT) opens
    read-only and is never written; a damaged file falls back to the previous copy, and is backed up first. */
@@ -51,7 +52,9 @@ window.FKStore = (() => {
   const clone = v => v === undefined ? v : JSON.parse(JSON.stringify(v));
   return {
     get(k, d) { return Object.prototype.hasOwnProperty.call(db.data, k) ? clone(db.data[k]) : d; },
-    set(k, v) { if (readOnly) return; db.data[k] = clone(v); if (!timer) timer = setTimeout(write, 300); },
+    set(k, v) { if (readOnly) return; db.data[k] = clone(v); if (!timer) timer = setTimeout(write, 300); try { if (this.onChange) this.onChange(k); } catch (e) { } },
+    /** Set without telling onChange (used by the Nextcloud sync when it applies merged data). */
+    put(k, v) { if (readOnly) return; db.data[k] = clone(v); if (!timer) timer = setTimeout(write, 300); },
     flush() { if (timer) { clearTimeout(timer); write(); } },
     /** "Delete all my data": a backup copy is kept first (backups/), then the data is emptied. */
     clear() { if (readOnly) return false; if (N && N.backupDb) N.backupDb('before-delete-' + stamp() + '.json'); db.data = {}; return write(); },
