@@ -2,10 +2,21 @@
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
-Stoic Ranger app look. Works fully offline: **no INTERNET permission**, no accounts, no tracking.
+Stoic Ranger app look. Works fully offline, no accounts, no tracking. Since 0.2.0 it has the INTERNET permission,
+used only for the optional Nextcloud sync (off by default); the WebView itself stays offline (other web requests are
+blocked).
 
 ## Versions
 
+- **0.2.0** (versionCode 6, 2026-11-07): **optional Nextcloud sync** (remark #2), following
+  `00_docs/SHARED-DB-CONTRACT.md` v1. ⋯ › About › "Where your data is stored": on this phone only (default) or on
+  this phone, synced to my Nextcloud (address, user name, app password, folder). Field Kit writes its own sheets
+  (`FK_Points`, `FK_Breathing`, `FK_DropWind`, `FK_Settings`, hidden `_FK_Data`) into `fieldkit.xlsx`, or into the
+  shared `database.xlsx` when linked with Stoic Ranger, and keeps every other sheet unchanged. Three-way merge,
+  tombstones for points deleted on the phone, backup to `<folder>/backups/` before each upload (newest 30 kept),
+  If-Match upload with retry on 412. App password encrypted with the Android Keystore (`SyncStore.java`).
+  Linked apps share one storage setting through `LinkProvider` (`at.stoicranger.fieldkit.link`: `storage`,
+  `setStorage`). Saved points now carry a permanent uid. SheetJS 0.18.5 (Apache 2.0, `js/SheetJS-LICENSE.txt`).
 - **0.1.4** (versionCode 5, 2026-11-06): **the real cause of the Back problem.** The cloud build turns Java lambdas
   into `LambdaMetafactory` calls (dx instead of d8), which Android does not have, so the app crashed the moment Back
   ran its first lambda, and a crash looks like the app closing. The same crash hit printing, sharing, "keep screen
@@ -68,8 +79,9 @@ version opens read-only; a damaged file is backed up and the previous copy is us
 ## Build and test
 
 ```
-node field-kit/tools/test-app.mjs          # 36 checks in Chromium: routes, solver, MGRS, units, link, data safety
-KEYSTORE=/path/to/debug.keystore VERSION_CODE=5 VERSION_NAME=0.1.4 field-kit/tools/build-debug.sh
+node field-kit/tools/test-app.mjs          # 36 checks
+node field-kit/tools/test-sync.mjs         # 20 checks against a fake Nextcloud (contract v1) in Chromium: routes, solver, MGRS, units, link, data safety
+KEYSTORE=/path/to/debug.keystore VERSION_CODE=6 VERSION_NAME=0.2.0 field-kit/tools/build-debug.sh
 ```
 
 The build needs no Gradle: aapt2, ecj, dalvik-exchange (or dx), apksigner (`apt install aapt apksigner

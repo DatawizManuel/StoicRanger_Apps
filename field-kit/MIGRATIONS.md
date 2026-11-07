@@ -23,6 +23,9 @@ Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.2.0 (format 1, add-only): new keys `sync-base`, `sync-state`, `sr-points-deleted`; saved points get a `uid`
+  on the first sync (or when saved). The storage setting and the encrypted app password are not in db.json
+  (SharedPreferences `fk-sync`, excluded from Android backups). Nothing is converted or removed.
 - 0.1.4 (format 1): no data change.
 - 0.1.3 (format 1): no data change.
 - 0.1.2 (format 1): no data change (new file back-log.txt, diagnostics only).
