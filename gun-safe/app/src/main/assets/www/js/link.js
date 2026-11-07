@@ -30,6 +30,8 @@ window.GSLink = (() => {
     if (!status.installed) { problem = 'not-installed'; return problem; }
     const r = parse(N.srCall('gunsafe', ''));
     if (r.error) { problem = r.error === 'unknown method' || r.error === 'no-provider' ? 'needs-update' : r.error; return problem; }
+    // a pending barrel change is done once SR Shooting reports the barrel the same way
+    if (Array.isArray(D().srPending)) D().srPending = D().srPending.filter(p => !(r.barrels || []).some(b => b.id === p.id && (b.removed || '') === (p.removed || '') && (b.installed || '') === (p.installed || '')));
     D().srCache = { weapons: r.weapons || [], barrels: r.barrels || [], munitions: r.munitions || [], rounds: r.rounds || [], at: new Date().toISOString(), version: status.version || '' };
     GSStore.changed('link');
     return '';
@@ -43,6 +45,11 @@ window.GSLink = (() => {
     if (!N || !N.srCall) return 'Barrel changes on SR Shooting guns need the Android app.';
     const r = parse(N.srCall('putBarrels', JSON.stringify({ barrels })));
     if (r.error) return r.error === 'unknown method' ? 'SR Shooting needs an update before GunSafe can change its barrels. Change the barrel in SR Shooting for now.' : 'SR Shooting did not accept the barrel change (' + r.error + ').';
+    // new barrels get their ids from SR Shooting (ok.ids, same order as sent); keep them until SR Shooting shows them
+    const ids = Array.isArray(r.ids) ? r.ids : [];
+    const pend = barrels.map((b, i) => Object.assign({}, b, { id: b.id || ids[i] || ('B-new-' + Date.now() + '-' + i) }));
+    D().srPending = (Array.isArray(D().srPending) ? D().srPending : []).filter(p => !pend.some(x => x.id === p.id)).concat(pend);
+    GSStore.changed('link');
     refresh();
     return '';
   }

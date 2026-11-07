@@ -7,7 +7,7 @@ window.GSModel = (() => {
   const arr = a => Array.isArray(a) ? a : [];
   const linked = () => D().link && D().link.sr === 'allowed' && !!D().srCache;
   const sr = () => (linked() ? D().srCache : null) || { weapons: [], barrels: [], munitions: [], rounds: [] };
-  const isSr = id => /^[WBM]\d/.test(String(id || ''));
+  const isSr = id => /^[WBM]-?\d/.test(String(id || ''));
 
   function guns() {
     const own = D().guns.map(g => Object.assign({ src: 'own' }, g));
@@ -34,7 +34,11 @@ window.GSModel = (() => {
 
   function barrels(gid) {
     const g = gun(gid);
-    const list = g && g.src === 'sr' ? arr(sr().barrels) : D().barrels;
+    let list = g && g.src === 'sr' ? arr(sr().barrels) : D().barrels;
+    // barrel changes sent to SR Shooting show at once; SR Shooting applies them on its next start
+    if (g && g.src === 'sr' && arr(D().srPending).length) {
+      list = list.map(b => D().srPending.find(p => p.id === b.id) || b).concat(D().srPending.filter(p => !list.some(b => b.id === p.id)));
+    }
     return list.filter(b => b.weaponId === gid);
   }
   const currentBarrel = gid => barrels(gid).filter(b => !b.removed).sort((a, b) => String(b.installed || '').localeCompare(String(a.installed || '')))[0];

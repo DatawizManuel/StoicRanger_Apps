@@ -47,6 +47,7 @@
       const l = st.last || {};
       return `<button type="button" class="linkbar${l.ok === false ? ' off' : ''}" data-go="#settings"><span class="dot"${l.ok === false ? ' style="background:var(--bad)"' : ''}></span><span>${st.busy ? 'Syncing with <b>Nextcloud</b> …' : l.at ? (l.ok ? 'Synced with <b>Nextcloud</b> · ' : '<b>Sync failed</b> · ') + esc(l.ok ? dShow(l.at.slice(0, 10)) + ' ' + l.at.slice(11, 16) + ' UTC' : l.msg) : 'Nextcloud is set up · not synced yet'}</span></button>`;
     }
+    if (st.setting.mode === 'nextcloud' && !st.setting.pwSet) return '<button type="button" class="linkbar off" data-go="#settings"><span class="dot" style="background:var(--bad)"></span><span><b>Nextcloud</b> is chosen' + (M.linked() ? ' (set in SR Shooting)' : '') + ': enter your app password once in Settings to sync.</span></button>';
     return '<button type="button" class="linkbar off" data-go="#settings"><span class="dot"></span><span>Stored <b>on this phone</b> only.</span></button>';
   }
   function linkBox() {
@@ -317,7 +318,7 @@
       h += `<label class="field span2"><span>Nextcloud address</span><input id="ncUrl" inputmode="url" autocapitalize="off" placeholder="https://cloud.example.com" value="${esc(s.url)}"></label>
         <label class="field"><span>User name</span><input id="ncUser" autocapitalize="off" autocomplete="username" value="${esc(s.user)}"></label>
         <label class="field"><span>App password</span><input id="ncPw" type="password" autocomplete="current-password" placeholder="${s.pwSet ? '•••••• (saved)' : 'xxxxx-xxxxx-…'}"></label>
-        <p class="sub span2" style="grid-column:span 2;margin:0">Make an app password in Nextcloud under Settings › Security › Devices &amp; sessions. It is kept encrypted on this phone only and is used only to log in to your Nextcloud.</p>
+        <p class="sub span2" style="grid-column:span 2;margin:0">Make an app password in Nextcloud under Settings › Security › Devices &amp; sessions. It is kept encrypted on this phone only and is used only to log in to your Nextcloud.${M.linked() && !s.pwSet ? ' Each linked app asks for it once; the apps never pass it on.' : ''}</p>
         <label class="field span2"><span>Folder on Nextcloud</span><input id="ncFolder" value="${esc(s.folder || '/Stoic Ranger/')}"></label>
         <div class="box span2" style="grid-column:span 2;margin:0">File: <b>${esc((s.folder || '/Stoic Ranger/') + st.file)}</b>${M.linked() ? '<br>Shared with SR Shooting, so both apps use this file.' : ''}<br>${st.last && st.last.at ? 'Last sync: <b>' + esc(dShow(st.last.at.slice(0, 10)) + ' ' + st.last.at.slice(11, 16)) + ' UTC</b> · ' + esc(st.last.msg) : 'Not synced yet.'}<br>Syncs when the app opens, after each change and with Sync now.</div>
         ${msg ? `<p class="err" style="color:${msg.ok ? 'var(--ok)' : 'var(--bad)'}">${esc(msg.t)}</p>` : ''}
@@ -461,7 +462,7 @@
         draft.add.forEach(a => { d.components.push({ id: GSStore.nid('components', 'C'), weaponId: gid, type: a.type, name: a.name, fitted: date, removed: '' }); changes.push('Added ' + a.type.toLowerCase() + ': ' + a.name); });
         d.service.push({ id: GSStore.nid('service', 'E'), date, weaponId: gid, kind: 'Service', cleaningDone: draft.cleaningDone, note: draft.note.trim(), changes, seq: GSStore.seq() });
         const cd = draft.cleaningDone; draft = null;
-        save('service', cd ? 'Service saved · count back to 0' : 'Service saved'); GS.done();
+        save('service', (cd ? 'Service saved · count back to 0' : 'Service saved') + (barrelChange && g.src === 'sr' ? ' · SR Shooting takes the barrel at its next start' : '')); GS.done();
       };
     }
     if (v === 'fire' && $('fFire')) {

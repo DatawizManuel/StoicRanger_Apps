@@ -187,7 +187,8 @@ const FAKE = () => {
     srStatus: () => JSON.stringify({ installed: true, version: '1.3.0' }),
     srCall: (m, arg) => {
       if (m === 'gunsafe') return JSON.stringify(sr);
-      if (m === 'putBarrels') { const b = JSON.parse(arg).barrels; mem.srBarrels = b; b.forEach(x => { if (!x.id) x.id = 'B' + (sr.barrels.length + 1); const i = sr.barrels.findIndex(y => y.id === x.id); if (i >= 0) sr.barrels[i] = x; else sr.barrels.push(x); }); return '{"ok":true}'; }
+      // like SR Shooting 1.3.0: new ids B-nnn come back at once, the change itself is applied at SR's next start
+      if (m === 'putBarrels') { const b = JSON.parse(arg).barrels; mem.srBarrels = b; const ids = b.map((x, i) => x.id || 'B-' + String(100 + i)); mem.srApply = () => b.forEach((x, i) => { x = Object.assign({}, x, { id: ids[i] }); const j = sr.barrels.findIndex(y => y.id === x.id); if (j >= 0) sr.barrels[j] = x; else sr.barrels.push(x); }); return JSON.stringify({ ok: true, ids }); }
       return '{"error":"unknown method"}';
     },
     storageGet: () => pub(mem.storage),
@@ -235,6 +236,8 @@ const FAKE = () => {
   const pb = await page.evaluate(() => ({ sent: __mem.srBarrels, cur: GSModel.currentBarrel('W1').name, since: GSModel.gunFig('W1').since }));
   ok(pb.sent && pb.sent.length === 2 && pb.sent[1].removed && pb.cur === 'Bartlein 26"', 'barrel switch on SR gun via putBarrels ' + JSON.stringify(pb.sent));
   ok(pb.since === 0, 'service with cleaning done on SR gun resets since');
+  const ap = await page.evaluate(() => { __mem.srApply(); GSLink.refresh(); return { pend: GSStore.data.srPending.length, cur: GSModel.currentBarrel('W1').id, n: GSModel.barrels('W1').length }; });
+  ok(ap.pend === 0 && ap.cur === 'B-100' && ap.n === 2, 'pending barrel change ends once SR Shooting applied it ' + JSON.stringify(ap));
 
   // Nextcloud: set up, first sync uploads
   await page.evaluate(() => GS.go('#settings'));
