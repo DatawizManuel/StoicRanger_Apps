@@ -6,7 +6,7 @@
   const store = window.FKStore, N = window.FKNative || null;
   const root = document.documentElement;
   const parse = t => { try { return JSON.parse(t); } catch(e){ return null; } };
-  const TITLES = { home: "SR Field Kit", breathe: "Breathe", nav: "Navigate", cards: "Field cards", shoot: "Shooting helpers", print: "Printables" };
+  const TITLES = { home: "SR Field Kit", breathe: "Breathe", nav: "Navigate", cards: "Field cards", shoot: "Shooting helpers", print: "Printables", night: "Night & signal" };
   const settings = Object.assign({ units: "metric", theme: "" }, store.get("settings", {}));
   const saveSettings = () => store.set("settings", settings);
 

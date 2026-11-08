@@ -25,6 +25,8 @@
   FK.back = function () {
     try {
       var about = byId('about'), ws = byId('wsView'), pv = byId('preview');
+      var ov = document.querySelector('.fkover:not([hidden])');   // red screen, signal flash, map full screen
+      if (ov) { if (ov.fkClose) ov.fkClose(); else ov.hidden = true; return true; }
       if (about && !about.hidden) { var ac = byId('aboutClose'); if (ac) ac.click(); else about.hidden = true; return true; }
       if (ws && !ws.hidden) { ws.hidden = true; return true; }
       if (pv && pv.classList.contains('open')) { var vc = byId('vClose'); if (vc) vc.click(); else pv.classList.remove('open', 'showb'); return true; }

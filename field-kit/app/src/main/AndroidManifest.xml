@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
-     Internet only for the optional Nextcloud sync (0.2.0, off by default): every tool works offline, and nothing
-     leaves the phone unless the user turns on sync to their own Nextcloud.
+     Internet only for the user's own Nextcloud (0.2.0 sync, 0.3.0 map and route downloads; off until set up): every
+     tool works offline, and nothing leaves the phone unless the user sets up their Nextcloud. Network state: for
+     "download maps on Wi-Fi only". The flashlight (signal light) needs no camera permission.
      Location only when the user taps "Use my position". The Stoic Ranger signature permission is declared in every
      Stoic Ranger app (same signing key), so the install order does not matter; Field Kit uses it to read guns and
      ammunition from Stoic Ranger, read-only and only after the user allowed it. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <permission android:name="at.stoicranger.permission.LINK" android:protectionLevel="signature"

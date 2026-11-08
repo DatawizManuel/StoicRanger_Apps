@@ -48,20 +48,23 @@ import java.nio.charset.StandardCharsets;
  * Single-activity shell (same design as the other Stoic Ranger apps). The whole UI is the offline web app in
  * assets/www, served from https://appassets.androidplatform.net/ so it gets a normal secure origin. Native code
  * only does what a web page can't: durable storage (db.json), location on request, keeping the screen on,
- * printing, saving and sharing files, and reading guns and ammunition from Stoic Ranger (read-only, after consent).
- * The app has no internet permission.
+ * printing, saving and sharing files, reading guns and ammunition from Stoic Ranger (read-only, after consent),
+ * the optional Nextcloud sync, offline map files (files/maps), sensors, flashlight and screen brightness.
+ * The page itself never goes online: only the Java side talks to the user's own Nextcloud, when the user set it up.
  */
 public class MainActivity extends Activity {
     static final String ORIGIN = "https://appassets.androidplatform.net";
     /** Stoic Ranger (one app since 1.0; package kept from SR_Database) and its link provider. */
     static final String SR_PACKAGE = "at.rangebook.app";
     static final String SR_LINK = "content://at.rangebook.app.link";
-    private static final int REQ_CREATE = 12, REQ_LOCATION = 14;
+    private static final int REQ_CREATE = 12, REQ_LOCATION = 14, REQ_OPEN = 15;
 
     private WebView web;
     private String pendingCb;
     private byte[] pendingBytes;
     private WebView printView;   // kept alive until the print job has been laid out
+    private String openCb, openKind;
+    private volatile boolean mapCancel, torchOn;
     private String geoOrigin;
     private GeolocationPermissions.Callback geoCallback;
 
@@ -127,6 +130,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         web.evaluateJavascript("window.FK && FK.pause && FK.pause()", null);
+        if (torchOn) { Sensors.torch(this, false); torchOn = false; }   // the signal light never stays on behind the app
     }
 
     /** The WebView's prefers-color-scheme does not follow the phone reliably: tell the page directly. */
@@ -189,6 +193,42 @@ public class MainActivity extends Activity {
                 callback(cb, true, displayName(data.getData()));
             } catch (Exception e) { callback(cb, false, e.getMessage()); }
         }
+        if (req == REQ_OPEN) {
+            final String cb = openCb, kind = openKind;
+            openCb = null; openKind = null;
+            if (res != RESULT_OK || data == null || data.getData() == null) { callback(cb, false, "cancelled"); return; }
+            final Uri u = data.getData();
+            new Thread(new Runnable() { @Override public void run() { readPicked(u, kind, cb); } }).start();
+        }
+    }
+
+    /** A file the user picked: a GPX route comes back as text; a map file is copied into files/maps. */
+    private void readPicked(Uri u, String kind, String cb) {
+        String name = displayName(u);
+        try (InputStream is = getContentResolver().openInputStream(u)) {
+            if ("gpx".equals(kind)) {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] buf = new byte[65536]; int n; long tot = 0;
+                while ((n = is.read(buf)) > 0) { tot += n; if (tot > 5L * 1024 * 1024) throw new IOException("The file is larger than 5 MB."); bo.write(buf, 0, n); }
+                JSONObject o = new JSONObject().put("name", name == null ? "Route" : name).put("text", new String(bo.toByteArray(), StandardCharsets.UTF_8));
+                callback(cb, true, o.toString());
+                return;
+            }
+            String safe = name == null ? "" : name.replaceAll("[^A-Za-z0-9._ ()-]+", "_");
+            if (!MapFiles.safe(safe)) throw new IOException("Pick a map file ending in .pmtiles.");
+            File target = MapFiles.file(this, safe), part = new File(MapFiles.dir(this), safe + ".part");
+            byte[] head = new byte[7];
+            try (OutputStream os = new FileOutputStream(part)) {
+                byte[] buf = new byte[131072]; int n; boolean first = true;
+                while ((n = is.read(buf)) > 0) {
+                    if (first) { System.arraycopy(buf, 0, head, 0, Math.min(7, n)); first = false; }
+                    os.write(buf, 0, n);
+                }
+            }
+            if (!"PMTiles".equals(new String(head, StandardCharsets.US_ASCII))) { part.delete(); throw new IOException("This is not a PMTiles map file."); }
+            if (!MapFiles.finish(part, target)) { part.delete(); throw new IOException("Could not store the map file."); }
+            callback(cb, true, safe);
+        } catch (Exception e) { callback(cb, false, e.getMessage()); }
     }
 
     private String displayName(Uri u) {
@@ -227,6 +267,20 @@ public class MainActivity extends Activity {
                 return null;
             }
             String path = u.getPath();
+            if (path != null && path.startsWith("/maps/")) {     // a piece of an offline map file: /maps/<name>?o=<offset>&l=<length>
+                try {
+                    String name = path.substring(6);
+                    long o = Long.parseLong(u.getQueryParameter("o"));
+                    int l = Integer.parseInt(u.getQueryParameter("l"));
+                    WebResourceResponse resp = new WebResourceResponse("application/octet-stream", null, MapFiles.slice(MainActivity.this, name, o, l));
+                    java.util.Map<String, String> h = new java.util.HashMap<>();
+                    h.put("Cache-Control", "no-store");
+                    resp.setResponseHeaders(h);
+                    return resp;
+                } catch (Exception e) {
+                    return new WebResourceResponse("text/plain", "utf-8", 404, "Not found", null, null);
+                }
+            }
             if (path == null || !path.startsWith("/www/") || path.contains("..")) return null;
             try {
                 InputStream is = getAssets().open(path.substring(1));
@@ -240,7 +294,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        /** Links leave the app (the website in the About screen opens in the browser; this app has no internet itself).
+        /** Links leave the app (the website in the About screen opens in the browser; the page never loads web content).
          *  (No @Override: the cloud build compiles against an API 23 android.jar that lacks this API 24 method.) */
         public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
             Uri u = r.getUrl();
@@ -261,6 +315,7 @@ public class MainActivity extends Activity {
         if (p.endsWith(".woff2")) return "font/woff2";
         if (p.endsWith(".txt") || p.endsWith(".md")) return "text/plain";
         if (p.endsWith(".pdf")) return "application/pdf";
+        if (p.endsWith(".webp")) return "image/webp";
         return "application/octet-stream";
     }
 
@@ -477,6 +532,109 @@ public class MainActivity extends Activity {
                 String pw = o.has("password") ? o.optString("password", "") : null;
                 return SyncStore.set(MainActivity.this, o, pw, o.optString("changed", ""));
             } catch (Exception e) { return false; }
+        }
+
+        // ---------- offline maps (remark #7) ----------
+        @JavascriptInterface
+        public String mapList() { return MapFiles.list(MainActivity.this); }
+
+        /** Fallback reader (the page normally fetches /maps/<name>?o=&l=): base64 of a piece of a map file. */
+        @JavascriptInterface
+        public String mapRead(String name, double offset, int length) {
+            try { return Base64.encodeToString(MapFiles.read(MainActivity.this, name, (long) offset, length), Base64.NO_WRAP); }
+            catch (Exception e) { return null; }
+        }
+
+        @JavascriptInterface
+        public boolean mapDelete(String name) { return MapFiles.delete(MainActivity.this, name); }
+
+        @JavascriptInterface
+        public double mapFree() { return (double) MapFiles.free(MainActivity.this); }
+
+        /** {online, wifi}: for the "download on Wi-Fi only" setting. */
+        @JavascriptInterface
+        public String netState() {
+            try {
+                android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+                boolean online = nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET);
+                boolean wifi = nc != null && (nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET));
+                return new JSONObject().put("online", online).put("wifi", wifi).toString();
+            } catch (Exception e) { return "{\"online\":true,\"wifi\":false}"; }
+        }
+
+        /** Downloads one map file from the saved Nextcloud (path relative to the user's files) into files/maps/<name>:
+         *  .part first, checksum checked, then renamed; an older copy is replaced only when the new one is complete.
+         *  Progress and the result go to FKMapProgress(id, done, total, state, msg); state = run | done | error. */
+        @JavascriptInterface
+        public void mapDownload(final String path, final String name, final String sha256, final double size, final String id) {
+            mapCancel = false;
+            new Thread(new Runnable() { @Override public void run() {
+                String err = null;
+                File part = null;
+                try {
+                    if (path == null || path.contains("..")) throw new IOException("bad path");
+                    File target = MapFiles.file(MainActivity.this, name);
+                    if (size > 0 && MapFiles.free(MainActivity.this) < size + 200L * 1024 * 1024)
+                        throw new IOException("Not enough free space on the phone (" + Math.round(size / 1e6) + " MB needed).");
+                    part = new File(MapFiles.dir(MainActivity.this), name + ".part");
+                    JSONObject r = NcClient.download(SyncStore.get(MainActivity.this, true), path, part, new NcClient.Progress() {
+                        @Override public boolean step(long done, long total) { progress(id, done, total, "run", ""); return !mapCancel; }
+                    });
+                    int st = r.optInt("status");
+                    if (st != 200) throw new IOException(r.has("error") ? r.optString("error") : st == 404 ? "The file is not on Nextcloud (any more)." : st == 401 ? "Nextcloud refused the login. Check the app password." : "Nextcloud answered " + st + ".");
+                    if (r.has("error")) throw new IOException(r.optString("error"));
+                    if (sha256 != null && !sha256.isEmpty() && !sha256.equalsIgnoreCase(r.optString("sha256")))
+                        throw new IOException("The downloaded file is damaged (checksum differs). Nothing was replaced.");
+                    if (!MapFiles.finish(part, target)) throw new IOException("Could not store the map file.");
+                    part = null;
+                } catch (Exception e) { err = e.getMessage() == null ? "failed" : e.getMessage(); }
+                if (part != null) part.delete();
+                progress(id, 0, 0, err == null ? "done" : "error", err == null ? "" : err);
+            } }).start();
+        }
+
+        @JavascriptInterface
+        public void mapCancel() { mapCancel = true; }
+
+        private void progress(String id, long done, long total, String state, String msg) {
+            final String js = "window.FKMapProgress && FKMapProgress(" + JSONObject.quote(id) + "," + done + "," + total + "," + JSONObject.quote(state) + "," + JSONObject.quote(msg) + ")";
+            runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+        }
+
+        /** Let the user pick a file: kind "gpx" (route, comes back as {name, text}) or "map" (copied into files/maps). */
+        @JavascriptInterface
+        public void pickFile(final String kind, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                openCb = cb; openKind = kind;
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("*/*");
+                try { startActivityForResult(i, REQ_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage()); }
+            }});
+        }
+
+        // ---------- sensors, flashlight, brightness (remarks #4 and #6) ----------
+        /** {hasPressure, hasTemp, pressure (hPa), temp (°C)} to FKNativeCallback(cb, {ok, msg}). Only when the user taps. */
+        @JavascriptInterface
+        public void sensors(final String cb) {
+            Sensors.read(MainActivity.this, new Sensors.Done() { @Override public void done(JSONObject r) { callback(cb, true, r.toString()); } });
+        }
+
+        @JavascriptInterface
+        public boolean hasTorch() { return Sensors.hasTorch(MainActivity.this); }
+
+        @JavascriptInterface
+        public boolean torch(boolean on) { torchOn = on; return Sensors.torch(MainActivity.this, on); }
+
+        /** Screen brightness for this app only: 0.01 … 1, or below 0 to follow the phone again. */
+        @JavascriptInterface
+        public void setBrightness(final double f) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.screenBrightness = f < 0 ? WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE : (float) Math.max(0.01, Math.min(1, f));
+                getWindow().setAttributes(lp);
+            }});
         }
 
         /** Let the user pick where to save (Downloads, Drive, …). */

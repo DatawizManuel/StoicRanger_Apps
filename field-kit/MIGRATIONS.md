@@ -23,6 +23,13 @@ Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.3.0 (format 1, add-only): new keys `sr-routes` (`[{id, name, wps:[{lat, lon, name}], ticked, file, updated}]`),
+  `sr-route-cur`, `sr-route-auto`, `sr-maps` (maps on the phone: `[{id, name, date, bbox, base:{file, bytes,
+  sha256, date}, terrain:{…}}]`), `sr-maps-nc` (last Nextcloud catalog), `sr-maps-cfg` (`{folder, wifi}`),
+  `sr-map-view`, `sr-decl` (declination), `sr-level` (level zero offsets), `sr-night` (red screen, Morse settings).
+  The map files themselves are in `files/maps/` (not in db.json, not in the Android backup). Nothing is converted
+  or removed; 0.2.0 ignores and keeps the new keys.
+
 - 0.2.0 (format 1, add-only): new keys `sync-base`, `sync-state`, `sr-points-deleted`; saved points get a `uid`
   on the first sync (or when saved). The storage setting and the encrypted app password are not in db.json
   (SharedPreferences `fk-sync`, excluded from Android backups). Nothing is converted or removed.

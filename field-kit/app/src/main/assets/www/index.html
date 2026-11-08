@@ -7,6 +7,8 @@
 <title>SR Field Kit</title>
 <link rel="stylesheet" href="css/kit.css">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="map/lib/maplibre-gl.css">
+<link rel="stylesheet" href="css/map.css">
 </head>
 <body>
 <div class="phone" id="app">
@@ -23,16 +25,18 @@
     <a class="choice srpart sh" href="#shoot"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="12"/><path d="M17 2v9M17 23v9M2 17h9M23 17h9"/></svg></div><div><h3>Shooting helpers</h3>
       <p>Drop and wind table, MIL/MOA, scope clicks, range, angle, par timer for dry fire</p><p class="mono" id="hSh"></p></div></a>
     <a class="choice srpart nv" href="#nav"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14"/><path d="M17 6l4 11-4 11-4-11z"/><path d="M17 6l4 11h-8z" fill="currentColor"/></svg></div><div><h3>Navigate</h3>
-      <p>Your position as MGRS, bearings to a point, sun and moon</p><p class="mono" id="hNv"></p></div></a>
+      <p>Your position as MGRS, offline map, routes, bearings, coordinate converter, sun and moon</p><p class="mono" id="hNv"></p></div></a>
     <a class="choice srpart br" href="#breathe"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="13"/><circle cx="17" cy="17" r="6"/><circle cx="17" cy="4" r="2" fill="currentColor"/></svg></div><div><h3>Breathe</h3>
       <p>Six breathing patterns with sound cues, minutes and day streak</p><p class="mono" id="hBr"></p></div></a>
     <a class="choice srpart fc" href="#cards"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="6" y="4" width="22" height="27"/><path d="M10 10h14M10 15h14M10 20h9"/></svg></div><div><h3>Field cards</h3>
       <p>Business-card references: survival, medical, comms, shooting, stoic</p><p class="mono" id="hFc"></p></div></a>
     <a class="choice srpart pr" href="#print"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M9 12V4h16v8"/><rect x="4" y="12" width="26" height="12"/><path d="M9 20h16v10H9z"/><path d="M12 24h10M12 27h7"/></svg></div><div><h3>Printables</h3>
       <p>Range cards, training datasheet, wind cheat sheet: print or save as PDF</p><p class="mono">3 sheets · A4, A5, A6</p></div></a>
+    <a class="choice srpart ng" href="#night"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M22 5a12 12 0 1 0 7 17A10 10 0 0 1 22 5z"/><path d="M5 30l5-5M9 31l2-2"/></svg></div><div><h3>Night &amp; signal</h3>
+      <p>Dim red screen for night vision, red night mode, flashlight with SOS and Morse</p><p class="mono" id="hNg"></p></div></a>
     <div class="choice srpart soon"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 8v18M8 17h18"/></svg></div><div><h3>More to come</h3>
       <p>Room for the next tools. Each new tool gets its own row here.</p></div></div>
-    <p class="note">Everything stays on this phone. Nothing is sent anywhere.</p>
+    <p class="note">Everything stays on this phone. Nothing is sent anywhere unless you set up your own Nextcloud (⋯).</p>
   </section>
   <!-- BREATHE -->
   <section id="v-breathe" hidden>
@@ -91,6 +95,7 @@
       <button type="button" data-tab="range" aria-pressed="false">Range</button>
       <button type="button" data-tab="angle" aria-pressed="false">Angle</button>
       <button type="button" data-tab="timer" aria-pressed="false">Par timer</button>
+      <button type="button" data-tab="level" aria-pressed="false">Level</button>
     </div>
 
     <div class="panel" data-pane="ball">
@@ -111,6 +116,7 @@
         <div class="field"><label for="bStep">Step (m)</label><select id="bStep"><option>25</option><option selected>50</option><option>100</option></select></div>
         <div class="field"><label for="bMove">Target speed (km/h)</label><input id="bMove" type="number" step="0.5" value="5"></div>
       </div>
+      <div class="sensbar"><button type="button" class="button ghost" id="bSens">Use sensors</button><span class="note" id="bSensMsg">Fills altitude (air pressure) and temperature from the phone. Typed values stay until you tap.</span></div>
       <div class="results" id="bSum"></div>
       <div class="subhead"><h3 class="m0">Come-ups</h3><span class="note">Highlighted: zero distance. <span class="warn">Bronze rows: bullet below 1.2× speed of sound, less predictable.</span></span></div>
       <div class="tablewrap"><table class="data" id="bTable"></table></div>
@@ -184,16 +190,21 @@
         </div>
       </div>
     </div>
+    <div class="panel" data-pane="level" hidden></div>
   </section>
 
   <!-- NAVIGATE -->
   <section id="v-nav" hidden>
         <h2>Navigate</h2>
-    <p class="lede">Your position as a grid reference, bearings to a point, and the light for any day. Your position is worked out on this device and never leaves it.</p>
+    <p class="lede">Your position as a grid reference, an offline map with routes, bearings, coordinates and the light for any day. Your position is worked out on this device and never leaves it.</p>
     <div class="seg" role="group" aria-label="Tool">
       <button type="button" data-ntab="pos" aria-pressed="true">Position &amp; grid</button>
+      <button type="button" data-ntab="map" aria-pressed="false">Map &amp; routes</button>
+      <button type="button" data-ntab="conv" aria-pressed="false">Convert</button>
       <button type="button" data-ntab="sun" aria-pressed="false">Sun &amp; moon</button>
     </div>
+    <div class="panel" data-npane="map" hidden></div>
+    <div class="panel" data-npane="conv" hidden></div>
 
     <div class="panel" data-npane="pos">
       <div class="posbar">
@@ -234,6 +245,9 @@
     </div>
   </section>
 
+
+  <!-- NIGHT & SIGNAL -->
+  <section id="v-night" hidden></section>
 
   <!-- FIELD CARDS -->
   <section id="v-cards" hidden>
@@ -289,8 +303,8 @@
   <div class="aboutscr" id="about" hidden>
     <div class="viewbar"><button type="button" class="vback" id="aboutClose">‹ Back</button></div>
     <h2>About and settings</h2>
-    <p>SR Field Kit: shooting helpers, navigation, breathing, field cards and printables for the Stoic Ranger. Works fully offline. The app has no internet permission, no accounts and no tracking. Everything you enter stays on this phone.</p>
-    <dl class="kv"><dt>Version</dt><dd id="aboutVer">0.1.0</dd><dt>Permissions</dt><dd>Location, only when you tap "Use my position"</dd><dt>Fonts</dt><dd>Barlow and JetBrains Mono, SIL Open Font License 1.1</dd><dt>Data file</dt><dd id="aboutData">db.json on this phone</dd><dt>Linked apps</dt><dd id="aboutLink">None</dd><dt>Website</dt><dd>stoic-ranger.com</dd></dl>
+    <p>SR Field Kit: shooting helpers, navigation, breathing, field cards and printables for the Stoic Ranger. Works fully offline. No accounts and no tracking. Everything you enter stays on this phone; the app only goes online to reach your own Nextcloud, and only once you set it up (data sync, maps and routes).</p>
+    <dl class="kv"><dt>Version</dt><dd id="aboutVer">0.1.0</dd><dt>Permissions</dt><dd>Location, only when you tap "Use my position" or follow GPS on the map. Internet, only for your own Nextcloud. Flashlight, only for the signal light.</dd><dt>Map data</dt><dd><a href="https://openstreetmap.org/copyright">© OpenStreetMap contributors</a> (ODbL), basemap layout Protomaps; terrain Mapterhorn (Copernicus GLO-30 © DLR/Airbus/ESA, BEV, swisstopo and other open data)</dd><dt>Fonts</dt><dd>Barlow and JetBrains Mono, SIL Open Font License 1.1</dd><dt>Data file</dt><dd id="aboutData">db.json on this phone</dd><dt>Linked apps</dt><dd id="aboutLink">None</dd><dt>Website</dt><dd>stoic-ranger.com</dd></dl>
     <h3>Settings</h3>
     <div class="setrow2"><span>Look</span><div class="seg" role="group" aria-label="Look"><button type="button" data-th="" aria-pressed="true">Phone</button><button type="button" data-th="light" aria-pressed="false">Light</button><button type="button" data-th="dark" aria-pressed="false">Dark</button></div></div>
     <div class="setunits"><span>Units</span><div class="seg" role="group" aria-label="Units"><button type="button" data-u="metric" aria-pressed="true">Metric</button><button type="button" data-u="imp" aria-pressed="false">Imperial</button></div></div>
@@ -332,5 +346,9 @@
 <script src="js/xlsx.mini.min.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/app.js"></script>
+<script src="map/mgrs.js"></script>
+<script src="map/gpx.js"></script>
+<script src="js/nav3.js"></script>
+<script src="js/tools3.js"></script>
 </body>
 </html>

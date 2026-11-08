@@ -1,12 +1,45 @@
-# SR Field Kit (Android) — 0.2.0
+# SR Field Kit (Android) — 0.3.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
 Stoic Ranger app look. Works fully offline, no accounts, no tracking. Since 0.2.0 it has the INTERNET permission,
-used only for the optional Nextcloud sync (off by default); the WebView itself stays offline (other web requests are
-blocked).
+used only for the user's own Nextcloud (optional sync; since 0.3.0 also maps and routes), off until set up; the
+WebView itself stays offline (other web requests are blocked, only the Java side talks to the Nextcloud).
 
 ## Versions
+
+- **0.3.0** (versionCode 7, 2026-11-08): remarks #3 to #7 and #9.
+  - **Navigate › Map & routes** (#7, #9): offline map (OpenStreetMap vector map by Protomaps, Mapterhorn terrain for
+    hill shading and contour lines drawn on the phone; libraries in `www/map/lib`, shared with the Stoic Ranger Map
+    Manager, see `map/lib/THIRD-PARTY-LICENSES.txt`). The map libraries load only when the Map tab opens.
+    *Maps*: reads `<map folder>/maps.json` (format FK-1, default folder `/StoicRanger_Maps/`) from the Nextcloud set
+    up under ⋯ › Where your data is stored, downloads map + terrain file per region into `files/maps/` (`.part`
+    first, SHA-256 checked, old copy replaced only when the new one is complete, free space checked), Wi-Fi-only
+    option (on by default), Update when Nextcloud has a newer build, Delete, Import a `.pmtiles` file by hand.
+    *Route*: waypoints by tapping the map (Edit), by coordinates, from saved points or my position; rename,
+    reorder, delete, reverse; legs with distance and magnetic bearing (degrees + NATO mils); **tick off** passed
+    waypoints: bearing and distance run from the last ticked waypoint to the next, Undo, ticks kept in db.json;
+    Follow GPS shows distance/bearing from you and can tick off automatically within 25 m (accuracy ≤ 30 m).
+    GPX 1.1 import (file; tracks thinned to 50 points) and export, load from / save to `<map folder>/Routes/`.
+    *Position from bearings*: two landmarks (tap on map or saved point) + compass bearings (degrees or mils
+    magnetic, or degrees true) → your position, with angle of cut; use as my position or save as point.
+    Declination field on the map is the same as in Position & grid (now kept in db.json).
+  - **Navigate › Convert** (#3): MGRS (1 m, 8- and 6-figure), UTM, decimal degrees, degrees-minutes(-seconds) both
+    ways; save as point, use as target, show on map, set as my position (`map/mgrs.js`, checked against pyproj).
+  - **Drop & wind › Use sensors** (#4): barometer → pressure altitude (ICAO standard atmosphere, what the solver's
+    air density needs), GPS altitude if there is no barometer; ambient temperature only where the phone has the
+    sensor. Typed values are never changed without the tap.
+  - **Shooting helpers › Level** (#5): flat (bubble, both axes) or upright (cant), set zero / clear zero.
+  - **Night & signal** (#6, new home tile): dim red full screen with its own brightness (Back closes it and gives
+    the brightness back to the phone), red night mode for the whole app, flashlight on/off, SOS, Morse message
+    (4 to 12 words/min, repeat), strobe; screen white/red as light where there is no flashlight. The flashlight is
+    switched off whenever the app goes to the background.
+  - Android: `MapFiles.java`, `Sensors.java`, `NcClient.download` (streaming + SHA-256); bridge `mapList`,
+    `mapRead`, `mapDelete`, `mapFree`, `mapDownload`/`mapCancel` (progress to `FKMapProgress`), `netState`,
+    `pickFile`, `sensors`, `hasTorch`, `torch`, `setBrightness`; map files are read by the page at
+    `/maps/<name>?o=&l=` (served by `shouldInterceptRequest`). New permission `ACCESS_NETWORK_STATE`. Still no
+    lambdas (build check). Map files are not in the Android backup.
+  - Not tested on a real phone or a real Nextcloud yet; the map tests use small made-up test maps.
 
 - **0.2.0** (versionCode 6, 2026-11-07): **optional Nextcloud sync** (remark #2), following
   `00_docs/SHARED-DB-CONTRACT.md` v1. ⋯ › About › "Where your data is stored": on this phone only (default) or on

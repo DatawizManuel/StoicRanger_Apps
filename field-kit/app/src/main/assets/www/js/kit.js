@@ -8,7 +8,7 @@
   const fmtN = (x,d=0) => isFinite(x) ? (Math.abs(x) < 0.5*Math.pow(10,-d) ? 0 : x).toLocaleString("en",{maximumFractionDigits:d,minimumFractionDigits:d}) : "–";
 
   // ---------- routing ----------
-  const views = ["home","breathe","shoot","nav","cards","print"];
+  const views = ["home","breathe","shoot","nav","cards","print","night"];
   let onShow = {};
   function route(){
     let h = (location.hash || "#home").slice(1); if (!views.includes(h)) h = "home"; const v = h;
@@ -140,6 +140,7 @@
   document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
     document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-pressed", x===b));
     document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+    window.dispatchEvent(new CustomEvent("fk-tab", { detail: b.dataset.tab }));
   });
   const MOA_CM_100 = 2.90888;
   const n = id => parseFloat($(id).value);
@@ -820,6 +821,7 @@ window.__solve = solve;
       return `<tr><td>${esc(p.name)}</td><td>${fmtMGRS(toMGRS(p.lat, p.lon))}</td><td>${b ? FKUnits.dist(b.dist) + " · " + mils(b.brg - (+$("decl").value || 0)) + " mil" : "–"}</td><td><button class="x" type="button" data-del="${i}" aria-label="Delete ${esc(p.name)}">×</button></td></tr>`; }).join("") + "</tbody>"
       : `<tbody><tr><td class="empty">No saved points yet.</td></tr></tbody>`;
     $("tgtPick").innerHTML = `<option value="">–</option>` + points.map((p,i) => `<option value="${i+1}">${esc(p.name)}</option>`).join("");
+    if (window.__nav && window.__nav.onPoints) window.__nav.onPoints();
   }
   $("gpsBtn").onclick = () => locate($("gpsBtn"));
   window.addEventListener("fk-units", () => { renderPos(); renderPts(); });
@@ -832,7 +834,15 @@ window.__solve = solve;
   document.querySelectorAll("[data-ntab]").forEach(b => b.onclick = () => {
     document.querySelectorAll("[data-ntab]").forEach(x => x.setAttribute("aria-pressed", x === b));
     document.querySelectorAll("[data-npane]").forEach(p => p.hidden = p.dataset.npane !== b.dataset.ntab);
+    window.dispatchEvent(new CustomEvent("fk-ntab", { detail: b.dataset.ntab }));
   });
+  /** For the map, routes and converter (js/nav3.js): the same position, points and declination as this page. */
+  window.__nav = { here: () => here, points, setHere: (p, src) => { setHere(p, src); renderPts(); },
+    addPoint: (name, lat, lon) => { points.push({ uid: "p-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), name: name || "Point " + (points.length+1), lat, lon }); store.set("sr-points", points); renderPts(); },
+    setTarget: (lat, lon) => { $("tgtIn").value = lat.toFixed(6) + ", " + lon.toFixed(6); $("tgtPick").value = ""; renderBrg(); },
+    decl: () => +$("decl").value || 0, onPoints: null };
+  { const d = store.get("sr-decl", null); if (d != null && d !== "") $("decl").value = d; }
+  $("decl").addEventListener("change", () => store.set("sr-decl", $("decl").value));
 
   function renderSun(){
     const dv = $("sunDate").value, base = dv ? new Date(dv + "T12:00:00") : new Date();

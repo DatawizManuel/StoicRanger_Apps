@@ -1,0 +1,30 @@
+/* Regions offered in "Add a region": [west, south, east, north] in degrees. Extracts take every tile that touches the
+   box, so neighbouring regions join without gaps. */
+'use strict';
+module.exports = [
+  { id: "austria", name: "Austria", group: "Countries", bbox: [9.53, 46.37, 17.17, 49.02] },
+  { id: "switzerland", name: "Switzerland", group: "Countries", bbox: [5.95, 45.81, 10.50, 47.81] },
+  { id: "liechtenstein", name: "Liechtenstein", group: "Countries", bbox: [9.47, 47.04, 9.64, 47.28] },
+  { id: "slovenia", name: "Slovenia", group: "Countries", bbox: [13.37, 45.42, 16.61, 46.88] },
+  { id: "czechia", name: "Czech Republic", group: "Countries", bbox: [12.09, 48.55, 18.87, 51.06] },
+  { id: "slovakia", name: "Slovakia", group: "Countries", bbox: [16.83, 47.73, 22.57, 49.61] },
+  { id: "hungary", name: "Hungary", group: "Countries", bbox: [16.11, 45.74, 22.90, 48.59] },
+  { id: "croatia", name: "Croatia", group: "Countries", bbox: [13.49, 42.39, 19.45, 46.56] },
+  { id: "germany", name: "Germany (whole)", group: "Countries", bbox: [5.86, 47.27, 15.05, 55.06] },
+  { id: "at-vorarlberg", name: "Austria · Vorarlberg", group: "Austrian states", bbox: [9.53, 46.84, 10.24, 47.60] },
+  { id: "at-tirol", name: "Austria · Tyrol (North and East)", group: "Austrian states", bbox: [10.10, 46.65, 12.97, 47.75] },
+  { id: "at-salzburg", name: "Austria · Salzburg", group: "Austrian states", bbox: [12.07, 46.94, 13.99, 48.05] },
+  { id: "at-kaernten", name: "Austria · Carinthia", group: "Austrian states", bbox: [12.65, 46.37, 15.07, 47.13] },
+  { id: "at-steiermark", name: "Austria · Styria", group: "Austrian states", bbox: [13.56, 46.61, 16.17, 47.83] },
+  { id: "at-oberoesterreich", name: "Austria · Upper Austria", group: "Austrian states", bbox: [12.75, 47.46, 14.99, 48.78] },
+  { id: "at-niederoesterreich", name: "Austria · Lower Austria", group: "Austrian states", bbox: [14.45, 47.42, 17.07, 49.02] },
+  { id: "at-wien", name: "Austria · Vienna", group: "Austrian states", bbox: [16.18, 48.11, 16.58, 48.33] },
+  { id: "at-burgenland", name: "Austria · Burgenland", group: "Austrian states", bbox: [16.00, 46.83, 17.17, 48.12] },
+  { id: "de-bayern", name: "Germany · Bavaria", group: "Parts of bigger countries", bbox: [8.97, 47.27, 13.84, 50.57] },
+  { id: "de-bw", name: "Germany · Baden-Württemberg", group: "Parts of bigger countries", bbox: [7.51, 47.53, 10.50, 49.80] },
+  { id: "it-suedtirol", name: "Italy · South Tyrol", group: "Parts of bigger countries", bbox: [10.38, 46.22, 12.48, 47.10] },
+  { id: "it-trentino", name: "Italy · Trentino", group: "Parts of bigger countries", bbox: [10.45, 45.67, 11.97, 46.54] },
+  { id: "it-friuli", name: "Italy · Friuli-Venezia Giulia", group: "Parts of bigger countries", bbox: [12.32, 45.58, 13.92, 46.65] },
+  { id: "it-veneto", name: "Italy · Veneto", group: "Parts of bigger countries", bbox: [10.62, 44.79, 13.10, 46.68] },
+  { id: "it-lombardia", name: "Italy · Lombardy", group: "Parts of bigger countries", bbox: [8.49, 44.68, 11.43, 46.64] },
+];

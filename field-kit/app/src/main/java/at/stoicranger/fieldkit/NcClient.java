@@ -71,6 +71,47 @@ final class NcClient {
         return out;
     }
 
+    /** Progress of a download; return false to stop it. */
+    interface Progress { boolean step(long done, long total); }
+
+    /** Streams one file from Nextcloud into out (a .part file), with its SHA-256. → {status, bytes, sha256, error} */
+    static JSONObject download(JSONObject cfg, String path, java.io.File out, Progress p) {
+        JSONObject r = new JSONObject();
+        HttpURLConnection c = null;
+        try {
+            String base = cfg.optString("url"), user = cfg.optString("user"), pw = cfg.optString("password");
+            if (!base.startsWith("https://")) throw new Exception("Set up your Nextcloud first (⋯ › Where your data is stored).");
+            if (user.isEmpty() || pw.isEmpty()) throw new Exception("User name or app password missing");
+            c = (HttpURLConnection) new URL(davUrl(base, user, path)).openConnection();
+            c.setConnectTimeout(15000); c.setReadTimeout(60000);
+            c.setInstanceFollowRedirects(false);
+            c.setRequestProperty("Authorization", "Basic " + Base64.encodeToString((user + ":" + pw).getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
+            int st = c.getResponseCode();
+            r.put("status", st);
+            if (st != 200) return r;
+            long total = c.getContentLength();
+            try { total = Long.parseLong(c.getHeaderField("Content-Length")); } catch (Exception ignored) { }
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            long done = 0, last = 0;
+            try (InputStream in = c.getInputStream(); java.io.FileOutputStream os = new java.io.FileOutputStream(out)) {
+                byte[] buf = new byte[131072]; int n;
+                while ((n = in.read(buf)) > 0) {
+                    os.write(buf, 0, n); md.update(buf, 0, n); done += n;
+                    long now = System.currentTimeMillis();
+                    if (now - last > 300) { last = now; if (!p.step(done, total)) { r.put("status", 0).put("error", "cancelled"); return r; } }
+                }
+                os.getFD().sync();
+            }
+            p.step(done, total);
+            r.put("bytes", done).put("sha256", MapFiles.hex(md.digest()));
+        } catch (Exception e) {
+            try { r.put("status", 0).put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { }
+        } finally {
+            if (c != null) c.disconnect();
+        }
+        return r;
+    }
+
     private static void setMethod(HttpURLConnection c, String m) throws Exception {
         try { c.setRequestMethod(m); return; } catch (java.net.ProtocolException ignored) { }
         Field f = HttpURLConnection.class.getDeclaredField("method");
