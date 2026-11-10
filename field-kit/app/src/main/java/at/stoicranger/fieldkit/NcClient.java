@@ -75,7 +75,9 @@ final class NcClient {
     interface Progress { boolean step(long done, long total); }
 
     /** Streams one file from Nextcloud into out (a .part file), with its SHA-256. → {status, bytes, sha256, error} */
-    static JSONObject download(JSONObject cfg, String path, java.io.File out, Progress p) {
+    static JSONObject download(JSONObject cfg, String path, java.io.File out, Progress p) { return download(cfg, path, out, false, p); }
+    /** append = add to the end of out (one part of a split map, remark #13); sha256 is then that part's only. */
+    static JSONObject download(JSONObject cfg, String path, java.io.File out, boolean append, Progress p) {
         JSONObject r = new JSONObject();
         HttpURLConnection c = null;
         try {
@@ -93,7 +95,7 @@ final class NcClient {
             try { total = Long.parseLong(c.getHeaderField("Content-Length")); } catch (Exception ignored) { }
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             long done = 0, last = 0;
-            try (InputStream in = c.getInputStream(); java.io.FileOutputStream os = new java.io.FileOutputStream(out)) {
+            try (InputStream in = c.getInputStream(); java.io.FileOutputStream os = new java.io.FileOutputStream(out, append)) {
                 byte[] buf = new byte[131072]; int n;
                 while ((n = in.read(buf)) > 0) {
                     os.write(buf, 0, n); md.update(buf, 0, n); done += n;

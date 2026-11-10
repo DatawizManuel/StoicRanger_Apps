@@ -18,8 +18,8 @@ await page.exposeFunction('mmRoutes', () => fs.readdirSync(routesDir).map(f => (
 await page.exposeFunction('mmSave', (name, gpx, old) => { const f = name.replace(/[\\/:*?"<>|]+/g, ' ') + '.gpx'; fs.writeFileSync(path.join(routesDir, f), gpx); if (old && old !== f) fs.rmSync(path.join(routesDir, old), { force: true }); return f; });
 await page.addInitScript(({ catalog, regions }) => {
   const R = v => Promise.resolve({ ok: true, v });
-  window.mm = { state: () => R({ cfg: { folder: 'C:\\Users\\info\\Nextcloud\\StoicRanger_Maps', checkUpdates: false, decl: 4.5 }, folder: { folder: 'C:\\Users\\info\\Nextcloud\\StoicRanger_Maps', exists: true, synced: true, free: 2.1e11 }, catalog, regions, job: null, version: '0.1.0' }),
-    saveSettings: p => R(p), pickFolder: () => R(null), openFolder: () => R(true), estimate: id => R({ id, bytes: 123e6 }), updates: () => R({ latest: null, outdated: [] }), remove: () => R(true),
+  window.mm = { state: () => R({ cfg: { folder: 'C:\\Users\\info\\Nextcloud\\StoicRanger_Maps', checkUpdates: false, decl: 4.5, maxPart: 250, theme: 'system' }, folder: { folder: 'C:\\Users\\info\\Nextcloud\\StoicRanger_Maps', exists: true, synced: true, free: 2.1e11 }, catalog, regions, job: null, version: '0.2.0', tidied: ['Old Map'] }),
+    saveSettings: p => R(p), pickFolder: () => R(null), openFolder: () => R(true), estimate: id => R({ id, bytes: 500e6, base: 400e6, terrain: 100e6 }), updates: () => R({ latest: null, outdated: [] }), remove: () => R(true),
     download: () => R(true), cancel: () => R(true), onProgress: () => {},
     mapRead: async (f, o, l) => { const b = atob(await window.mmRead(f, o, l)); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; },
     routes: async () => ({ ok: true, v: await window.mmRoutes() }), saveRoute: async (n, g, o) => ({ ok: true, v: await window.mmSave(n, g, o) }), deleteRoute: () => R(true),
@@ -29,14 +29,27 @@ await page.goto('file://' + path.join(www, 'index.html') + '#maps');
 await page.waitForSelector('#mapRows tr');
 ok((await page.textContent('#mapRows')).includes('Test Innsbruck'), 'Maps: the region is listed');
 ok((await page.textContent('#catN')) === '1', 'catalog count shown');
+ok((await page.textContent('#mapRows')).includes('Delete'), 'Maps: each map has a Delete button (#12)');
+ok((await page.textContent('#toast')).includes('Old Map'), 'maps deleted by hand: message that they left maps.json');
 await page.click('nav a[data-tab=add]');
-await page.waitForSelector('.reg');
-ok(await page.locator('.reg').count() === regions.length, 'Add a region: all ' + regions.length + ' regions listed');
-await page.locator('.reg', { hasText: 'Austria · Tyrol' }).locator('input').check();
+await page.waitForSelector('.ctry');
+const nC = new Set(regions.map(r => r.cc + '|' + r.country)).size;
+ok(await page.locator('.ctry').count() === nC && nC > 200, 'Add a region: all ' + nC + ' countries in the left list (#15)');
+await page.locator('.ctry', { hasText: /^Austria/ }).click();
+ok((await page.textContent('#ctryHead')).includes('Austria') && await page.locator('#regionList .reg').count() === 10, 'Austria: whole country + 9 states in the middle list');
+await page.locator('.reg', { hasText: 'Tyrol' }).first().locator('input').check();
 await page.waitForTimeout(300);
-ok((await page.textContent('#selTotal')).includes('123 MB'), 'selection total from the size estimate');
-await page.fill('#q', 'tirol'); ok(await page.locator('.reg').count() === 0, 'search filters (no "tirol", English names)');
-await page.fill('#q', 'tyrol'); ok(await page.locator('.reg').count() === 2, 'search finds Tyrol and South Tyrol');
+const tot = await page.textContent('#selTotal');
+ok(tot.includes('500 MB') && tot.includes('3 files of max. 250 MB'), 'selection total with file count, split invisible: ' + tot);
+await page.fill('#q', 'scotland'); await page.waitForTimeout(100);
+ok(await page.locator('.ctry').count() === 1 && (await page.textContent('.ctry')).includes('United Kingdom'), 'search "scotland" finds the United Kingdom');
+ok((await page.textContent('#regionList')).includes('Scotland') && await page.locator('#regionList .reg').count() === 1, 'middle list shows Scotland');
+await page.click('#showAll'); const ukT = await page.textContent('#regionList'); ok(['England', 'Scotland', 'Wales', 'Northern Ireland', 'Whole country'].every(t => ukT.includes(t)) && await page.locator('#regionList .reg').count() === 5, 'show all: UK whole + England, Scotland, Wales, Northern Ireland');
+await page.fill('#q', 'tyrol'); await page.waitForTimeout(100);
+const ct = await page.locator('.ctry').allTextContents();
+ok(ct.length === 2 && ct.some(t => t.startsWith('Austria')) && ct.some(t => t.startsWith('Italy')), 'search "tyrol" finds Austria and Italy (South Tyrol): ' + ct.join(' | '));
+await page.fill('#q', 'brazil'); await page.waitForTimeout(100); ok((await page.textContent('.ctry')).startsWith('Brazil'), 'search finds countries by name (Brazil)');
+await page.fill('#q', '');
 await page.click('nav a[data-tab=routes]');
 await page.waitForFunction(() => document.querySelector('#map canvas'), null, { timeout: 15000 });
 await page.waitForTimeout(3000);
@@ -64,6 +77,16 @@ ok(rendered, 'map canvas drawn');
 if (shot) await page.screenshot({ path: shot });
 await page.click('nav a[data-tab=settings]'); await page.waitForTimeout(300);
 ok(await page.inputValue('#sDecl') === '4.5', 'Settings show the declination');
+ok(await page.inputValue('#sMax') === '250' && await page.inputValue('#sTheme') === 'system', 'Settings: max. file size 250 MB and design (#13, #14)');
+const bgL = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+await page.emulateMedia({ colorScheme: 'dark' }); await page.waitForTimeout(300);
+const bgD = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+ok(bgL === 'rgb(244, 241, 234)' && bgD === 'rgb(22, 21, 15)', 'dark design: ' + bgL + ' → ' + bgD);
+if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-settings-dark.png') });
+await page.click('nav a[data-tab=add]'); await page.locator('.ctry', { hasText: /^United Kingdom/ }).click(); await page.waitForTimeout(300);
+if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-add-dark.png') });
+await page.emulateMedia({ colorScheme: 'light' }); await page.waitForTimeout(200);
+if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-add-light.png') });
 const real = errors.filter(e => !/no terrain here|Failed to load resource|AbortError/.test(e));
 ok(real.length === 0, 'no script errors' + (real.length ? ': ' + real.slice(0, 3).join(' | ') : ''));
 await browser.close(); fs.rmSync(routesDir, { recursive: true, force: true });

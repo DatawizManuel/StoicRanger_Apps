@@ -1,4 +1,4 @@
-/* SR Field Kit 0.3.0 — "Use sensors" in Drop & wind (#4), cant level (#5), Night & signal (#6).
+/* SR Field Kit 0.3.0 (0.4.0: signal sequence in the app, #11) — "Use sensors" in Drop & wind (#4), cant level (#5), Night & signal (#6).
    Sensors are read only when the user taps. Nothing here is logged; settings in db.json: sr-level {flat, cant}
    (zero offsets), sr-night {red, lvl, wpm, src}. */
 'use strict';
@@ -161,8 +161,10 @@
     if (ng.src === "torch" && torchOk) N.torch(on);
     else { flash.hidden = false; flash.classList.toggle("on", on); flash.classList.toggle("red", ng.src === "red"); }
   }
+  let sig = null;   // the running flashlight sequence on the phone side (remark #11)
   function stop(){
-    run++; if (lightOn || ng.src === "torch") { if (torchOk) N.torch(false); } lightOn = false;
+    run++; if (sig){ sig = null; if (N.signalStop) N.signalStop(); }
+    if (lightOn || ng.src === "torch") { if (torchOk) N.torch(false); } lightOn = false;
     flash.hidden = true; flash.classList.remove("on"); $("ngStop").hidden = true; $("ngShow").textContent = "";
     $("ngTorch").setAttribute("aria-pressed", "false"); $("ngTorch").textContent = "Light on";
     if (N && N.keepScreenOn && scr.hidden) N.keepScreenOn(false);
@@ -173,6 +175,13 @@
     stop(); const my = ++run, rep = $("ngRep").checked;
     if (!steps.length){ toast("Nothing to send"); return; }
     $("ngStop").hidden = false; if (N && N.keepScreenOn) N.keepScreenOn(true);
+    /* Flashlight: the whole sequence runs in the app itself (exact timing, light always off at the end); the page only
+       shows which letter is being sent. Timers in the page were throttled and cut the message off (remark #11). */
+    if (ng.src === "torch" && torchOk && N.signal){
+      const id = "sig" + my; sig = { id, steps, label };
+      if (!N.signal(JSON.stringify(steps.map(s => [s[0] ? 1 : 0, s[1]])), unitMs, rep, id)){ sig = null; stop(); toast("The flashlight could not be used"); }
+      return;
+    }
     let i = 0;
     const next = () => {
       if (my !== run) return;
@@ -182,6 +191,12 @@
     };
     next();
   }
+  window.FKSignal = (id, i, state) => {
+    if (!sig || sig.id !== id) return;
+    if (state === "run"){ const c = sig.steps[i] && sig.steps[i][2]; if (c) $("ngShow").textContent = sig.label + " · " + c + " " + (MORSE[c] || "").replace(/\./g, "·").replace(/-/g, "–"); }
+    else if (state === "pause") $("ngShow").textContent = sig.label + " · pause";
+    else { sig = null; if (state === "error") toast("The flashlight stopped working"); stop(); }
+  };
   const unit = () => 1200 / (+ng.wpm || 6);
   $("ngSos").onclick = () => play(seq("SOS"), "SOS", unit());
   $("ngSend").onclick = () => { const t = $("ngMsg").value.trim(); play(seq(t), t.toUpperCase(), unit()); };

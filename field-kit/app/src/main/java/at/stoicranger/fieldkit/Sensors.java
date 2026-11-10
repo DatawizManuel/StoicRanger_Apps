@@ -59,7 +59,14 @@ final class Sensors {
         }}, 3000);
     }
 
-    private static String torchId(Context c) {
+    private static volatile String torchCache; private static volatile boolean torchLooked;
+    /** The camera with a flash, looked up once (asking the camera service on every blink was slow, remark #11). */
+    static String torchId(Context c) {
+        if (torchLooked) return torchCache;
+        torchCache = findTorch(c); torchLooked = true;
+        return torchCache;
+    }
+    private static String findTorch(Context c) {
         try {
             CameraManager cm = (CameraManager) c.getSystemService(Context.CAMERA_SERVICE);
             for (String id : cm.getCameraIdList()) {
@@ -77,6 +84,11 @@ final class Sensors {
         String id = torchId(c);
         if (id == null) return false;
         try { ((CameraManager) c.getSystemService(Context.CAMERA_SERVICE)).setTorchMode(id, on); return true; }
-        catch (Exception e) { return false; }
+        catch (Exception e) {
+            if (!on) {   // switching off must never fail silently: try once more after a short wait
+                try { Thread.sleep(50); ((CameraManager) c.getSystemService(Context.CAMERA_SERVICE)).setTorchMode(id, false); return true; } catch (Exception ignored) { }
+            }
+            return false;
+        }
     }
 }

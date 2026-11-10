@@ -40,6 +40,26 @@ ok(core.routes().length === 2, 'routes listed'); core.deleteRoute(f3); ok(core.r
 ok(core.saveRoute('x', '<gpx/>', '../../evil.gpx') === 'x.gpx' && fs.existsSync(path.join(dir, 'Nextcloud', 'StoicRanger_Maps', 'Routes', 'x.gpx')), 'paths outside the Routes folder are not touched');
 // remove
 ok(core.remove('at-wien') && !fs.existsSync(path.join(folder, 'at-wien.pmtiles')) && core.catalog().maps.length === 0, 'remove deletes files and the catalog entry');
+// #13 split into parts of max. file size (tiny limit for the test), phone-side join gives the same file
+const whole = fs.readFileSync(path.join(dir, '20261107.pmtiles')).length; ok(whole > 600, 'test map big enough to split (' + whole + ' bytes)');
+core.partBytes = () => 256; const e2 = await core.download('at-wien');
+const c4 = JSON.parse(fs.readFileSync(path.join(folder, 'maps.json'), 'utf8')), mb = c4.maps[0].base;
+ok(c4.format === 'FK-2' && mb.parts && mb.parts.length === Math.ceil(mb.bytes / 256) && !fs.existsSync(path.join(folder, 'at-wien.pmtiles')), 'big file split into ' + (mb.parts || []).length + ' parts, maps.json says FK-2');
+const joined = Buffer.concat(mb.parts.map(p => fs.readFileSync(path.join(folder, p.file))));
+ok(joined.length === mb.bytes && crypto.createHash('sha256').update(joined).digest('hex') === mb.sha256 && mb.parts.every(p => crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, p.file))).digest('hex') === p.sha256), 'parts joined give the whole file; part checksums right');
+ok(mb.parts.every((p, i) => p.file === 'at-wien.pmtiles.' + String(i + 1).padStart(3, '0') && p.bytes <= 256), 'parts named .001, .002, … and none bigger than the limit');
+ok(core.readMap('at-wien.pmtiles', 240, 40).equals(joined.subarray(240, 280)) && core.readMap('at-wien.pmtiles', 0, 7).toString() === 'PMTiles', 'routes map reads across parts');
+ok(fs.readdirSync(path.join(dir, 'tmp')).length === 0, 'split leaves nothing in the temporary folder');
+core.partBytes = () => 0; ok(await core.applyPartSize() >= 1 && fs.existsSync(path.join(folder, 'at-wien.pmtiles')) && !fs.readdirSync(folder).some(f => /\.pmtiles\.\d{3}$/.test(f)) && core.catalog().format === 'FK-1', 'no limit: existing parts joined again, FK-1');
+ok(crypto.createHash('sha256').update(fs.readFileSync(path.join(folder, 'at-wien.pmtiles'))).digest('hex') === mb.sha256, 'joined file has the right checksum');
+core.partBytes = () => 150; ok(await core.applyPartSize() >= 1 && core.catalog().maps[0].base.parts.length === Math.ceil(mb.bytes / 150), 'smaller limit: existing map split again without downloading');
+// #12 delete removes all parts; files deleted by hand leave maps.json
+const parts = core.catalog().maps[0].base.parts.map(p => p.file); ok(core.remove('at-wien') && !parts.some(f => fs.existsSync(path.join(folder, f))) && !fs.existsSync(path.join(folder, 'at-wien-terrain.pmtiles')), 'Delete removes every part and the terrain');
+await core.download('at-wien'); fs.unlinkSync(path.join(folder, core.catalog().maps[0].base.parts[1].file));
+const gone = core.tidy(); ok(gone.length === 1 && core.catalog().maps.length === 0, 'map with a part deleted by hand is taken out of maps.json (' + gone.join(', ') + ')');
+ok(core.tidy().length === 0, 'tidy again changes nothing');
+for (const f of fs.readdirSync(folder)) if (/\.pmtiles/.test(f)) fs.unlinkSync(path.join(folder, f));
+delete core.partBytes;
 // newest build search: 404 for two days, then a build
 let asked = [];
 const c2 = new Core({ configDir: path.join(dir, 'cfg2'), tmpDir: path.join(dir, 'tmp2'), now: () => new Date('2026-11-09T10:00:00Z'),
@@ -49,8 +69,9 @@ const b = await c2.baseSource(); ok(b.date === '20261107' && asked.length === 3 
 const c3 = new Core({ configDir: path.join(dir, 'cfg3'), tmpDir: path.join(dir, 'tmp3'), fetch: async () => new Response('', { status: 404 }) }); c3.saveCfg({ folder });
 let msg = ''; try { await c3.baseSource(); } catch (err){ msg = err.message; } ok(/No current OpenStreetMap build/.test(msg), 'no build reachable gives a clear message');
 // a newer maps.json is never overwritten; a damaged one is kept as a copy
-fs.writeFileSync(path.join(folder, 'maps.json'), JSON.stringify({ format: 'FK-2', version: 1, maps: [] }));
-let nm = ''; try { core.writeCatalog(core.catalog()); } catch (err){ nm = err.message; } ok(/newer Map Manager/.test(nm) && JSON.parse(fs.readFileSync(path.join(folder, 'maps.json'), 'utf8')).format === 'FK-2', 'newer maps.json is left unchanged');
+fs.writeFileSync(path.join(folder, 'maps.json'), JSON.stringify({ format: 'FK-3', version: 1, maps: [] }));
+let nm = ''; try { core.writeCatalog(core.catalog()); } catch (err){ nm = err.message; } ok(/newer Map Manager/.test(nm) && JSON.parse(fs.readFileSync(path.join(folder, 'maps.json'), 'utf8')).format === 'FK-3', 'newer maps.json is left unchanged');
+fs.writeFileSync(path.join(folder, 'maps.json'), JSON.stringify({ format: 'FK-2', version: 1, maps: [] })); core.writeCatalog(core.catalog()); ok(core.catalog().format === 'FK-1', 'FK-2 maps.json is read; FK-1 is written again when nothing is split');
 fs.writeFileSync(path.join(folder, 'maps.json'), '{broken');
 core.writeCatalog(core.catalog()); ok(fs.readdirSync(folder).some(f => f.startsWith('maps.json.damaged-')) && core.catalog().format === 'FK-1', 'damaged maps.json kept as a copy, then rewritten');
 // cancelled download leaves nothing behind

@@ -24,27 +24,30 @@
       <div class="actions"><a class="btn ghost" href="#add">+ Add a region</a><button type="button" class="btn" id="updAll" hidden>Update all</button></div>
     </div>
     <div class="card tablebox"><table><thead><tr><th>Region</th><th>Map data</th><th>Size</th><th>Status</th><th class="r">Action</th></tr></thead><tbody id="mapRows"></tbody></table></div>
-    <p class="note">Removing a map asks first. Phones keep the maps they already downloaded until they are deleted there.</p>
+    <p class="note">Delete asks first, then removes the map's files and takes it out of maps.json, so the phone stops offering it. Maps whose files you deleted by hand are taken out of maps.json automatically. Phones keep maps they already downloaded until they are deleted there.</p>
   </div>
   <aside class="side">
     <section class="card"><h2>Nextcloud folder</h2><div id="fState"></div><div class="mono small" id="fPath"></div><div class="small muted" id="fFree"></div><button type="button" class="btn ghost" id="openF">Open folder</button></section>
     <section class="card"><h2>Catalog for the phone</h2><div><span class="mono small">maps.json</span> · <span id="catN">0</span> maps listed</div><p class="small muted">Only maps that are fully downloaded and checked (SHA-256) are listed, so the phone never sees a half-finished file.</p></section>
-    <section class="card dark"><h2>Map format FK-1</h2><p class="small">Vector map (zoom 0-15) · contour lines · hillshade · footpaths and tracks · place names</p><p class="small dim">Fixed: SR Field Kit reads exactly this, so there are no settings to get wrong.</p></section>
+    <section class="card dark"><h2>Map format</h2><p class="small">Vector map (zoom 0-15) · contour lines · hillshade · footpaths and tracks · place names</p><p class="small dim">Fixed: SR Field Kit reads exactly this, so there are no settings to get wrong.</p></section>
   </aside>
 </section>
 
 <section id="v-add" class="view" hidden>
   <div class="main">
-    <div class="titlerow"><div><h1>Add a region</h1><p class="sub">Tick what you need. Regions you already have are marked. Sizes are worked out from the map server.</p></div></div>
-    <label class="sr" for="q">Search regions</label><input id="q" type="search" placeholder="Search a country or region, e.g. Tyrol">
-    <div class="cols" id="regionCols"></div>
+    <div class="titlerow"><div><h1>Add a region</h1><p class="sub">Pick a country, then tick the whole country or the regions you need. Maps you already have are marked. Sizes are worked out from the map server.</p></div></div>
+    <div class="pick">
+      <section class="card plist"><label class="sr" for="q">Search countries and regions</label><input id="q" type="search" placeholder="Search a country or region, e.g. Scotland" autocomplete="off">
+        <div id="countryList" class="scroll" role="listbox" aria-label="Countries"></div></section>
+      <section class="card plist"><div class="glbl" id="ctryHead">Regions</div><div id="regionList" class="scroll"></div></section>
+    </div>
   </div>
   <aside class="side">
     <section class="card"><h2>Selected</h2><div id="selList" class="small muted">Nothing selected yet.</div>
       <div class="total"><span>Total</span><span class="mono" id="selTotal">–</span></div>
       <button type="button" class="btn" id="dlBtn" disabled>Download</button><a class="btn ghost" href="#maps">Back to my maps</a></section>
     <section class="card" id="jobBox" hidden><h2>Downloading</h2><div id="jobText" class="small"></div><div class="bar"><i id="jobBar"></i></div><button type="button" class="btn ghost" id="cancelBtn">Stop</button></section>
-    <section class="card dark"><h2>Always format FK-1</h2><p class="small">Every region comes with contour lines, hillshade and footpaths. There is nothing to choose.</p></section>
+    <section class="card dark"><h2>Always the same map format</h2><p class="small">Every region comes with contour lines, hillshade and footpaths. There is nothing to choose. Big maps are split into files of the size set under Settings; the phone joins them again.</p></section>
   </aside>
 </section>
 
@@ -86,9 +89,13 @@
         <p class="small muted">Each map is written in a temporary folder first and moved in when it is complete; maps.json is updated last.</p>
       </section>
       <section class="card">
-        <h2>Updates</h2>
+        <h2>Options</h2>
         <label class="opt"><input type="checkbox" id="sCheck">Check for newer map data when the Map Manager opens</label>
         <label class="opt"><input type="checkbox" id="sKeep">Keep the previous version of a map when updating (as .bak)</label>
+        <label class="lbl2" for="sMax">Maximum file size (bigger maps are saved in parts; the phone joins them)</label>
+        <select id="sMax"><option value="100">100 MB</option><option value="250">250 MB (recommended)</option><option value="500">500 MB</option><option value="1000">1000 MB</option><option value="0">No limit</option></select>
+        <label class="lbl2" for="sTheme">Design</label>
+        <select id="sTheme"><option value="system">Like Windows (light or dark)</option><option value="light">Light</option><option value="dark">Dark</option></select>
         <label class="lbl2" for="sDecl">Declination for route bearings (° east +, 0 = true north)</label><input id="sDecl" type="number" step="0.1">
         <details class="adv"><summary>Map data sources (advanced)</summary>
           <label class="lbl2" for="sBase">OpenStreetMap build (empty = newest Protomaps daily build)</label><input id="sBase" class="mono" placeholder="https://build.protomaps.com/YYYYMMDD.pmtiles">
@@ -98,8 +105,8 @@
       </section>
       <section class="card dark">
         <h2>Map format (fixed)</h2>
-        <dl class="kv"><dt>Format</dt><dd class="mono">FK-1</dd><dt>Map</dt><dd>Vector, zoom 0-15</dd><dt>Contour lines</dt><dd>Yes (from terrain)</dd><dt>Hillshade</dt><dd>Yes</dd><dt>Footpaths, tracks</dt><dd>Yes</dd></dl>
-        <p class="small dim">Map data © OpenStreetMap contributors (ODbL), built by Protomaps. Terrain: Mapterhorn, from Copernicus GLO-30 (DLR, Airbus, EU/ESA) and national elevation data: BEV and the Austrian Länder, Bayerische Vermessungsverwaltung, swisstopo, ARSO, ČÚZK, Prov. Bozen (CC BY 4.0 and open data).</p>
+        <dl class="kv"><dt>Format</dt><dd class="mono">FK-1 (FK-2 when split)</dd><dt>Map</dt><dd>Vector, zoom 0-15</dd><dt>Contour lines</dt><dd>Yes (from terrain)</dd><dt>Hillshade</dt><dd>Yes</dd><dt>Footpaths, tracks</dt><dd>Yes</dd></dl>
+        <p class="small dim">Map data © OpenStreetMap contributors (ODbL), built by Protomaps. Terrain: Mapterhorn, from Copernicus GLO-30 (DLR, Airbus, EU/ESA) and national elevation data: BEV and the Austrian Länder, Bayerische Vermessungsverwaltung, swisstopo, ARSO, ČÚZK, Prov. Bozen (CC BY 4.0 and open data). Country and region borders for the lists: Natural Earth (public domain).</p>
         <p class="small dim" id="verLine"></p>
       </section>
     </div>

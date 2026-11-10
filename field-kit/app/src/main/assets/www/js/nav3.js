@@ -1,7 +1,8 @@
-/* SR Field Kit 0.3.0 — Navigate: offline map, routes with tick-off, position from two bearings, map downloads from
+/* SR Field Kit 0.4.0 — Navigate: offline map, routes with tick-off, position from two bearings, map downloads from
    the user's Nextcloud (remarks #7, #9) and the coordinate converter (#3).
    Map files: files/maps/*.pmtiles on the phone (MainActivity serves pieces at /maps/<name>?o=&l=), made by the
-   Stoic Ranger Map Manager (maps.json catalog, format FK-1) in <map folder>/ on Nextcloud. Routes: GPX 1.1.
+   Stoic Ranger Map Manager (maps.json catalog, format FK-1, or FK-2 when a file is split into parts: remark #13) in
+   <map folder>/ on Nextcloud. Routes: GPX 1.1.
    db.json keys (add-only): sr-routes [{id, name, wps:[{lat,lon,name}], ticked, file, updated}], sr-route-cur,
    sr-maps [{id, name, date, bbox, base:{file,bytes,sha256}, terrain:{…}}], sr-maps-nc {fetched, catalog},
    sr-maps-cfg {folder, wifi}, sr-map-view {c, z}, sr-decl. The map libraries load only when the Map tab opens. */
@@ -452,7 +453,7 @@
     const r = await nc("GET", folder() + "maps.json");
     if (r.status !== 200){ $("mMsg").textContent = r.status === 404 ? "No maps.json in " + folder() + ". Download regions with the Stoic Ranger Map Manager on your PC first, or check the folder name." : ncWhy(r); return; }
     let cat; try { cat = JSON.parse(ncText(r)); } catch (e){ $("mMsg").textContent = "maps.json on Nextcloud could not be read."; return; }
-    if (cat.format !== "FK-1"){ $("mMsg").textContent = "maps.json has the format " + esc(cat.format) + ", this app reads FK-1. Update the app or the Map Manager."; return; }
+    if (cat.format !== "FK-1" && cat.format !== "FK-2"){ $("mMsg").textContent = "maps.json has the format " + esc(cat.format) + ", this app reads FK-1 and FK-2. Update the app or the Map Manager."; return; }
     store.set("sr-maps-nc", { fetched: new Date().toISOString(), catalog: cat });
     const n = (cat.maps || []).length; $("mMsg").textContent = n + " region" + (n === 1 ? "" : "s") + " on Nextcloud.";
     renderMaps();
@@ -462,7 +463,10 @@
   function dlFile(path, f, label, base, all){
     return new Promise(res => {
       job = { id: uid("dl-"), onRun: (d, t) => { const p = all ? (base + d) / all : 0; $("mDlBar").style.width = Math.round(p * 100) + "%"; $("mDlTxt").textContent = label + " · " + MB(base + d) + (all ? " of " + MB(all) : ""); }, finish: e => res(e) };
-      N.mapDownload(path, f.file, f.sha256 || "", f.bytes || 0, job.id);
+      if (Array.isArray(f.parts) && f.parts.length){
+        if (!N.mapDownloadParts){ res("This map is saved in parts; update SR Field Kit."); return; }
+        N.mapDownloadParts(folder(), f.file, JSON.stringify(f.parts.map(p => ({ file: String(p.file), bytes: +p.bytes || 0, sha256: String(p.sha256 || "") }))), f.sha256 || "", f.bytes || 0, job.id);
+      } else N.mapDownload(path, f.file, f.sha256 || "", f.bytes || 0, job.id);
     });
   }
   $("mList").addEventListener("click", async e => {

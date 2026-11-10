@@ -23,6 +23,8 @@ Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.4.0 (format 1): no data change. The phone keeps one file per map in `files/maps/`, also when the map is split
+  into parts on Nextcloud (format FK-2): the parts are joined while downloading.
 - 0.3.0 (format 1, add-only): new keys `sr-routes` (`[{id, name, wps:[{lat, lon, name}], ticked, file, updated}]`),
   `sr-route-cur`, `sr-route-auto`, `sr-maps` (maps on the phone: `[{id, name, date, bbox, base:{file, bytes,
   sha256, date}, terrain:{…}}]`), `sr-maps-nc` (last Nextcloud catalog), `sr-maps-cfg` (`{folder, wifi}`),

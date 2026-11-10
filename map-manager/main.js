@@ -1,10 +1,11 @@
 /* Stoic Ranger Map Manager — Electron main process: the window and the bridge to lib/core.js. */
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
 const path = require('path'), fs = require('fs');
 const { Core } = require('./lib/core');
 
 let win, core, job = null;
+const THEMES = ["system", "light", "dark"];
 app.setName("Stoic Ranger Map Manager");
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on("second-instance", () => { if (win){ if (win.isMinimized()) win.restore(); win.focus(); } });
@@ -12,7 +13,8 @@ app.on("second-instance", () => { if (win){ if (win.isMinimized()) win.restore()
 function createWindow(){
   core = new Core({ configDir: app.getPath("userData"), tmpDir: path.join(app.getPath("temp"), "sr-map-manager") });
   Menu.setApplicationMenu(null);
-  win = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, title: "Stoic Ranger Map Manager", backgroundColor: "#f4f1ea",
+  nativeTheme.themeSource = THEMES.includes(core.cfg.theme) ? core.cfg.theme : "system";   // #14 light/dark: the page follows prefers-color-scheme
+  win = new BrowserWindow({ width: 1280, height: 820, minWidth: 900, minHeight: 600, title: "Stoic Ranger Map Manager", backgroundColor: nativeTheme.shouldUseDarkColors ? "#16150f" : "#f4f1ea",
     icon: path.join(__dirname, "res", "icon.png"), webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   win.loadFile(path.join(__dirname, "www", "index.html"));
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: "deny" }; });
@@ -25,8 +27,8 @@ app.on("window-all-closed", () => app.quit());
 const send = (ch, d) => { if (win && !win.isDestroyed()) win.webContents.send(ch, d); };
 const handle = (ch, fn) => ipcMain.handle(ch, async (e, ...a) => { try { return { ok: true, v: await fn(...a) }; } catch(err){ return { ok: false, error: err.message }; } });
 
-handle("state", () => ({ cfg: core.cfg, folder: core.folderState(), catalog: core.catalog(), regions: core.regions(), job: job ? job.state : null, version: app.getVersion() }));
-handle("saveSettings", patch => core.saveCfg(patch));
+handle("state", () => ({ tidied: job ? [] : core.tidy(), cfg: core.cfg, folder: core.folderState(), catalog: core.catalog(), regions: core.regions(), job: job ? job.state : null, version: app.getVersion() }));
+handle("saveSettings", patch => { const c = core.saveCfg(patch); if (patch && "theme" in patch) nativeTheme.themeSource = THEMES.includes(c.theme) ? c.theme : "system"; return c; });
 handle("pickFolder", async () => { const r = await dialog.showOpenDialog(win, { title: "The maps folder inside your Nextcloud folder", properties: ["openDirectory", "createDirectory"], defaultPath: core.cfg.folder || app.getPath("home") }); return r.canceled ? null : r.filePaths[0]; });
 handle("openFolder", () => { core.ensureFolder(); return shell.openPath(core.cfg.folder); });
 handle("estimate", id => core.estimate(id));
@@ -48,9 +50,9 @@ handle("download", ids => {
   return true;
 });
 handle("cancel", () => { if (job) job.ac.abort(); return true; });
-handle("mapRead", (file, offset, length) => {
-  const fd = fs.openSync(core.mapPath(file), "r"); try { const b = Buffer.alloc(length); const n = fs.readSync(fd, b, 0, length, offset); return b.subarray(0, n); } finally { fs.closeSync(fd); }
-});
+handle("mapRead", (file, offset, length) => core.readMap(file, offset, length));
+handle("tidy", () => job ? [] : core.tidy());
+handle("applyPartSize", () => { if (job) throw new Error("Wait until the download has finished."); return core.applyPartSize(); });
 handle("routes", () => core.routes());
 handle("saveRoute", (name, gpx, oldFile) => core.saveRoute(name, gpx, oldFile));
 handle("deleteRoute", file => core.deleteRoute(file));

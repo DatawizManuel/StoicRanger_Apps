@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.3.0
+# SR Field Kit (Android) — 0.4.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
@@ -8,6 +8,16 @@ WebView itself stays offline (other web requests are blocked, only the Java side
 
 ## Versions
 
+- **0.4.0** (versionCode 8, 2026-11-10): remarks #11 and #13.
+  - **Night & signal** (#11): Morse message, SOS and strobe with the flashlight now run inside the app on their own
+    thread with exact timing (the page's timers were slowed down by the phone and cut the message off). The page
+    only starts and stops it and shows the letter being sent. The light is always switched off at the end, on Stop,
+    on an error and when the app goes to the background; the flashlight is looked up once instead of on every blink.
+  - **Maps in parts** (#13): reads `maps.json` format FK-2 from the Stoic Ranger Map Manager 0.2.0, where a big map is
+    saved in parts (`<file>.001`, `.002`, …). All parts are downloaded one after the other into the one `.part` file,
+    each part is checked (SHA-256), then the joined map is checked against the whole file's checksum and only then
+    replaces an older copy. A part that is not on Nextcloud yet (the PC client still uploading) gives a clear
+    message. FK-1 maps download as before.
 - **0.3.0** (versionCode 7, 2026-11-08): remarks #3 to #7 and #9.
   - **Navigate › Map & routes** (#7, #9): offline map (OpenStreetMap vector map by Protomaps, Mapterhorn terrain for
     hill shading and contour lines drawn on the phone; libraries in `www/map/lib`, shared with the Stoic Ranger Map

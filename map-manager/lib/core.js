@@ -8,8 +8,12 @@
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
 const pmx = require('./pmx'), REGIONS = require('./regions');
 
-const FORMAT = "FK-1", BASE_MAXZOOM = 15, TERRAIN_MAXZOOM = 12;
-const DEFAULTS = { folder: "", baseUrl: "", terrainUrl: "https://download.mapterhorn.com/planet.pmtiles", checkUpdates: true, keepOld: false };
+/* FK-1: one file per map and terrain. FK-2 (0.2.0): a file may be split into parts of at most `maxPart` MB (the
+   Nextcloud client has trouble with very large files): {file, bytes, sha256, parts: [{file, bytes, sha256}]}; the
+   phone downloads the parts and joins them into the one file. maps.json says FK-2 only when a map is split, so
+   phones with Field Kit 0.3.0 keep working as long as nothing is split. */
+const FORMAT = "FK-1", FORMAT2 = "FK-2", FORMATS = [FORMAT, FORMAT2], BASE_MAXZOOM = 15, TERRAIN_MAXZOOM = 12;
+const DEFAULTS = { folder: "", baseUrl: "", terrainUrl: "https://download.mapterhorn.com/planet.pmtiles", checkUpdates: true, keepOld: false, maxPart: 250, theme: "" };
 const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, "");
 const safeId = s => String(s).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "map";
 const safeName = s => String(s).replace(/[\\/:*?"<>|\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Route";
@@ -53,8 +57,8 @@ class Core {
   }
   writeCatalog(c){
     const old = fs.existsSync(this.catalogFile()) ? this.catalog() : null;
-    if (old && !old.damaged && (old.format !== FORMAT || (old.version || 1) > 1)) throw new Error("maps.json was written by a newer Map Manager (" + old.format + " v" + old.version + "). Update this app first; nothing was changed.");
-    delete c.damaged; c.format = FORMAT; c.version = 1; c.updated = this.now().toISOString(); c.maps.sort((a, b) => a.name.localeCompare(b.name)); this.ensureFolder(); writeAtomic(this.catalogFile(), JSON.stringify(c, null, 2)); }
+    if (old && !old.damaged && (!FORMATS.includes(old.format) || (old.version || 1) > 1)) throw new Error("maps.json was written by a newer Map Manager (" + old.format + " v" + old.version + "). Update this app first; nothing was changed.");
+    delete c.damaged; c.format = c.maps.some(m => ["base", "terrain"].some(k => m[k] && m[k].parts)) ? FORMAT2 : FORMAT; c.version = 1; c.updated = this.now().toISOString(); c.maps.sort((a, b) => a.name.localeCompare(b.name)); this.ensureFolder(); writeAtomic(this.catalogFile(), JSON.stringify(c, null, 2)); }
   regions(){ return REGIONS; }
 
   /** The newest Protomaps daily build: tries the last 14 days (or the URL set under Settings). */
@@ -97,20 +101,90 @@ class Core {
       const cat = this.catalog(), old = cat.maps.find(m => m.id === fileId);
       const dst = f => path.join(this.cfg.folder, f);
       if (old && this.cfg.keepOld){ for (const k of ["base", "terrain"]) if (old[k] && fs.existsSync(dst(old[k].file))) moveFile(dst(old[k].file), dst(old[k].file.replace(/\.pmtiles$/, "-" + (old.date || "old").replace(/-/g, "") + ".pmtiles.bak"))); }
-      moveFile(tmpB, dst(fileId + ".pmtiles")); moveFile(tmpT, dst(fileId + "-terrain.pmtiles"));
+      report("Splitting");
+      const pb = await this.split(tmpB, fileId + ".pmtiles"), pt = await this.split(tmpT, fileId + "-terrain.pmtiles");
+      if (old) this.deletePieces(old, [pb, pt]);                // old pieces the new map does not use any more
+      for (const pc of [pb, pt]) for (const x of pc.moves) moveFile(x[0], dst(x[1]));
       const entry = { id: fileId, name: r.name, bbox: rb.bbox, date: b.date ? b.date.slice(0, 4) + "-" + b.date.slice(4, 6) + "-" + b.date.slice(6) : this.now().toISOString().slice(0, 10),
-        downloaded: this.now().toISOString(), base: { file: fileId + ".pmtiles", bytes: rb.bytes, sha256: hb, maxZoom: rb.maxZoom }, terrain: { file: fileId + "-terrain.pmtiles", bytes: rt.bytes, sha256: ht, maxZoom: rt.maxZoom },
+        downloaded: this.now().toISOString(), base: Object.assign({ file: fileId + ".pmtiles", bytes: rb.bytes, sha256: hb, maxZoom: rb.maxZoom }, pb.parts ? { parts: pb.parts } : {}), terrain: Object.assign({ file: fileId + "-terrain.pmtiles", bytes: rt.bytes, sha256: ht, maxZoom: rt.maxZoom }, pt.parts ? { parts: pt.parts } : {}),
         attribution: "© OpenStreetMap contributors (ODbL), Protomaps; terrain: Mapterhorn (Copernicus GLO-30 and national elevation data)" };
       const c2 = this.catalog(); c2.maps = c2.maps.filter(m => m.id !== fileId).concat(entry); this.writeCatalog(c2);
       report("Done");
       return entry;
-    } finally { for (const f of [tmpB, tmpT, tmpB + ".part", tmpT + ".part"]) try { fs.unlinkSync(f); } catch(e){} }
+    } finally { for (const f of fs.readdirSync(this.tmpDir)) if (f.startsWith(fileId + ".") || f.startsWith(fileId + "-terrain.")) try { fs.unlinkSync(path.join(this.tmpDir, f)); } catch(e){} }
+  }
+  partBytes(){ const mb = +this.cfg.maxPart || 0; return mb > 0 ? mb * 1024 * 1024 : 0; }
+  /** Splits tmp file into parts of at most maxPart (in the temp folder) → {parts|null, moves: [[tmpPath, nameInFolder]]}. */
+  async split(tmp, name){
+    const max = this.partBytes(), size = fs.statSync(tmp).size;
+    if (!max || size <= max) return { parts: null, moves: [[tmp, name]], names: [name] };
+    const parts = [], moves = [], fd = fs.openSync(tmp, "r"), buf = Buffer.alloc(Math.min(max, 8 * 1024 * 1024));
+    try {
+      for (let off = 0, i = 1; off < size; off += max, i++){
+        const pn = name + "." + String(i).padStart(3, "0"), pp = path.join(this.tmpDir, pn), out = fs.openSync(pp, "w"), h = crypto.createHash("sha256");
+        let left = Math.min(max, size - off), pos = off;
+        try { while (left > 0){ const n = fs.readSync(fd, buf, 0, Math.min(buf.length, left), pos); if (!n) throw new Error("short read"); fs.writeSync(out, buf, 0, n); h.update(buf.subarray(0, n)); pos += n; left -= n; } } finally { fs.closeSync(out); }
+        parts.push({ file: pn, bytes: Math.min(max, size - off), sha256: h.digest("hex") }); moves.push([pp, pn]);
+      }
+    } finally { fs.closeSync(fd); }
+    fs.unlinkSync(tmp);
+    return { parts, moves, names: parts.map(p => p.file) };
+  }
+  /** File names in the folder that belong to one entry (the file, or its parts). */
+  pieces(f){ return !f ? [] : f.parts ? f.parts.map(p => p.file) : [f.file]; }
+  deletePieces(m, keep){
+    const k = new Set((keep || []).flatMap(x => x.names));
+    for (const key of ["base", "terrain"]) for (const f of this.pieces(m[key])) if (!k.has(f)) try { fs.unlinkSync(path.join(this.cfg.folder, path.basename(f))); } catch(e){}
   }
   remove(id){
     const c = this.catalog(), m = c.maps.find(x => x.id === id); if (!m) return false;
     c.maps = c.maps.filter(x => x.id !== id); this.writeCatalog(c);      // the phone stops listing it first
-    for (const k of ["base", "terrain"]) if (m[k]) try { fs.unlinkSync(path.join(this.cfg.folder, m[k].file)); } catch(e){}
+    this.deletePieces(m, []);
     return true;
+  }
+  /** Maps whose files were deleted by hand are taken out of maps.json (so the phone stops offering them). → names */
+  tidy(){
+    if (!this.cfg.folder || !fs.existsSync(this.catalogFile())) return [];
+    const c = this.catalog(); if (c.damaged || !FORMATS.includes(c.format)) return [];
+    const gone = c.maps.filter(m => !m.base || this.pieces(m.base).some(f => !fs.existsSync(path.join(this.cfg.folder, path.basename(f)))) || (m.terrain && this.pieces(m.terrain).some(f => !fs.existsSync(path.join(this.cfg.folder, path.basename(f))))));
+    if (!gone.length) return [];
+    c.maps = c.maps.filter(m => !gone.includes(m)); this.writeCatalog(c);
+    return gone.map(m => m.name);
+  }
+  /** After the max. file size changed: split or join the maps already in the folder, without downloading again. */
+  async applyPartSize(onProgress){
+    const c = this.catalog(), max = this.partBytes(); let changed = 0;
+    for (const m of c.maps) for (const key of ["base", "terrain"]){
+      const f = m[key]; if (!f) continue;
+      const want = max && f.bytes > max ? Math.ceil(f.bytes / max) : 1, have = f.parts ? f.parts.length : 1;
+      if (want === have && (!f.parts || f.parts.every((p, i) => p.bytes === Math.min(max, f.bytes - i * max)))) continue;
+      onProgress && onProgress(m.name);
+      const tmp = path.join(this.tmpDir, f.file + ".join"), out = fs.openSync(tmp, "w");
+      try { for (const pc of this.pieces(f)) { const b = fs.readFileSync(path.join(this.cfg.folder, pc)); fs.writeSync(out, b); } } finally { fs.closeSync(out); }
+      if (await sha256(tmp) !== f.sha256){ fs.unlinkSync(tmp); throw new Error(m.name + ": the files in the folder do not match maps.json; download the map again."); }
+      const sp = await this.split(tmp, f.file), old = this.pieces(f);
+      for (const x of sp.moves) moveFile(x[0], path.join(this.cfg.folder, x[1]));
+      for (const o of old) if (!sp.names.includes(o)) try { fs.unlinkSync(path.join(this.cfg.folder, o)); } catch(e){}
+      if (sp.parts) f.parts = sp.parts; else delete f.parts;
+      changed++;
+    }
+    if (changed) this.writeCatalog(c);
+    return changed;
+  }
+  /** Reads a piece of a map file in the folder, also when it is split into parts. */
+  readMap(file, offset, length){
+    file = path.basename(file); if (!/\.pmtiles$/.test(file)) throw new Error("bad file");
+    const m = this.catalog().maps.map(x => [x.base, x.terrain]).flat().find(f => f && f.file === file);
+    const list = m && m.parts ? m.parts : [{ file, bytes: Infinity }], out = Buffer.alloc(length); let got = 0, start = 0;
+    for (const p of list){
+      const size = p.bytes === Infinity ? fs.statSync(path.join(this.cfg.folder, p.file)).size : p.bytes;
+      if (offset + got < start + size && got < length){
+        const fd = fs.openSync(path.join(this.cfg.folder, path.basename(p.file)), "r");
+        try { got += fs.readSync(fd, out, got, Math.min(length - got, start + size - (offset + got)), offset + got - start); } finally { fs.closeSync(fd); }
+      }
+      start += size; if (got >= length) break;
+    }
+    return out.subarray(0, got);
   }
   /** Newest build date vs. each map's date. */
   async updates(signal){ const b = await this.baseSource(signal); const d = b.date ? b.date.slice(0, 4) + "-" + b.date.slice(4, 6) + "-" + b.date.slice(6) : null; return { latest: d, outdated: d ? this.catalog().maps.filter(m => m.date < d).map(m => m.id) : [] }; }
@@ -129,4 +203,4 @@ class Core {
   }
   deleteRoute(file){ try { fs.unlinkSync(path.join(this.routesDir(), path.basename(file))); return true; } catch(e){ return false; } }
 }
-module.exports = { Core, FORMAT, BASE_MAXZOOM, TERRAIN_MAXZOOM, safeName };
+module.exports = { Core, FORMAT, FORMAT2, BASE_MAXZOOM, TERRAIN_MAXZOOM, safeName };

@@ -39,8 +39,12 @@ const BRIDGE = ({ db, installed, srJson }) => {
     mapCancel: () => {}, pickFile: (kind, cb) => setTimeout(() => FKNativeCallback(cb, state.pick), 5),
     sensors: cb => setTimeout(() => FKNativeCallback(cb, { ok: true, msg: JSON.stringify(state.sensors) }), 5),
     hasTorch: () => true, torch: on => { state.torch.push(on); return true; }, setBrightness: f => state.bright.push(f),
+    // 0.4.0: flashlight sequence runs in the app (#11), maps in parts (#13)
+    signal: (pattern, unitMs, repeat, id) => { state.signals.push({ pattern: JSON.parse(pattern), unitMs, repeat, id }); state.torch.push(true); setTimeout(() => FKSignal(id, 0, 'run'), 5); return true; },
+    signalStop: () => { state.signalStops++; state.torch.push(false); },
+    mapDownloadParts: (folder, name, parts, sha, size, id) => { state.calls.push('DLP ' + folder + ' ' + name + ' ' + JSON.parse(parts).map(p => p.file).join(',')); setTimeout(() => FKMapProgress(id, size / 2, size, 'run', ''), 5); setTimeout(() => { state.maps = state.maps.filter(f => f.name !== name).concat([{ name, bytes: size }]); FKMapProgress(id, 0, 0, 'done', ''); }, 15); },
   };
-  Object.assign(state, { files: [], calls: [], nc: {}, maps: [], wifi: true, pick: { ok: false, msg: 'cancelled' }, sensors: { hasPressure: true, hasTemp: false, pressure: 950 }, torch: [], bright: [] });
+  Object.assign(state, { files: [], calls: [], nc: {}, maps: [], wifi: true, pick: { ok: false, msg: 'cancelled' }, sensors: { hasPressure: true, hasTemp: false, pressure: 950 }, torch: [], bright: [], signals: [], signalStops: 0 });
 };
 const SR = JSON.stringify({ weapons: [{ id: 'W1', name: 'Test rifle', caliber: '6.5 Creedmoor', sightHeightMm: 52, zeroM: 100, scopeUnit: 'mrad', clickValue: 0.1 }],
   munitions: [{ id: 'M1', name: 'Test 140', caliber: '6.5 Creedmoor', bulletWeightG: 9.07, bcG1: 0.646, bcG7: 0.326, nominalV0: 823 }], v0: { 'W1|M1': { v: 820, n: 6 } } });
@@ -205,6 +209,17 @@ async function page(opts, hash = '') {
   ok((await p.$eval('#mList', e => e.textContent)).includes('Update'), 'maps: newer build on Nextcloud shows Update');
   await p.click('[data-mdel="at-tirol"]'); await p.click('[data-mdel="at-tirol"]'); await p.waitForTimeout(30);
   ok(await p.evaluate(() => __bridge.maps.length === 0 && !FKStore.get('sr-maps', []).length), 'maps: delete (asks twice) removes files and entry');
+  // #13 maps.json FK-2: a file in parts is downloaded part by part and joined in the app
+  await p.evaluate(() => { __bridge.nc['GET /StoicRanger_Maps/maps.json'] = [200, JSON.stringify({ format: 'FK-2', version: 1, maps: [{ id: 'gb-scotland', name: 'United Kingdom · Scotland', date: '2026-11-09', bbox: [-8, 54.6, -0.7, 60.9], base: { file: 'gb-scotland.pmtiles', bytes: 600e6, sha256: 'ab', parts: [{ file: 'gb-scotland.pmtiles.001', bytes: 262144000, sha256: '1' }, { file: 'gb-scotland.pmtiles.002', bytes: 262144000, sha256: '2' }, { file: 'gb-scotland.pmtiles.003', bytes: 75711999, sha256: '3' }] }, terrain: { file: 'gb-scotland-terrain.pmtiles', bytes: 200e6, sha256: 'cd' } }] })]; });
+  await p.click('#mCheck'); await p.waitForTimeout(60);
+  ok((await p.$eval('#mList', e => e.textContent)).includes('Scotland'), 'maps: FK-2 catalog (split map) is read');
+  await p.click('[data-mget="gb-scotland"]'); await p.waitForTimeout(200);
+  const calls4 = await p.evaluate(() => __bridge.calls);
+  ok(calls4.includes('DLP /StoicRanger_Maps/ gb-scotland.pmtiles gb-scotland.pmtiles.001,gb-scotland.pmtiles.002,gb-scotland.pmtiles.003') && calls4.includes('DL /StoicRanger_Maps/gb-scotland-terrain.pmtiles'), 'maps: split map downloaded in its 3 parts, terrain in one piece');
+  const m4 = await p.evaluate(() => FKStore.get('sr-maps', []).find(x => x.id === 'gb-scotland'));
+  ok(m4 && m4.base.file === 'gb-scotland.pmtiles' && m4.date === '2026-11-09', 'maps: joined map is on the phone under its one name');
+  await p.evaluate(() => { __bridge.nc['GET /StoicRanger_Maps/maps.json'] = [200, JSON.stringify({ format: 'FK-3', version: 1, maps: [] })]; }); await p.click('#mCheck'); await p.waitForTimeout(60);
+  ok((await p.$eval('#mMsg', e => e.textContent)).includes('FK-3'), 'maps: unknown newer format refused with a clear message');
   // position from two bearings
   const fx = await p.evaluate(() => { const P = { lat: 47.25, lon: 11.40 }, L1 = { lat: 47.30, lon: 11.38 }, L2 = { lat: 47.27, lon: 11.48 };
     const R = Math.PI / 180, brg = (a, b) => { const y = Math.sin((b.lon - a.lon) * R) * Math.cos(b.lat * R), x = Math.cos(a.lat * R) * Math.sin(b.lat * R) - Math.sin(a.lat * R) * Math.cos(b.lat * R) * Math.cos((b.lon - a.lon) * R); return (Math.atan2(y, x) / R + 360) % 360; };
@@ -238,9 +253,17 @@ async function page(opts, hash = '') {
   ok(await p.$eval('#hTitle', e => e.textContent) === 'Night & signal', 'route #night');
   const s = await p.evaluate(() => __night.seq('SOS').map(x => (x[0] ? '1' : '0') + x[1]).join(' '));
   ok(s === '11 01 11 01 11 03 13 01 13 01 13 03 11 01 11 01 11', 'Morse: SOS timing (dot 1, dash 3, gaps 1/3)');
-  await p.click('#ngSos'); await p.waitForTimeout(500); await p.click('#ngStop');
+  await p.click('#ngSos'); await p.waitForTimeout(100);
+  const sg = await p.evaluate(() => __bridge.signals[0]);
+  ok(sg && sg.pattern.map(x => x.join('')).join(' ') === s && sg.unitMs === 200, 'signal light: whole SOS sequence handed to the app in one go (#11), 200 ms unit');
+  ok((await p.$eval('#ngShow', e => e.textContent)).includes('SOS · S'), 'signal light: the page shows the letter being sent');
+  await p.click('#ngStop');
   const tr = await p.evaluate(() => __bridge.torch);
-  ok(tr.includes(true) && tr[tr.length - 1] === false, 'signal light: SOS uses the flashlight, Stop turns it off');
+  ok(await p.evaluate(() => __bridge.signalStops) === 1 && tr[tr.length - 1] === false, 'signal light: Stop ends the sequence and turns the light off');
+  await p.fill('#ngMsg', 'help me'); await p.click('#ngSend'); await p.waitForTimeout(50);
+  const sg2 = await p.evaluate(() => __bridge.signals[1]); ok(sg2 && sg2.pattern.length === (await p.evaluate(() => __night.seq('help me').length)), 'signal light: message sent as one sequence');
+  await p.evaluate(id => FKSignal(id, -1, 'done'), sg2.id); await p.waitForTimeout(20);
+  ok(await p.$eval('#ngStop', e => e.hidden), 'signal light: end of message resets the buttons');
   await p.click('#ngRed'); ok(!(await p.$eval('#ngScr', e => e.hidden)) && (await p.evaluate(() => __bridge.bright)).length > 0, 'red screen opens and dims the screen');
   ok(await p.evaluate(() => FK.back()) === true && await p.$eval('#ngScr', e => e.hidden) && (await p.evaluate(() => __bridge.bright)).slice(-1)[0] === -1, 'Back closes the red screen, brightness back to the phone');
   await p.check('#ngMode'); ok(await p.evaluate(() => document.documentElement.hasAttribute('data-red')), 'red night mode for the whole app');

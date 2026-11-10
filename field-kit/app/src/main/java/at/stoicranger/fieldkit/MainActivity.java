@@ -33,6 +33,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -130,6 +131,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         web.evaluateJavascript("window.FK && FK.pause && FK.pause()", null);
+        stopSignal();
         if (torchOn) { Sensors.torch(this, false); torchOn = false; }   // the signal light never stays on behind the app
     }
 
@@ -339,6 +341,17 @@ public class MainActivity extends Activity {
     }
 
     /* ---------- JS bridge ---------- */
+    // ---------- signal light (remark #11): the whole Morse / SOS / strobe sequence runs here, on its own thread ----------
+    private volatile Thread signalThread;
+    private void stopSignal() {
+        Thread t = signalThread; signalThread = null;
+        if (t != null) { t.interrupt(); try { t.join(800); } catch (InterruptedException ignored) { } }
+    }
+    private void signalProgress(String id, int step, String state) {
+        final String js = "window.FKSignal && FKSignal(" + JSONObject.quote(id) + "," + step + "," + JSONObject.quote(state) + ")";
+        runOnUiThread(new Runnable() { @Override public void run() { if (web != null) web.evaluateJavascript(js, null); } });
+    }
+
     private class Bridge {
         private File dbFile() { return new File(getFilesDir(), "db.json"); }
 
@@ -594,6 +607,52 @@ public class MainActivity extends Activity {
             } }).start();
         }
 
+        /** Downloads a map saved in parts by the Map Manager (remark #13): parts = [{file, bytes, sha256}] in folder,
+         *  each part checked, appended to <name>.part, the joined file checked against sha256, then renamed. */
+        @JavascriptInterface
+        public void mapDownloadParts(final String folder, final String name, final String parts, final String sha256, final double size, final String id) {
+            mapCancel = false;
+            new Thread(new Runnable() { @Override public void run() {
+                String err = null;
+                File part = null;
+                try {
+                    if (folder == null || folder.contains("..")) throw new IOException("bad path");
+                    JSONArray list = new JSONArray(parts);
+                    if (list.length() == 0 || list.length() > 1000) throw new IOException("bad parts list");
+                    File target = MapFiles.file(MainActivity.this, name);
+                    if (size > 0 && MapFiles.free(MainActivity.this) < size + 200L * 1024 * 1024)
+                        throw new IOException("Not enough free space on the phone (" + Math.round(size / 1e6) + " MB needed).");
+                    part = new File(MapFiles.dir(MainActivity.this), name + ".part");
+                    if (part.exists() && !part.delete()) throw new IOException("Could not clear an old unfinished download.");
+                    final long all = (long) size;
+                    long before = 0;
+                    JSONObject cfg = SyncStore.get(MainActivity.this, true);
+                    for (int i = 0; i < list.length(); i++) {
+                        JSONObject pc = list.getJSONObject(i);
+                        String f = pc.optString("file");
+                        if (f.isEmpty() || f.contains("/") || f.contains("\\") || f.contains("..")) throw new IOException("bad part name");
+                        final long base = before;
+                        JSONObject r = NcClient.download(cfg, folder + f, part, true, new NcClient.Progress() {
+                            @Override public boolean step(long done, long total) { progress(id, base + done, all > 0 ? all : base + total, "run", ""); return !mapCancel; }
+                        });
+                        int st = r.optInt("status");
+                        if (st != 200) throw new IOException(r.has("error") ? r.optString("error") : st == 404 ? "Part " + (i + 1) + " of " + list.length() + " is not on Nextcloud (yet). Wait until the Nextcloud client has uploaded everything." : st == 401 ? "Nextcloud refused the login. Check the app password." : "Nextcloud answered " + st + ".");
+                        if (r.has("error")) throw new IOException(r.optString("error"));
+                        String ps = pc.optString("sha256");
+                        if (!ps.isEmpty() && !ps.equalsIgnoreCase(r.optString("sha256"))) throw new IOException("Part " + (i + 1) + " is damaged or not fully uploaded yet (checksum differs). Nothing was replaced.");
+                        before += r.optLong("bytes");
+                    }
+                    progress(id, before, all > 0 ? all : before, "run", "");
+                    if (sha256 != null && !sha256.isEmpty() && !sha256.equalsIgnoreCase(MapFiles.sha256(part)))
+                        throw new IOException("The joined map is damaged (checksum differs). Nothing was replaced.");
+                    if (!MapFiles.finish(part, target)) throw new IOException("Could not store the map file.");
+                    part = null;
+                } catch (Exception e) { err = e.getMessage() == null ? "failed" : e.getMessage(); }
+                if (part != null) part.delete();
+                progress(id, 0, 0, err == null ? "done" : "error", err == null ? "" : err);
+            } }).start();
+        }
+
         @JavascriptInterface
         public void mapCancel() { mapCancel = true; }
 
@@ -625,7 +684,62 @@ public class MainActivity extends Activity {
         public boolean hasTorch() { return Sensors.hasTorch(MainActivity.this); }
 
         @JavascriptInterface
-        public boolean torch(boolean on) { torchOn = on; return Sensors.torch(MainActivity.this, on); }
+        public boolean torch(boolean on) { stopSignal(); torchOn = on; return Sensors.torch(MainActivity.this, on); }
+
+        /** Plays a flashlight sequence: pattern = [[on 0/1, units], …], unitMs per unit; repeat = again after 7 units
+         *  off until signalStop. Timing is kept against the clock (no drift); the light is always switched off at the
+         *  end, when stopped, on error and when the app goes to the background. Progress: FKSignal(id, step, state);
+         *  state = run | pause | done | stopped | error. */
+        @JavascriptInterface
+        public boolean signal(String pattern, final double unitMs, final boolean repeat, final String id) {
+            stopSignal();
+            final int[][] steps;
+            try {
+                JSONArray a = new JSONArray(pattern);
+                steps = new int[a.length()][2];
+                for (int i = 0; i < a.length(); i++) { JSONArray s = a.getJSONArray(i); steps[i][0] = s.optInt(0) != 0 ? 1 : 0; steps[i][1] = Math.max(1, Math.min(50, s.optInt(1, 1))); }
+            } catch (Exception e) { return false; }
+            if (steps.length == 0 || steps.length > 5000 || Sensors.torchId(MainActivity.this) == null) return false;
+            final long unit = Math.max(30, Math.min(2000, Math.round(unitMs)));
+            Thread t = new Thread(new Runnable() { @Override public void run() {
+                String state = "done";
+                long next = android.os.SystemClock.elapsedRealtime();
+                try {
+                    boolean again = true;
+                    while (again) {
+                        for (int i = 0; i < steps.length; i++) {
+                            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                            boolean on = steps[i][0] == 1;
+                            torchOn = on;
+                            if (!Sensors.torch(MainActivity.this, on) && on) throw new IOException("torch");
+                            signalProgress(id, i, "run");
+                            next += steps[i][1] * unit;
+                            long wait = next - android.os.SystemClock.elapsedRealtime();
+                            if (wait > 0) Thread.sleep(wait); else next = android.os.SystemClock.elapsedRealtime();
+                        }
+                        again = repeat;
+                        if (again) {
+                            Sensors.torch(MainActivity.this, false); torchOn = false;
+                            signalProgress(id, -1, "pause");
+                            next += 7 * unit;
+                            long wait = next - android.os.SystemClock.elapsedRealtime();
+                            if (wait > 0) Thread.sleep(wait); else next = android.os.SystemClock.elapsedRealtime();
+                        }
+                    }
+                } catch (InterruptedException e) { state = "stopped"; }
+                catch (Exception e) { state = "error"; }
+                finally {
+                    Sensors.torch(MainActivity.this, false); torchOn = false;
+                    signalProgress(id, -1, state);
+                }
+            } }, "signal");
+            signalThread = t;
+            t.start();
+            return true;
+        }
+
+        @JavascriptInterface
+        public void signalStop() { stopSignal(); Sensors.torch(MainActivity.this, false); torchOn = false; }
 
         /** Screen brightness for this app only: 0.01 … 1, or below 0 to follow the phone again. */
         @JavascriptInterface
