@@ -1,0 +1,10 @@
+{
+  "name": "stoic-ranger-map-manager",
+  "productName": "Stoic Ranger Map Manager",
+  "version": "0.2.0",
+  "description": "Downloads offline maps (OpenStreetMap with contour lines) and plans routes for SR Field Kit, into your Nextcloud folder.",
+  "main": "main.js",
+  "author": "Manuel Faessler",
+  "license": "UNLICENSED",
+  "private": true
+}

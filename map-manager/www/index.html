@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stoic Ranger Map Manager</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; script-src 'self'; connect-src 'self' fkbase: fkglyphs: fkdem: dem-shared: dem-contour: blob: data:; font-src 'self'">
+<link rel="stylesheet" href="map/lib/maplibre-gl.css">
+<link rel="stylesheet" href="mm.css">
+</head>
+<body>
+<header class="band">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#b08d3c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+  <div class="brand"><b>Stoic Ranger Map Manager</b><span>Offline maps for SR Field Kit</span></div>
+  <nav aria-label="Sections">
+    <a href="#maps" data-tab="maps">Maps</a><a href="#add" data-tab="add">Add a region</a><a href="#routes" data-tab="routes">Routes</a><a href="#settings" data-tab="settings">Settings</a>
+  </nav>
+</header>
+<div id="notice" class="notice" hidden></div>
+
+<section id="v-maps" class="view">
+  <div class="main">
+    <div class="titlerow">
+      <div><h1>Your maps</h1><p class="sub" id="mapsSub"></p></div>
+      <div class="actions"><a class="btn ghost" href="#add">+ Add a region</a><button type="button" class="btn" id="updAll" hidden>Update all</button></div>
+    </div>
+    <div class="card tablebox"><table><thead><tr><th>Region</th><th>Map data</th><th>Size</th><th>Status</th><th class="r">Action</th></tr></thead><tbody id="mapRows"></tbody></table></div>
+    <p class="note">Delete asks first, then removes the map's files and takes it out of maps.json, so the phone stops offering it. Maps whose files you deleted by hand are taken out of maps.json automatically. Phones keep maps they already downloaded until they are deleted there.</p>
+  </div>
+  <aside class="side">
+    <section class="card"><h2>Nextcloud folder</h2><div id="fState"></div><div class="mono small" id="fPath"></div><div class="small muted" id="fFree"></div><button type="button" class="btn ghost" id="openF">Open folder</button></section>
+    <section class="card"><h2>Catalog for the phone</h2><div><span class="mono small">maps.json</span> · <span id="catN">0</span> maps listed</div><p class="small muted">Only maps that are fully downloaded and checked (SHA-256) are listed, so the phone never sees a half-finished file.</p></section>
+    <section class="card dark"><h2>Map format</h2><p class="small">Vector map (zoom 0-15) · contour lines · hillshade · footpaths and tracks · place names</p><p class="small dim">Fixed: SR Field Kit reads exactly this, so there are no settings to get wrong.</p></section>
+  </aside>
+</section>
+
+<section id="v-add" class="view" hidden>
+  <div class="main">
+    <div class="titlerow"><div><h1>Add a region</h1><p class="sub">Pick a country, then tick the whole country or the regions you need. Maps you already have are marked. Sizes are worked out from the map server.</p></div></div>
+    <div class="pick">
+      <section class="card plist"><label class="sr" for="q">Search countries and regions</label><input id="q" type="search" placeholder="Search a country or region, e.g. Scotland" autocomplete="off">
+        <div id="countryList" class="scroll" role="listbox" aria-label="Countries"></div></section>
+      <section class="card plist"><div class="glbl" id="ctryHead">Regions</div><div id="regionList" class="scroll"></div></section>
+    </div>
+  </div>
+  <aside class="side">
+    <section class="card"><h2>Selected</h2><div id="selList" class="small muted">Nothing selected yet.</div>
+      <div class="total"><span>Total</span><span class="mono" id="selTotal">–</span></div>
+      <button type="button" class="btn" id="dlBtn" disabled>Download</button><a class="btn ghost" href="#maps">Back to my maps</a></section>
+    <section class="card" id="jobBox" hidden><h2>Downloading</h2><div id="jobText" class="small"></div><div class="bar"><i id="jobBar"></i></div><button type="button" class="btn ghost" id="cancelBtn">Stop</button></section>
+    <section class="card dark"><h2>Always the same map format</h2><p class="small">Every region comes with contour lines, hillshade and footpaths. There is nothing to choose. Big maps are split into files of the size set under Settings; the phone joins them again.</p></section>
+  </aside>
+</section>
+
+<section id="v-routes" class="view routes" hidden>
+  <aside class="rlist">
+    <div class="lbl">Your routes</div>
+    <div id="routeList"></div>
+    <div class="rbtns"><button type="button" class="btn" id="newRoute">+ New route</button><button type="button" class="btn ghost" id="impRoute">Import GPX file</button></div>
+  </aside>
+  <div class="mapwrap"><div id="map"></div>
+    <div class="maphint" id="mapHint">Click the map to add a waypoint. Drag a waypoint to move it, right-click it to remove it.</div>
+    <div class="nomap" id="noMap" hidden><b>No map downloaded yet.</b><p>Download a region under "Add a region" first. You can still plan with typed coordinates.</p></div>
+  </div>
+  <aside class="rdetail">
+    <div class="rhead">
+      <label for="rName">Route name</label><input id="rName" maxlength="60">
+      <div class="small" id="rTotals"></div>
+    </div>
+    <div id="wpList" class="wplist"></div>
+    <form id="addCoord" class="addc"><label for="cIn" class="small">Add by coordinates (MGRS or degrees)</label><div class="row"><input id="cIn" placeholder="33T VN 12345 67890 or 47.2, 11.4"><button class="btn ghost" type="submit">Add</button></div><div class="small bad" id="cErr"></div></form>
+    <div class="rfoot">
+      <button type="button" class="btn" id="saveRoute">Save for the phone (StoicRanger_Maps/Routes)</button>
+      <div class="row"><button type="button" class="btn ghost" id="expRoute">Export GPX file</button><button type="button" class="btn ghost" id="revRoute">Reverse</button><button type="button" class="btn ghost" id="delRoute">Delete</button></div>
+      <span class="small muted">GPX opens in most map and GPS apps, so you can share a route with people who don't use Field Kit.</span>
+    </div>
+  </aside>
+</section>
+
+<section id="v-settings" class="view" hidden>
+  <div class="main wide">
+    <h1>Settings</h1>
+    <div class="grid3">
+      <section class="card">
+        <h2>Where maps go</h2>
+        <p class="small">The Map Manager saves into your Nextcloud desktop folder and the Nextcloud client uploads it. No password needed here.</p>
+        <label class="lbl2" for="sFolder">Maps folder inside your Nextcloud desktop folder</label>
+        <div class="row"><input id="sFolder" class="mono"><button type="button" class="btn ghost" id="pickF">Change</button></div>
+        <div class="small" id="sFolderState"></div>
+        <p class="small muted">Each map is written in a temporary folder first and moved in when it is complete; maps.json is updated last.</p>
+      </section>
+      <section class="card">
+        <h2>Options</h2>
+        <label class="opt"><input type="checkbox" id="sCheck">Check for newer map data when the Map Manager opens</label>
+        <label class="opt"><input type="checkbox" id="sKeep">Keep the previous version of a map when updating (as .bak)</label>
+        <label class="lbl2" for="sMax">Maximum file size (bigger maps are saved in parts; the phone joins them)</label>
+        <select id="sMax"><option value="100">100 MB</option><option value="250">250 MB (recommended)</option><option value="500">500 MB</option><option value="1000">1000 MB</option><option value="0">No limit</option></select>
+        <label class="lbl2" for="sTheme">Design</label>
+        <select id="sTheme"><option value="system">Like Windows (light or dark)</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        <label class="lbl2" for="sDecl">Declination for route bearings (° east +, 0 = true north)</label><input id="sDecl" type="number" step="0.1">
+        <details class="adv"><summary>Map data sources (advanced)</summary>
+          <label class="lbl2" for="sBase">OpenStreetMap build (empty = newest Protomaps daily build)</label><input id="sBase" class="mono" placeholder="https://build.protomaps.com/YYYYMMDD.pmtiles">
+          <label class="lbl2" for="sTerr">Terrain</label><input id="sTerr" class="mono">
+        </details>
+        <button type="button" class="btn" id="saveS">Save settings</button><span class="small ok" id="sSaved"></span>
+      </section>
+      <section class="card dark">
+        <h2>Map format (fixed)</h2>
+        <dl class="kv"><dt>Format</dt><dd class="mono">FK-1 (FK-2 when split)</dd><dt>Map</dt><dd>Vector, zoom 0-15</dd><dt>Contour lines</dt><dd>Yes (from terrain)</dd><dt>Hillshade</dt><dd>Yes</dd><dt>Footpaths, tracks</dt><dd>Yes</dd></dl>
+        <p class="small dim">Map data © OpenStreetMap contributors (ODbL), built by Protomaps. Terrain: Mapterhorn, from Copernicus GLO-30 (DLR, Airbus, EU/ESA) and national elevation data: BEV and the Austrian Länder, Bayerische Vermessungsverwaltung, swisstopo, ARSO, ČÚZK, Prov. Bozen (CC BY 4.0 and open data). Country and region borders for the lists: Natural Earth (public domain).</p>
+        <p class="small dim" id="verLine"></p>
+      </section>
+    </div>
+  </div>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+<script src="map/lib/maplibre-gl.js"></script>
+<script src="map/lib/pmtiles.js"></script>
+<script src="map/lib/maplibre-contour.js"></script>
+<script src="map/lib/protomaps-basemaps.js"></script>
+<script src="map/fkmap.js"></script>
+<script src="map/gpx.js"></script>
+<script src="map/mgrs.js"></script>
+<script src="mm.js"></script>
+</body>
+</html>
