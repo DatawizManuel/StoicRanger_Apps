@@ -81,11 +81,12 @@ RB.TABLES = {
     ],
   },
   roundsLog: {
-    title: 'Rounds log', one: 'rounds log entry', prefix: 'R', sheet: 'Rounds_Log',
+    title: 'Rounds log', one: 'rounds entry', prefix: 'R', sheet: 'Rounds_Log',
     fields: [
       ['id', 'ID', 'id'], ['date', 'Date', 'date', { span: 3, req: true }], ['rounds', 'Rounds', 'int', { span: 3, req: true }],
       ['weaponId', 'Weapon ID', 'ref:weapons', { span: 6, req: true }], ['barrelId', 'Barrel ID', 'ref:barrels', { span: 6, hint: 'Empty = barrel fitted on that date' }],
-      ['note', 'Note', 'text', { span: 6, hint: 'Hunting, fouling shots, practice without a sheet …' }],
+      ['munitionId', 'Ammunition', 'ref:munitions', { span: 6, hint: 'Optional' }],
+      ['note', 'Note', 'text', { span: 6, hint: 'e.g. Shot by shooter xy, hunting, fouling shots, practice without a training' }],
     ],
   },
 };

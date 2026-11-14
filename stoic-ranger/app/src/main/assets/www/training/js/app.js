@@ -57,12 +57,11 @@ TL.newTraining = () => {
   if (TL.readOnly) { TL.toast('Read-only: update the app first.', true); return; }
   const opts = [
     ['#/training/new', '✎', 'Create new training dataset', 'Date, duration, guns and rounds, trainer, remarks.'],
-    ['#/db/shooters/new', '☺', 'Add new shooter', 'A person whose trainings you log.'],
     ['#/db/weapons/new', '⌖', 'Add new gun', 'Rifle, pistol, shotgun … with caliber and zero distance.'],
     ['#/db/trainers/new', '☎', 'Add new trainer', 'Trainer, club, school or range, with phone, e-mail and website.'],
   ];
   const m = TL.sheet('New', opts.map(([h, ic, t, d]) => `<a class="choice sm" href="${h}" data-go><div class="ic">${ic}</div><div><h3>${t}</h3><p>${d}</p></div></a>`).join('')
-    + (TL.linkOn() ? '<p class="note">Linked with the Gun Database: shooters, guns and trainers you add there appear here on the next sync. Barrels and ammunition are kept in the Gun Database.</p>' : ''));
+    + (TL.linkOn() ? '<p class="note">Linked with the Gun Database: guns and trainers you add there appear here on the next sync. Barrels and ammunition are kept in the Gun Database.</p>' : ''));
   TL.$$('[data-go]', m.body).forEach(a => a.onclick = e => { e.preventDefault(); m.close(); TL.go(a.getAttribute('href')); });
 };
 
@@ -105,15 +104,15 @@ TL.views.welcome = {
         <div class="wlogo">${TL.logo('hlogo')}</div>
         <div class="kicker">Stoic Ranger // Training Log</div>
         <h1>Welcome</h1>
-        <p>Log every shooting training: who trained, when and how long, with which guns and how many rounds, and with which trainer or organizer. The dashboard sums it up by shooter, year, gun and trainer, and prints a record sheet. Everything stays on this phone.</p>
+        <p>Log your shooting trainings: when and how long, with which guns and how many rounds, and with which trainer or organizer. The dashboard sums it up by year, gun and trainer, and prints a record sheet. Everything stays on this phone.</p>
       </div>
       <div class="stack">
         <button class="btn pri big" id="wStart">Start</button>
         <button class="btn big" id="wImport">Restore a backup</button>
         <button class="btn big" id="wXlsx">Import database.xlsx</button>
       </div>
-      <p class="note">The logbook starts empty. Add your shooters, guns and trainers first (or link with the Gun Database under More), then enter trainings with the <b>New</b> button.</p>`;
-    $('#wStart').onclick = () => { TL.firstRun = false; TL.save(true); TL.go('#/db/shooters'); };
+      <p class="note">The logbook starts empty. Add your guns and trainers first (or link with the Gun Database under More), then enter trainings with the <b>New</b> button.</p>`;
+    $('#wStart').onclick = () => { TL.firstRun = false; TL.save(true); TL.go('#/db/weapons'); };
     $('#wImport').onclick = () => { TL.firstRun = false; TL.go('#/more'); setTimeout(() => TL.restoreBackup && TL.restoreBackup(), 50); };
     $('#wXlsx').onclick = () => { TL.firstRun = false; TL.save(true); TL.go('#/more'); setTimeout(() => TL.importXlsx && TL.importXlsx(), 50); };
   },

@@ -3,7 +3,7 @@
 'use strict';
 (() => {
 const { $, $$, esc, fmtInt } = TL;
-const TABS = ['shooters', 'weapons', 'trainers'];
+const TABS = ['weapons', 'trainers'];   // shooters: one only from 1.3.0 (kept in the Gun Database)
 
 TL.recordForm = (table, r) => { const lock = TL.lockedKeys(table, r); return `<div class="fg">${TL.TABLES[table].fields.map(([k, label, type, o = {}]) => {
   const v = r[k] ?? '', span = 's' + (o.span || 6), req = o.req ? ' *' : '', dis = lock.includes(k) ? ' disabled' : '';
@@ -56,8 +56,8 @@ const contactLinks = t => [
 ].filter(Boolean).join('');
 
 TL.views.db = {
-  render(el, [table = 'shooters', id]) {
-    if (!TL.TABLES[table]) table = 'shooters';
+  render(el, [table = 'weapons', id]) {
+    if (!TL.TABLES[table]) table = 'weapons';
     if (id) return editView(el, table, id);
     const T = TL.TABLES[table];
     TL.header('Database', { actions: `<a class="ib" href="#/db/${table}/new" aria-label="Add new ${esc(T.one)}">＋</a>` });

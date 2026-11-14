@@ -5,13 +5,15 @@ const { $, $$, esc, fx } = RB;
 
 const pick = RB.pickSel = (id, label, none, opts, v) => `<label><span>${label}</span><select id="${id}" aria-label="${label}"><option value="">${none}</option>${opts.map(([k, n]) => `<option value="${esc(k)}" ${k === v ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
 
-/** Shooter → gun → ammunition selection (each list narrowed by the choice before) and everything built for it. */
+/** Gun → ammunition selection (the list narrowed by the choice before) and everything built for it.
+    No shooter choice from 1.4.0 (remark #20: one shooter only, no shooter in the data). */
 RB.selectData = f => {
+    f.shooter = '';
     // optional selection under the header: shooter first, then gun, then ammunition. Each list only offers what
     // occurs together with the choice before it. Kept in settings, so it survives a restart.
     const sheets = RB.db.sheets;
     const kM = s => (RB.munition(s.munitionId) ? s.munitionId : 'n:' + (s.ammo || '')), kS = s => (RB.shooter(s.shooterId) ? s.shooterId : 'n:' + (s.shooter || ''));
-    const shooterOpts = RB.db.shooters.map(p => [p.id, p.name]).concat([...new Set(sheets.filter(s => !RB.shooter(s.shooterId) && s.shooter).map(s => s.shooter))].map(n => ['n:' + n, n + ' (not in DB)']));
+    const shooterOpts = [];
     if (f.shooter && !shooterOpts.some(o => o[0] === f.shooter)) f.shooter = '';
     const byShooter = sheets.filter(s => !f.shooter || kS(s) === f.shooter);
     const weaponOpts = RB.db.weapons.filter(w => !f.shooter || byShooter.some(s => s.weaponId === w.id)).map(w => [w.id, w.name]);
@@ -74,7 +76,6 @@ RB.views.dash = {
     el.innerHTML = `
       <div class="brandbar">${RB.logo('dlogo')}<div><div class="bt">Stoic Ranger</div><div class="bs">Gun Database · performance log</div></div></div>
       <div class="filters">
-        ${pick('dS', 'Shooter', 'All shooters', shooterOpts, f.shooter)}
         ${pick('dW', 'Gun', 'All guns', weaponOpts, W)}
         ${pick('dM', 'Ammunition', 'All ammunition', ammoOpts, f.munition)}
       </div>
@@ -114,7 +115,7 @@ RB.views.dash = {
       <div class="card"><h3>Group size over time</h3><div class="note">Mean radius in ${A} per sheet.</div><div id="cTrend"></div></div>
       <div class="card"><h3>Average ring per shooter sheet</h3><div class="note">Ring 1–10, scored to the bullet edge.</div><div id="cRing"></div></div>`;
 
-    [['dW', 'weapon'], ['dM', 'munition'], ['dS', 'shooter']].forEach(([id, k]) => $('#' + id).onchange = e => { f[k] = e.target.value; RB.save(); RB.views.dash.render(el); });
+    [['dW', 'weapon'], ['dM', 'munition']].forEach(([id, k]) => $('#' + id).onchange = e => { f[k] = e.target.value; RB.save(); RB.views.dash.render(el); });
     RB.wireQuickAdd(el);
     $('#dClear').onclick = () => { Object.assign(f, { shooter: '', weapon: '', munition: '' }); RB.save(); RB.views.dash.render(el); };
     $$('tr[data-href]', el).forEach(tr => tr.onclick = () => RB.go(tr.dataset.href));

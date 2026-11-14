@@ -62,7 +62,7 @@ TL.views.more = {
     el.innerHTML = `
       ${SR.dataSection()}
       <h2>database.xlsx</h2>
-      <p class="note">Same sheets and columns as the registry workbook and the dashboard (Shooters, Weapons, Trainers, Trainings), so the data can go back and forth. Import adds and updates, it never deletes.</p>
+      <p class="note">Same sheets and columns as the registry workbook and the dashboard (Weapons, Trainers, Trainings), so the data can go back and forth. Import adds and updates, it never deletes.</p>
       <div class="stack">
         <button class="btn" id="mXlsxOut">Export database.xlsx</button>
         <button class="btn" id="mXlsxIn">Import database.xlsx</button>
@@ -71,8 +71,8 @@ TL.views.more = {
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(s.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div>
       ${TL.hasExamples() ? '<h2>Example data</h2><div class="stack"><button class="btn" id="mExClear">Remove example data</button></div>' : ''}
       <h2>About</h2>
-      <p class="note">Stoic Ranger · Training Log ${esc(info.version || '')} · data format ${TL.SCHEMA}${info.android === 'web app' ? ' · web app' : TL.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
-      ${TL.db.trainings.length} trainings · ${TL.db.shooters.length} shooters · ${TL.db.weapons.length} guns · ${TL.db.trainers.length} trainers<br>
+      <p class="note">Stoic Ranger Shooting · Training Log ${esc(info.version || '')} · data format ${TL.SCHEMA}${info.android === 'web app' ? ' · web app' : TL.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
+      ${TL.db.trainings.length} trainings · ${TL.db.weapons.length} guns · ${TL.db.trainers.length} trainers<br>
       Fonts: Barlow, JetBrains Mono (SIL Open Font License). SheetJS Community Edition (Apache License 2.0).</p>`;
     SR.wireData(el, TL.toast);
     $('#mXlsxOut', el).onclick = async () => { TL.flush(); const r = await TL.saveFile(`sr-training-log_database_${TL.today()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', TL.exportXlsx()); if (r.ok) TL.toast('Saved: ' + r.msg); else if (r.msg !== 'cancelled') TL.toast('Not saved: ' + r.msg, true); };

@@ -105,21 +105,21 @@ const dbOf = async p => JSON.parse((await idbAll(p))['sr/db.json'] || 'null');
     if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await p.screenshot({ path: path.join(SHOTS, `${(dir || 'home').replace('/', '')}.png`) }); }
   }
   await open(p, 'training/');
-  await p.evaluate(() => { TL.db.shooters.push({ id: 'S-901', uid: 'u-test-901', name: 'Web Test' }); TL.save(true); });
+  await p.evaluate(() => { TL.db.weapons.push({ id: 'W-901', uid: 'u-test-901', name: 'Web Test' }); TL.save(true); });
   await leave(p);
   let d = await dbOf(p);
-  ok(d && d.app === 'stoic-ranger' && d.shooters.some(s => s.uid === 'u-test-901'), 'saved to the one database in IndexedDB');
+  ok(d && d.app === 'stoic-ranger' && d.weapons.some(s => s.uid === 'u-test-901'), 'saved to the one database in IndexedDB');
   await open(p, 'drills/');
-  ok(await p.evaluate(() => SD.db.shooters.some(s => s.uid === 'u-test-901')), 'a shooter added in the Training Log is in Shooting Drills');
+  ok(await p.evaluate(() => SD.db.weapons.some(s => s.uid === 'u-test-901')), 'a gun added in the Training Log is in Shooting Drills');
   await open(p, 'gun/');
-  ok(await p.evaluate(() => RB.db.shooters.some(s => s.uid === 'u-test-901')), 'and in the Gun Database');
+  ok(await p.evaluate(() => RB.db.weapons.some(s => s.uid === 'u-test-901')), 'and in the Gun Database');
   await leave(p);
   d = await dbOf(p);
   const all = await idbAll(p);
   const bak = JSON.parse(all['sr/db.bak.json'] || '{}');
-  ok(bak.app === 'stoic-ranger' && bak.shooters.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
+  ok(bak.app === 'stoic-ranger' && bak.weapons.some(s => s.uid === 'u-test-901') && bak.updated <= d.updated, 'previous copy kept as db.bak.json');
   await open(p, '');
-  ok(await p.evaluate(() => !document.querySelector('.srwis') && /Training Log/.test(document.body.innerText) && !/Daily Thoughts/.test(document.querySelector('#view').innerText.split('Data')[0])), 'home shows the three parts and no quote');
+  ok(await p.evaluate(() => !document.querySelector('.srwis') && /Training Log/i.test(document.body.innerText) && !/Daily Thoughts/.test(document.querySelector('#view').innerText.split('Data')[0])), 'home shows the three parts and no quote');
   await ctx.close();
 }
 function arr(a) { return Array.isArray(a) ? a : []; }
@@ -147,12 +147,12 @@ function arr(a) { return Array.isArray(a) ? a : []; }
 /* 4: localStorage mirror newer than IndexedDB */
 {
   const { ctx, p } = await fresh();
-  const a = { app: 'stoic-ranger', format: 1, updated: '2026-10-01T10:00:00.000Z', schemas: { sd: 1 }, settings: { common: {} }, history: [], results: [], favs: [], shooters: [{ id: 'S-001', uid: 'a', name: 'Old' }], weapons: [] };
-  const b = Object.assign({}, a, { updated: '2026-10-02T10:00:00.000Z', shooters: [{ id: 'S-001', uid: 'a', name: 'Old' }, { id: 'S-002', uid: 'b', name: 'New' }] });
+  const a = { app: 'stoic-ranger', format: 1, updated: '2026-10-01T10:00:00.000Z', schemas: { sd: 1 }, settings: { common: {} }, history: [], results: [], favs: [], weapons: [{ id: 'S-001', uid: 'a', name: 'Old' }] };
+  const b = Object.assign({}, a, { updated: '2026-10-02T10:00:00.000Z', weapons: [{ id: 'S-001', uid: 'a', name: 'Old' }, { id: 'S-002', uid: 'b', name: 'New' }] });
   await idbPut(p, { 'sr/db.json': JSON.stringify(a) });
   await p.evaluate(t => localStorage.setItem('sr.db', t), JSON.stringify(b));
   await open(p, 'drills/');
-  ok(await p.evaluate(() => SD.db.shooters.length === 2), 'newer localStorage copy wins over an older IndexedDB copy');
+  ok(await p.evaluate(() => SD.db.weapons.length === 2), 'newer localStorage copy wins over an older IndexedDB copy');
   await ctx.close();
 }
 
@@ -179,11 +179,35 @@ function arr(a) { return Array.isArray(a) ? a : []; }
   await ctx.close();
 }
 
+/* 8: 1.4.0, remark #20: the shooter goes out of the data; others' entries keep their rounds and get "Shot by" */
+{
+  const { ctx, p } = await fresh();
+  const old = { app: 'stoic-ranger', format: 1, schemas: { tl: 3, sd: 1 }, settings: { common: {}, tl: { lastShooter: 'S-001' } }, history: [],
+    shooters: [{ id: 'S-001', uid: 's1', name: 'Manuel' }, { id: 'S-002', uid: 's2', name: 'Ines' }], weapons: [{ id: 'W-001', uid: 'w1', name: 'Rifle' }], trainers: [],
+    trainings: [{ id: 'TR-0001', uid: 't1', date: '2026-01-01', fire: 'live', shooterId: 'S-001', desc: 'a', weapons: [{ weaponId: 'W-001', rounds: 20 }] },
+      { id: 'TR-0002', uid: 't2', date: '2026-01-02', fire: 'live', shooterId: 'S-001', desc: 'b', weapons: [] },
+      { id: 'TR-0003', uid: 't3', date: '2026-01-03', fire: 'live', shooterId: 'S-002', desc: 'c', remarks: 'windy', weapons: [{ weaponId: 'W-001', rounds: 10 }] }],
+    results: [{ id: 'R-0001', uid: 'r1', date: '2026-01-03', drillId: 'x', shooterId: 'S-002' }] };
+  await idbPut(p, { 'sr/db.json': JSON.stringify(old) });
+  await open(p, 'training/');
+  await leave(p);
+  const d = await dbOf(p);
+  const t3 = d.trainings.find(t => t.uid === 't3'), t1 = d.trainings.find(t => t.uid === 't1');
+  ok(!('shooters' in d) && d.trainings.every(t => !('shooterId' in t)) && d.results.every(r => !('shooterId' in r)), '#20: no shooters table and no shooter field any more');
+  ok(t3.remarks === 'windy · Shot by Ines' && !t1.remarks && d.results[0].notes === 'Shot by Ines' && d.settings.common.meName === 'Manuel', '#20: entries of another shooter say "Shot by <name>", the user\'s own stay as they were');
+  ok(t3.weapons[0].rounds === 10, '#20: their rounds stay');
+  ok(Object.keys(await idbAll(p)).some(k => k.startsWith('sr/backups/db-before-1.4.0-shooter-')), '#20: a backup of the whole database was made first');
+  await open(p, 'training/');
+  await leave(p);
+  ok((await dbOf(p)).trainings.find(t => t.uid === 't3').remarks === 'windy · Shot by Ines', '#20: done once (no second "Shot by")');
+  await ctx.close();
+}
+
 /* 7: database.xlsx by hand (the way on iPhone): save, change "in Excel", open again */
 {
   const { ctx, p } = await fresh();
   await open(p, 'training/');
-  await p.evaluate(() => { TL.db.shooters.push({ id: 'S-801', uid: 'u-x-801', name: 'Xlsx Test' }); TL.save(true); });
+  await p.evaluate(() => { TL.db.weapons.push({ id: 'W-801', uid: 'u-x-801', name: 'Xlsx Test' }); TL.save(true); });
   await open(p, '', '#/data');
   ok(await p.evaluate(() => !SR.xlsx.canLink() && !!document.querySelector('#xSave') && !!document.querySelector('#xIn')), 'web: database.xlsx is saved and opened by hand (no link)');
   const b64 = await p.evaluate(() => new Promise(res => {
@@ -194,12 +218,12 @@ function arr(a) { return Array.isArray(a) ? a : []; }
   const r = await p.evaluate(b64 => {
     const wb = XLSX.read(b64, { type: 'base64' });
     const names = wb.SheetNames.join();
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets.Shooters, { defval: '' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets.Weapons, { defval: '' });
     const row = rows.find(x => x.Name === 'Xlsx Test');
     if (!row) return { names, fail: 'row missing' };
     row.Name = 'Edited In Excel';
     rows.push({ Name: 'Added In Excel' });
-    wb.Sheets.Shooters = XLSX.utils.json_to_sheet(rows);
+    wb.Sheets.Weapons = XLSX.utils.json_to_sheet(rows);
     const out = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
     return new Promise(res => {
       const N = window.SRNative, keep = N.openFile;
@@ -211,9 +235,9 @@ function arr(a) { return Array.isArray(a) ? a : []; }
   ok(r.x && r.x.ok, 'database.xlsx opened again ' + JSON.stringify(r.x && (r.x.msg || r.x.error || r.x.stats)));
   await leave(p);
   const d = await dbOf(p);
-  ok(d.shooters.some(s => s.uid === 'u-x-801' && s.name === 'Edited In Excel') && d.shooters.some(s => s.name === 'Added In Excel'), 'a change and a new row made in Excel come in');
+  ok(d.weapons.some(s => s.uid === 'u-x-801' && s.name === 'Edited In Excel') && d.weapons.some(s => s.name === 'Added In Excel'), 'a change and a new row made in Excel come in');
   await open(p, 'drills/');
-  ok(await p.evaluate(() => SD.db.shooters.some(s => s.name === 'Added In Excel')), 'and every part sees them');
+  ok(await p.evaluate(() => SD.db.weapons.some(s => s.name === 'Added In Excel')), 'and every part sees them');
   await ctx.close();
 }
 

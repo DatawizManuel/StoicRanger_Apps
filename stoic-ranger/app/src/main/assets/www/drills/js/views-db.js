@@ -3,7 +3,7 @@
 'use strict';
 (() => {
 const { $, $$, esc, fmtInt } = SD;
-const TABS = ['shooters', 'weapons'];   // SD.lockedKeys / SD.isLinked: js/link.js
+const TABS = ['weapons'];   // no shooters from 1.4.0 (one shooter only)   // SD.lockedKeys / SD.isLinked: js/link.js
 
 SD.recordForm = (table, r) => { const lock = SD.lockedKeys(table, r); return `<div class="fg">${SD.TABLES[table].fields.map(([k, label, type, o = {}]) => {
   const v = r[k] ?? '', span = 's' + (o.span || 6), req = o.req ? ' *' : '', dis = lock.includes(k) ? ' disabled' : '';
@@ -50,8 +50,8 @@ SD.quickAdd = (table, done) => {
 };
 
 SD.views.db = {
-  render(el, [table = 'shooters', id]) {
-    if (!SD.TABLES[table]) table = 'shooters';
+  render(el, [table = 'weapons', id]) {
+    if (!SD.TABLES[table] || table === 'shooters') table = 'weapons';
     if (id) return editView(el, table, id);
     const T = SD.TABLES[table];
     SD.header('Database', { back: true, actions: `<a class="ib" href="#/db/${table}/new" aria-label="Add new ${esc(T.one)}">＋</a>` });

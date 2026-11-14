@@ -45,6 +45,67 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger Shooting 1.4.0: tombstones, no shooter in the data
+
+- `db.json` gets `deleted: [{ app: 'SR', t, id, uid, label, at, by, part, row?, undone? }]` (added, nothing changed):
+  one entry per delete. `row` is the local copy for Undo (dropped after 30 days), the tombstone itself goes after
+  365 days. Changed and new entries get `updated` (ISO time). database.xlsx gets the hidden sheet `_Deleted`
+  (App, Table, ID, Source uid, Label, Deleted at, Deleted by), see SHARED-DB-CONTRACT.md section E; rows of other
+  apps in it are kept as they are.
+- **Shooter (#20), once and again whenever older data comes in** (start, restored backup, brought-in backup, a
+  database.xlsx with a Shooters sheet): `backups/db-before-1.4.0-shooter-<time>.json` first, then the user is
+  `settings.common.meName` (else the shooter with the most entries, then stored there). Every training, drill result,
+  datasheet and rounds entry of another shooter gets "Shot by <name>" in `remarks` / `notes` / `note` (once), then
+  `shooterId` / `shooter` and the `shooters` table are removed. Rounds and everything else stay. The backup holds the
+  old shape; a history entry records it.
+- **Replace** (Settings) writes `backups/db-before-replace-<time>.json` first and refuses if that fails.
+
+## Stoic Ranger Shooting 1.3.1: sync fixes, clean-up of copies
+
+- No format change (database FORMAT and database.xlsx columns as in 1.3.0).
+- Once, at the first start of 1.3.1 (`settings.common.cleanup131`): entries that the 1.3.0 sync added more than once
+  are merged back into one (`SRX.dedupe`). Only exact copies: shooters, trainers, ammunition, guns, barrels with the
+  same name and the same data; trainings, drill results, datasheets, rounds log rows and targets with the same ID and
+  the same data. References (trainings, sheets, rounds, barrels, drill results) move to the entry kept (the first).
+  A backup of the whole database is written first (`backups/db-before-1.3.1-cleanup-<time>.json`), and the history
+  notes what was merged. The cleaned list goes out to database.xlsx at the next sync; the copies stay deleted there
+  (three-way merge: deleted in the app since the last sync).
+- After a sync that brought in entries, a table that now has real entries drops its example entries (as the Gun
+  Database already did at the first own entry).
+
+## Stoic Ranger Shooting 1.3.0: Nextcloud, one shooter, the SR GunSafe link
+
+Add-only, no conversion: installs over 1.2.x / 1.1.0 with everything kept.
+- Trainings keep their `shooterId`; new trainings get the own shooter (the one used last, else the first active one,
+  else a new "Me"). Trainings of other shooters stay theirs and their rounds stay in every total.
+- Rounds_Log rows may carry `munitionId` (new optional column "Munition ID" at the end of the sheet; older files read
+  as before).
+- database.xlsx: sheets of other apps and the user's own sheets are written back unchanged (before 1.3.0 a save kept
+  only Shooting's sheets).
+- Where the data is stored is a device setting (Android SharedPreferences "storage", Windows config.json `nc`), not in
+  the database. The app password is stored encrypted only (Android Keystore / Windows DPAPI). Switching to Nextcloud
+  first merges what is there with the device's data (nothing lost on either side); switching back keeps everything on
+  the device and deletes nothing on Nextcloud.
+- Barrel changes from SR GunSafe are added (never deleted); the inbox file is kept as `link-inbox-<time>.done`.
+
+## Stoic Ranger Shooting 1.2.1 (Android only): Back button fix
+
+No change to the data; installs over 1.2.0 (or 1.1.0) with everything kept. The Java code had lambdas, and the cloud
+build (dx instead of d8) turned them into calls Android does not have, so the app crashed at the first one: pressing
+Back crashed it (it looked like "Back closes the app"), and so did saving, opening and sharing files and the
+database.xlsx link. All lambdas are now anonymous classes and `tools/build-debug.sh` stops if `classes.dex` mentions
+`LambdaMetafactory`. Web and Windows have no Java code and stay at 1.2.0.
+
+## Stoic Ranger Shooting 1.2.0: new name, overviews, Field Kit link
+
+No change to the data: `db.json`, `thoughts.json`, the web storage (IndexedDB `stoic-ranger`) and the Windows data
+folder (`%APPDATA%\Stoic Ranger`) keep their names and format, so 1.2.0 installs over 1.1.0 with everything kept.
+- The name ("Stoic Ranger Shooting", short "SR_Shooting") is display only. Backups are saved as
+  `sr-shooting-backup_<date>.json`; a backup is recognised by its content (`app: 'stoic-ranger'`), not by its name.
+- The home page overview only reads. Its tab and filter are kept in localStorage (`sr.home.overview`), not in the
+  database, so they never change database.xlsx.
+- The Field Kit link (`LinkProvider.java`) only reads `files/db.json` (or `db.bak.json`) and never writes.
+
 ## Stoic Ranger 1.1.0: Daily Thoughts out again, the shared database.xlsx
 
 **Daily Thoughts** is its own app again (SR_Daily Thoughts 0.2.0, Manuel 2026-10-29). 1.1.0 has no Daily Thoughts

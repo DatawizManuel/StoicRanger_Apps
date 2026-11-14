@@ -9,7 +9,6 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const opt = (v, label, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
 TL.filterSelects = f => `
   <div class="filters f4">
-    <label><span>Shooter</span><select data-f="shooter">${opt('', 'All', f.shooter)}${TL.sorted('shooters').map(s => opt(s.id, s.name, f.shooter)).join('')}</select></label>
     <label><span>Year</span><select data-f="year">${opt('', 'All', f.year)}${TL.years().map(y => opt(y, y, f.year)).join('')}</select></label>
     <label><span>Gun</span><select data-f="weapon">${opt('', 'All', f.weapon)}${TL.sorted('weapons').map(w => opt(w.id, w.name, f.weapon)).join('')}</select></label>
     <label><span>Trainer</span><select data-f="trainer">${opt('', 'All', f.trainer)}${TL.sorted('trainers').map(t => opt(t.id, t.name, f.trainer)).join('')}</select></label>
@@ -25,7 +24,7 @@ TL.trainingItem = (t, f = {}) => {
     <div class="main">
       <div><span class="date">${fmtDate(t.date)}${t.start ? ' · ' + esc(t.start) : ''}</span>${dry ? '<span class="pill dry">Dry fire</span>' : ''}${t.example ? '<span class="pill example">Example</span>' : ''}</div>
       <div class="desc">${esc(t.desc || '(no description)')}</div>
-      <div class="kvs">${f.shooter ? '' : `<span><em>Shooter</em>${esc(TL.nameOf('shooters', t.shooterId))}</span>`}${t.trainerId ? `<span><em>Trainer</em>${esc(TL.nameOf('trainers', t.trainerId))}</span>` : ''}${ws ? `<span><em>Guns</em>${ws}</span>` : ''}</div>
+      <div class="kvs">${TL.isOther(t) ? `<span><em>Shooter</em>${esc(TL.nameOf('shooters', t.shooterId))}</span>` : ''}${t.trainerId ? `<span><em>Trainer</em>${esc(TL.nameOf('trainers', t.trainerId))}</span>` : ''}${ws ? `<span><em>Guns</em>${ws}</span>` : ''}</div>
     </div>
     <div class="side"><div class="big">${fh(t.durationH) || '–'}<small class="u"> h</small></div><div class="u">${dry ? (r ? fmtInt(r) + ' reps' : 'dry') : fmtInt(r) + ' rds'}</div></div>
   </a>`;
@@ -56,7 +55,7 @@ function lastRemarks(list, f) {
   const L = list.filter(t => (t.remarks || '').trim()).slice(0, 5);   // list is newest first (date, start time)
   if (!L.length) return '';
   return `<div class="card"><h3>Last ${L.length === 1 ? 'remark' : L.length + ' remarks'}</h3><div class="rmks">${L.map(t => `<a class="rmk${TL.isDry(t) ? ' dry' : ''}" href="#/training/${encodeURIComponent(t.id)}">
-    <div class="rh">${fmtDate(t.date)}${t.start ? ' · ' + esc(t.start) : ''}${f.shooter ? '' : ' · ' + esc(TL.nameOf('shooters', t.shooterId))} · ${esc(t.desc || '')}</div>
+    <div class="rh">${fmtDate(t.date)}${t.start ? ' · ' + esc(t.start) : ''}${TL.isOther(t) ? ' · ' + esc(TL.nameOf('shooters', t.shooterId)) : ''} · ${esc(t.desc || '')}</div>
     <p>${esc(t.remarks.trim())}</p></a>`).join('')}</div></div>`;
 }
 
@@ -82,7 +81,7 @@ TL.views.dash = {
     TL.header('Training Log', { actions: `<button class="ib" id="dPrint" aria-label="Print record sheet" title="Print record sheet"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg></button>` });
     const f = TL.db.settings.dashFilter;
     // a filter pointing at a deleted entry (or a year without trainings) is dropped
-    if (f.shooter && !TL.shooter(f.shooter)) f.shooter = '';
+    f.shooter = '';                                  // one shooter only (1.3.0): no shooter filter
     if (f.weapon && !TL.weapon(f.weapon)) f.weapon = '';
     if (f.trainer && !TL.trainer(f.trainer)) f.trainer = '';
     if (f.year && !TL.years().includes(f.year)) f.year = '';

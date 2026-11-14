@@ -137,6 +137,7 @@ RB.dopeView = (el, q) => {
   RB.header('Dope card', { back: true });
   const S = store(), U = RB.U;
   if (q && q.from === 'dash') { const F = RB.db.settings.dashFilter || {}; if (RB.weapon(F.weapon)) S.weaponId = F.weapon; if (RB.munition(F.munition)) S.munitionId = F.munition; }
+  if (q && q.w && RB.weapon(q.w)) { S.weaponId = q.w; if (q.m && RB.munition(q.m)) S.munitionId = q.m; }   // from the home page's dope card list
   const weapons = RB.db.weapons.filter(w => w.status !== 'Sold'), D = RB.build();
   if (!weapons.length || !RB.db.munitions.length) { el.innerHTML = `<div class="empty">Add a gun and an ammunition in the database first.</div><div class="row"><a class="btn pri" href="#/db/weapons/new">Add a gun</a><a class="btn" href="#/db/munitions/new">Add ammunition</a></div>`; return; }
   if (!RB.weapon(S.weaponId)) S.weaponId = (weapons.find(w => !w.example) || weapons[0]).id;

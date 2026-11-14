@@ -76,10 +76,10 @@ SD.drillPage = d => {
       <div class="box"><div class="l">Safety</div><p>${esc(d.live ? SD.SAFETY_LIVE : '')} ${esc(d.dry ? SD.SAFETY_DRY : '')}</p></div></div>
   </div>
   <h2 style="margin-top:5mm">Results</h2>
-  <table class="log"><tr><th>Date</th><th>Shooter</th><th>Live / dry</th><th>Time s</th><th>Hits</th><th>Points</th><th>Pass</th><th>Notes</th></tr>
-  ${res.map(r => `<tr><td>${esc(SD.fmtDate(r.date))}</td><td>${esc(SD.nameOf('shooters', r.shooterId))}</td><td>${r.mode === 'dry' ? 'dry' : 'live'}</td><td>${esc(SD.fx(r.timeS, 2))}</td><td>${esc(r.hits ?? '')}${r.shots != null ? '/' + esc(r.shots) : ''}</td><td>${esc(r.points ?? '')}</td><td>${r.pass === true ? '✓' : r.pass === false ? '✗' : ''}</td><td>${esc(r.notes || '')}</td></tr>`).join('')}
-  ${Array.from({ length: Math.max(0, 6 - res.length) }, () => '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}</table>
-  <div class="foot"><span>Stoic Ranger - Shooting Drills · metric units</span><span>Printed ${esc(SD.fmtDate(SD.today()))}</span></div>
+  <table class="log"><tr><th>Date</th><th>Live / dry</th><th>Time s</th><th>Hits</th><th>Points</th><th>Pass</th><th>Notes</th></tr>
+  ${res.map(r => `<tr><td>${esc(SD.fmtDate(r.date))}</td><td>${r.mode === 'dry' ? 'dry' : 'live'}</td><td>${esc(SD.fx(r.timeS, 2))}</td><td>${esc(r.hits ?? '')}${r.shots != null ? '/' + esc(r.shots) : ''}</td><td>${esc(r.points ?? '')}</td><td>${r.pass === true ? '✓' : r.pass === false ? '✗' : ''}</td><td>${esc(r.notes || '')}</td></tr>`).join('')}
+  ${Array.from({ length: Math.max(0, 6 - res.length) }, () => '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}</table>
+  <div class="foot"><span>Stoic Ranger Shooting - Shooting Drills · metric units</span><span>Printed ${esc(SD.fmtDate(SD.today()))}</span></div>
   </body></html>`;
 };
 

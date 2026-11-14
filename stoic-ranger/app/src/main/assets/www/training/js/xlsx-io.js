@@ -25,24 +25,25 @@ TL.exportXlsx = () => {
   const X = window.XLSX, wb = X.utils.book_new();
   const own = t => TL.db[t].filter(r => !r.example);
   for (const [t, [sheet, cols]] of Object.entries(COLS)) {
+    if (t === 'shooters') continue;                    // 1.4.0: one shooter only, no Shooters sheet (still read on import)
     const ws = X.utils.aoa_to_sheet([cols.map(c => c[0]), ...own(t).map(r => cols.map(([, k]) => r[k] ?? ''))]);
     ws['!cols'] = cols.map(c => ({ wch: Math.max(10, c[0].length + 2) }));
     X.utils.book_append_sheet(wb, ws, sheet);
   }
   const tr = own('trainings').slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const nW = Math.max(4, ...tr.map(t => t.weapons.length));          // Weapon 1..N / Rounds 1..N, at least 4
-  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Shooter', 'Description', 'Trainer / organizer'];
+  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Description', 'Trainer / organizer'];
   for (let i = 1; i <= nW; i++) head.push('Weapon ' + i, 'Rounds ' + i);
   head.push('Remarks', 'Source uid');
   const rows = tr.map(t => {
-    const r = [t.id, t.date, t.start || '', t.durationH ?? '', TL.FIRE[t.fire] || TL.FIRE.live, TL.nameOf('shooters', t.shooterId), t.desc || '', TL.nameOf('trainers', t.trainerId)];
+    const r = [t.id, t.date, t.start || '', t.durationH ?? '', TL.FIRE[t.fire] || TL.FIRE.live, t.desc || '', TL.nameOf('trainers', t.trainerId)];
     for (let i = 0; i < nW; i++) { const w = t.weapons[i]; r.push(w ? TL.nameOf('weapons', w.weaponId) : '', w && w.rounds != null ? w.rounds : ''); }
     r.push(t.remarks || '', t.uid);
     return r;
   });
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([head, ...rows]), 'Trainings');
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger - Training Log ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
-    ['Trainings', 'Shooter, trainer and weapons by name (matched to the sheets above); Source uid = permanent id of the training in the app.'],
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger Shooting - Training Log ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
+    ['Trainings', 'Trainer and weapons by name (matched to the sheets above); Source uid = permanent id of the training in the app.'],
     ['Type', 'Live fire or Dry fire. Dry fire: the Rounds columns hold dry-fire reps and never count as rounds.']]), 'Info');
   return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array' }));
 };

@@ -11,7 +11,7 @@ body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
 .srhome{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:4px;background:none;border:0;color:inherit;flex:none}
 .srhome svg{width:32px;height:32px}
 #hActions .ib{font-size:24px}
-.srnew{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+.srnew{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
 .srnew .btn{padding:12px 6px;font-size:13px;letter-spacing:.06em}
 .srpart{border-left:6px solid var(--fg)}
 .srpart.tl{border-left-color:#4B5320}
@@ -24,3 +24,46 @@ body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
 .srwis .k{font:600 12px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
 .srwis blockquote{margin:8px 0 6px;font:500 18px/1.35 "Barlow Semi Condensed",sans-serif}
 .srwis .r{font-size:13px;opacity:.75}
+
+/* overviews (sr/overview.js) */
+.ovf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:4px 0 8px}
+.ovf label{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ovf label span{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ovf select{width:100%;min-width:0}
+.ovbars{display:block;width:100%;height:auto;margin:4px 0 10px}
+.ovbars rect{fill:var(--accent,#4b5320)}
+.ovbars text{fill:var(--muted);font:500 10px var(--f-mono)}
+.ovh{margin:4px 0 10px}
+.ovh .r{display:grid;grid-template-columns:minmax(0,38%) 1fr auto;gap:8px;align-items:center;margin:5px 0;font-size:14px}
+.ovh .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ovh .b{height:10px;background:var(--panel,#8882)}
+.ovh .b i{display:block;height:100%;background:var(--accent,#4b5320)}
+.ovh .v{font:13px var(--f-mono);white-space:nowrap}
+.ovt{overflow-x:auto;margin:4px 0 10px}
+.ovt table{width:100%;border-collapse:collapse;font-size:13px}
+.ovt th{font:600 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ovt td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--hair);font-family:var(--f-mono);white-space:nowrap}
+.ovt .t{text-align:left;font-family:var(--f-body);white-space:normal}
+.kvs .warn{color:var(--warn,#9a6a00)}
+/* 1.3.0: where the data is stored */
+#stMode a{white-space:normal;line-height:1.25}
+.fld{display:block;margin:8px 0}
+.fld span{display:block;font:700 11px/1.4 var(--f-disp);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.fld input{width:100%;box-sizing:border-box}
+.chk{display:flex;gap:10px;align-items:flex-start;margin:10px 0 2px;font-size:14px;line-height:1.4}
+.chk input{margin-top:3px;flex:none;width:auto;min-height:0}
+@media (min-width:640px){.srnew{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* 1.3.1: a labelled Settings button and the storage line on the home page */
+.srset{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:18px;border:1px solid currentColor;background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.srset span{font-size:16px}
+.srstore{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 12px;padding:10px 14px;border-radius:10px;border:1px solid var(--line,#8884);text-decoration:none;color:inherit;font-size:14px}
+.srstore b{white-space:nowrap}
+/* 1.4.0 Recently deleted + replace */
+.dellist{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.delrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#8884)}
+.delrow span{flex:1;min-width:0;overflow-wrap:anywhere}
+.delrow small{display:block;opacity:.7;font-size:12px}
+.delrow .btn{flex:none;width:auto;padding:6px 14px}
+.srrepl{margin-top:12px}
+.srrepl summary{cursor:pointer;font-size:14px;opacity:.85}

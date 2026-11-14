@@ -8,7 +8,7 @@ const id = groups.length ? groups[0].id : 1, lang = groups.length ? groups[0].la
 ResEdit.Resource.IconGroupEntry.replaceIconsForResource(res.entries, id, lang, ico.icons.map(i => i.data));
 const vi = ResEdit.Resource.VersionInfo.fromEntries(res.entries)[0], v = [...ver.split('.').map(Number), 0];
 vi.setFileVersion(...v, 1033); vi.setProductVersion(...v, 1033);
-vi.setStringValues({ lang: 1033, codepage: 1200 }, { FileDescription: 'Stoic Ranger', ProductName: 'Stoic Ranger', CompanyName: 'Stoic Ranger', LegalCopyright: 'Manuel Faessler',
+vi.setStringValues({ lang: 1033, codepage: 1200 }, { FileDescription: 'Stoic Ranger Shooting', ProductName: 'Stoic Ranger Shooting', CompanyName: 'Stoic Ranger', LegalCopyright: 'Manuel Faessler',
   OriginalFilename: 'StoicRanger.exe', InternalName: 'StoicRanger', FileVersion: ver, ProductVersion: ver });
 vi.outputToResourceEntries(res.entries);
 res.outputResource(pe); fs.writeFileSync(exe, Buffer.from(pe.generate()));

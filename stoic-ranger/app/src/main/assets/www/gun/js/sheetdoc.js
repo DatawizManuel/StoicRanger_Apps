@@ -28,7 +28,7 @@ RB.SHEET_CSS = `
 .sheet .idbox div{padding:.7mm 2mm;border-bottom:.5pt solid var(--s-hair);min-height:5.2mm}
 .sheet .idbox div:nth-child(odd){color:var(--s-muted);text-transform:uppercase;letter-spacing:.08em;border-right:.5pt solid var(--s-hair);font-weight:600}
 .sheet .idbox div:nth-last-child(-n+2){border-bottom:0}
-.sheet .meta{display:grid;grid-template-columns:1fr 1.15fr 1fr 1.25fr .75fr;border-bottom:.6pt solid var(--s-hair)}
+.sheet .meta{display:grid;grid-template-columns:1.35fr 1fr 1.25fr .75fr;border-bottom:.6pt solid var(--s-hair)}
 .sheet .meta>div{padding:1.1mm 2mm 1.1mm 0;min-height:9mm}
 .sheet .meta>div+div{padding-left:2mm;border-left:.5pt solid var(--s-hair)}
 .sheet .lbl{display:block;font:600 6.3pt/1.2 "Barlow Semi Condensed",sans-serif;color:var(--s-muted);text-transform:uppercase;letter-spacing:.13em}
@@ -106,11 +106,10 @@ RB.sheetHTML = s => {
   return `
   <div class="cls top">Stoic Ranger // Training datasheet</div>
   <div class="shdr">
-    <div class="brand">${RB.logo('slogo')}<div><div class="doctype">Training Datasheet</div><div class="docsub">Stoic Ranger · Gun Database · record of one series</div></div></div>
+    <div class="brand">${RB.logo('slogo')}<div><div class="doctype">Training Datasheet</div><div class="docsub">Stoic Ranger Shooting · Gun Database · record of one series</div></div></div>
     <div class="idbox"><div>Sheet no.</div><div class="sm">${v('no')}</div><div>Date</div><div class="sm">${esc(RB.fmtDate(s.date))}</div><div>Time</div><div class="sm">${v('time')}</div><div>Series</div><div class="sm">${v('series')}</div></div>
   </div>
   <div class="meta">
-    <div><span class="lbl">Shooter</span><div class="val">${v('shooter')}</div></div>
     <div><span class="lbl">Purpose</span><div style="margin-top:.6mm"><span class="ck">${box(s.purpose === 'training')}Training</span><span class="ck">${box(s.purpose === 'test')}Test</span><span class="ck">${box(s.purpose === 'competition')}Comp.</span>${s.purpose && !['training', 'test', 'competition'].includes(s.purpose) ? `<span class="ck">${box(true)}${esc(RB.purposeName(s.purpose))}</span>` : `<span class="ck">${box(false)}Other ____</span>`}</div></div>
     <div><span class="lbl">Discipline</span><div class="val">${v('discipline')}</div></div>
     <div><span class="lbl">Position / support</span><div class="val">${v('position')}</div></div>
@@ -165,7 +164,7 @@ RB.sheetHTML = s => {
   </div>
   <h3><span class="n">4</span>Remarks</h3>
   <div class="rem">${Array.from({ length: 12 }, (_, i) => `<i style="top:${(i + 1) * 6.6 + .4}mm"></i>`).join('')}<p>${v('remarks')}</p></div>
-  <div class="ftr"><div>${esc(s.no || 'Training datasheet')}</div><div>Stoic Ranger - Gun Database</div><div>${esc([s.gun, s.caliber].filter(Boolean).join(' · '))}</div></div>
+  <div class="ftr"><div>${esc(s.no || 'Training datasheet')}</div><div>Stoic Ranger Shooting - Gun Database</div><div>${esc([s.gun, s.caliber].filter(Boolean).join(' · '))}</div></div>
   <div class="cls bot">Long range training // Datasheet</div>`;
 };
 

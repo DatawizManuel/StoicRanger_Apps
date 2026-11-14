@@ -69,14 +69,14 @@ function demoBanner() {
 }
 
 /* ---------- quick "Add new …" buttons (dashboard front, New chooser) ---------- */
-RB.QUICK_ADD = [['shooters', 'shooter'], ['weapons', 'gun'], ['barrels', 'barrel'], ['munitions', 'ammunition'], ['trainers', 'trainer']];
+RB.QUICK_ADD = [['weapons', 'gun'], ['barrels', 'barrel'], ['munitions', 'ammunition'], ['trainers', 'trainer']];
 RB.quickAddHTML = (withSheet = true) => `<div class="qa">${withSheet ? '<button class="btn pri" data-qsheet>Create new training dataset</button>' : ''}${RB.QUICK_ADD.map(([t, n]) => `<a class="btn" href="#/db/${t}/new">Add new ${n}</a>`).join('')}</div>`;
 RB.wireQuickAdd = el => { const b = $('[data-qsheet]', el); if (b) b.onclick = () => { const s = RB.newSheet(); RB.db.sheets.push(s); RB.save(true); RB.go(`#/sheet/${encodeURIComponent(s.id)}`); }; };
 
 /* ---------- "New" button in the bottom bar: every way to add a set of results ---------- */
 RB.addChooser = () => {
   const opts = [
-    ['newsheet', '✎', 'Create new training dataset', 'Type in the results of a session (carries over gun, ammo and shooter from your last sheet).'],
+    ['newsheet', '✎', 'Create new training dataset', 'Type in the results of a session (carries over gun and ammo from your last sheet).'],
     ['target', '◎', 'Score a target photo', 'Photograph the shot target: hits, group size and correction are calculated.'],
     ['scan', '▤', 'Read a filled sheet photo', 'A hand-filled printed sheet, read in by Claude for you to check.'],
     ['vel', '⚡', 'Velocities from Xero C1 Pro', 'New datasheet, starting with pasting or importing the shot speeds.'],
@@ -100,7 +100,7 @@ RB.addChooser = () => {
 
 /* ---------- notices about the stored data (update / recovery / newer app) ---------- */
 function dataNotice() {
-  if (RB.readOnly) return `<div class="banner warn">This data was saved by a newer version of Stoic Ranger (data format ${RB.dataSchema}, this app reads up to ${RB.SCHEMA}). Nothing is changed or saved until you update the app.</div>`;
+  if (RB.readOnly) return `<div class="banner warn">This data was saved by a newer version of Stoic Ranger Shooting (data format ${RB.dataSchema}, this app reads up to ${RB.SCHEMA}). Nothing is changed or saved until you update the app.</div>`;
   return '';
 }
 RB.dataNotice = dataNotice;
@@ -133,13 +133,13 @@ document.addEventListener('DOMContentLoaded', () => {
 RB.views.welcome = {
   tab: 'dash',
   render(el) {
-    RB.header("Stoic Ranger");
+    RB.header("Stoic Ranger Shooting");
     el.innerHTML = `
       <div class="hero">
         <div class="wlogo">${RB.logo('hlogo')}</div>
         <div class="kicker">Stoic Ranger // Gun Database</div>
         <h1>Welcome</h1>
-        <p>Keep your guns, barrels, ammunition and shooters in one place, fill in training datasheets, score targets from a photo and follow barrel wear and ammo performance on the dashboard. Everything stays on this phone.</p>
+        <p>Keep your guns, barrels and ammunition in one place, fill in training datasheets, score targets from a photo and follow barrel wear and ammo performance on the dashboard. Everything stays on this phone.</p>
       </div>
       <div class="stack">
         <button class="btn pri big" id="wStart">Start with an empty database</button>

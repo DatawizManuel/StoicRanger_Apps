@@ -61,8 +61,8 @@ TL.recordDoc = (f, o = {}) => {
   const list = TL.filtered(f).slice().reverse();                 // printed oldest first, like a logbook
   const s = TL.summary(list, f);
   const ft = TL.filterText(f);
-  const showShooter = !f.shooter;
-  const title = f.shooter ? TL.nameOf('shooters', f.shooter) : 'All shooters';
+  const showShooter = new Set(list.map(t => t.shooterId).filter(Boolean)).size > 1;   // only when older trainings of others are in it
+  const title = 'Training record';                              // one shooter only, no names (1.4.0)
   const trainers = Array.from(new Set(list.map(t => t.trainerId).filter(Boolean))).map(TL.trainer).filter(Boolean);
   const ws = t => t.weapons.filter(w => !f.weapon || w.weaponId === f.weapon)
     .map(w => `<span>${esc(TL.nameOf('weapons', w.weaponId))}${w.rounds ? ' · ' + fmtInt(w.rounds) + (TL.isDry(t) ? ' reps' : '') : ''}</span>`).join('<br>');
@@ -102,7 +102,7 @@ TL.recordDoc = (f, o = {}) => {
     ${trainers.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.contact || '')}</td><td class="mono">${esc(t.phone || '')}</td><td>${esc(t.email || '')}</td><td>${esc(t.website || '')}</td></tr>`).join('')}</tbody></table>` : ''}
 
   <div class="end">${o.signature ? `<div class="sig"><div>Place, date</div><div>Signature${f.shooter ? ' – ' + esc(TL.nameOf('shooters', f.shooter)) : ''}</div></div>` : ''}
-  <div class="foot"><span>Stoic Ranger - Training Log</span><span>Printed ${stamp}</span></div></div>
+  <div class="foot"><span>Stoic Ranger Shooting - Training Log</span><span>Printed ${stamp}</span></div></div>
   </body></html>`;
 };
 
@@ -111,8 +111,8 @@ TL.csv = f => {
   const list = TL.filtered(f).slice().reverse();
   const q = v => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const dec = v => v == null || v === '' ? '' : String(v).replace('.', ',');
-  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Shooter', 'Training', 'Guns (rounds / reps)', 'Rounds total', 'Dry-fire reps', 'Trainer / organizer', 'Remarks'];
-  const rows = list.map(t => [t.id, t.date, t.start, dec(t.durationH), TL.FIRE[t.fire] || TL.FIRE.live, TL.nameOf('shooters', t.shooterId), t.desc,
+  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Training', 'Guns (rounds / reps)', 'Rounds total', 'Dry-fire reps', 'Trainer / organizer', 'Remarks'];
+  const rows = list.map(t => [t.id, t.date, t.start, dec(t.durationH), TL.FIRE[t.fire] || TL.FIRE.live, t.desc,
     t.weapons.map(w => `${TL.nameOf('weapons', w.weaponId)} (${w.rounds || 0})`).join(', '), TL.rounds(t), TL.reps(t) || '', TL.nameOf('trainers', t.trainerId), t.remarks]);
   return '﻿' + [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');
 };

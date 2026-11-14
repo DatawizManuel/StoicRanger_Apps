@@ -31,16 +31,18 @@ const RAW = window.SRNative;
 const FORMAT = 1;
 const PARTS = {
   gundb: { prefix: 'RB', dir: 'gun', name: 'Gun Database', app: undefined,
-    tables: ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'targets'] },
-  tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['shooters', 'weapons', 'trainers', 'trainings'] },
-  sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['shooters', 'weapons', 'results', 'favs'] },
+    tables: ['weapons', 'barrels', 'munitions', 'trainers', 'roundsLog', 'sheets', 'targets'] },
+  tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['weapons', 'trainers', 'trainings'] },
+  sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['weapons', 'results', 'favs'] },
 };
-const SHARED = ['shooters', 'weapons', 'trainers'];
+// 1.4.0 (remark #20): no shooters table any more, one shooter only (the user); see dropShooters140()
+const SHARED = ['weapons', 'trainers'];
 const ALL_TABLES = [...new Set(Object.values(PARTS).filter(p => !p.file).flatMap(p => p.tables))];
 const PART = document.documentElement.dataset.part || 'home';
 
 const parse = t => { try { const j = JSON.parse(t); return j && typeof j === 'object' && !Array.isArray(j) ? j : null; } catch (e) { return null; } };
 const arr = a => Array.isArray(a) ? a : [];
+const run = f => { try { return f(); } catch (e) { console.error(e); } };
 const clone = o => JSON.parse(JSON.stringify(o));
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const now = () => new Date().toISOString();
@@ -74,6 +76,7 @@ function normalize(u) {
   u.settings = u.settings || {};
   u.settings.common = Object.assign({ theme: 'auto' }, u.settings.common || {});
   if (!Array.isArray(u.history)) u.history = [];
+  if (!Array.isArray(u.deleted)) u.deleted = [];          // 1.4.0: tombstones (delete on all devices)
   SHARED.forEach(t => u[t].forEach(r => { if (r && typeof r === 'object' && !r.uid) r.uid = uuid(); }));
   return u;
 }
@@ -104,8 +107,98 @@ function load() {
   } else U = emptyUnified();
   normalize(U);
   if (converted && !newer) writeRaw();
+  if (!newer) cleanUp131();
+  if (!newer) dropShooters140();
   loadThoughts();
-  xlsxIn();
+  linkInbox();
+  if (PART === 'home') run(adoptLinked);
+  if (!ncRecent()) xlsxIn();
+}
+/* 1.3.1, once: entries that 1.3.0 added two or three times from a database.xlsx made in Excel (rows without a Source uid)
+   become one again; references move to the one kept. Exact copies only, a backup of the whole database first (rule 1). */
+function cleanUp131() {
+  const c = U.settings.common;
+  if (c.cleanup131 || !window.SRX || !SRX.dedupe) return;
+  let r = null;
+  try { r = SRX.dedupe(U); } catch (e) { r = null; }
+  if (r && r.total) {
+    try { RAW.backupDb('db-before-1.3.1-cleanup-' + Date.now() + '.json'); } catch (e) { }
+    U = normalize(r.db);
+    U.history.push({ at: now(), part: 'stoic-ranger', note: '1.3.1: entries added more than once by the 1.3.0 sync merged into one', removed: r.removed });
+    U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });   // the cleaned list goes out to database.xlsx
+    SR_LAST.cleanup = r.removed;
+  }
+  U.settings.common.cleanup131 = now();
+  writeRaw(true);
+}
+/* 1.4.0 (remark #20, Manuel 2026-11-07: "it is only ever the user of the app"): the shooter goes out of the data.
+   Entries of another shooter keep their rounds and get "Shot by <name>" in their note (SRX.dropShooters). Runs
+   whenever older data comes in (start, restored backup); a backup of the whole database first (rule 1). */
+const meName = () => String((U && U.settings && U.settings.common && U.settings.common.meName) || '');
+function dropShooters140(quiet) {
+  if (!window.SRX || !SRX.dropShooters) return null;
+  const has = 'shooters' in U || ['trainings', 'results', 'sheets', 'roundsLog'].some(t => arr(U[t]).some(r => r && typeof r === 'object' && ('shooterId' in r || ('shooter' in r && t !== 'sheets') || (t === 'sheets' && r.shooter))));
+  if (!has) { ['sheets'].forEach(t => arr(U[t]).forEach(r => { if (r && 'shooter' in r) delete r.shooter; })); return null; }
+  if (!quiet) { try { RAW.backupDb('db-before-1.4.0-shooter-' + Date.now() + '.json'); } catch (e) { } }
+  const r = SRX.dropShooters(U, meName());
+  if (r.me && !meName()) U.settings.common.meName = r.me;
+  ['gundb', 'tl', 'sd'].forEach(p => { const st = U.settings[p]; if (st && typeof st === 'object') { if (st.dashFilter) delete st.dashFilter.shooter; delete st.lastShooter; } });
+  if (r.dropped) {
+    U.history.push({ at: now(), part: 'stoic-ranger', note: '1.4.0: shooter taken out of the data (one shooter only); entries of others got "Shot by <name>"', moved: r.moved });
+    U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });
+  }
+  writeRaw(true);
+  return r;
+}
+/* After a sync: a table that now has real entries drops its example entries (as the Gun Database does at the first
+   own entry), so the brought-in guns and ammunition are not hidden among the samples. */
+function dropExamples() {
+  ['weapons', 'barrels', 'munitions', 'trainers', 'roundsLog', 'sheets', 'trainings', 'results'].forEach(t => {
+    const L = arr(U[t]);
+    if (L.some(r => r && r.example) && L.some(r => r && !r.example)) U[t] = L.filter(r => !(r && r.example));
+  });
+}
+/* On Nextcloud every page start would ask the server: once in 20 s is enough (Sync now and leaving a page still do). */
+function ncRecent() {
+  if (!NC()) return false;
+  try { const t = +sessionStorage.getItem('sr.nc.at') || 0; if (Date.now() - t < 20000) return true; sessionStorage.setItem('sr.nc.at', String(Date.now())); } catch (e) { }
+  return false;
+}
+/* SR GunSafe changes barrels through the link (LinkProvider putBarrels): {add:[barrel]} adds a barrel (a free id if
+   its id is taken), {set:[{id, installed, removed}]} changes those dates. Applied once, when the app opens. */
+function linkInbox() {
+  if (newer || !RAW.takeLinkInbox) return;
+  let ops = null;
+  try { ops = parse('{"a":' + (RAW.takeLinkInbox() || 'null') + '}'); } catch (e) { ops = null; }
+  ops = ops && Array.isArray(ops.a) ? ops.a : [];
+  if (!ops.length) return;
+  let added = 0, changed = 0;
+  ops.forEach(op => {
+    arr(op && op.barrels).forEach(b => {                    // {barrels:[…]}: an existing id gets its dates, a new one is added
+      if (!b || typeof b !== 'object') return;
+      const cur = b.id && U.barrels.find(x => x.id === b.id);
+      if (cur && !b.isNew) { ['installed', 'removed'].forEach(k => { if (k in b) cur[k] = b[k] || ''; }); cur.updated = now(); changed++; return; }
+      if (!b.weaponId) return;
+      const r = Object.assign({}, b); delete r.isNew; delete r.at;
+      if (!r.id || U.barrels.some(x => x.id === r.id)) r.id = SRX.nextId(U.barrels, 'B');
+      r.uid = r.uid || uuid(); r.updated = now(); r.notes = r.notes || 'Added in SR GunSafe';
+      U.barrels.push(r); added++;
+    });
+    arr(op && op.add).forEach(b => {
+      if (!b || typeof b !== 'object' || !b.weaponId) return;
+      const r = Object.assign({}, b); delete r.at;
+      if (!r.id || U.barrels.some(x => x.id === r.id)) r.id = SRX.nextId(U.barrels, 'B');
+      r.uid = r.uid || uuid(); r.updated = now();
+      U.barrels.push(r); added++;
+    });
+    arr(op && op.set).forEach(c => {
+      const b = c && U.barrels.find(x => x.id === c.id);
+      if (!b) return;
+      ['installed', 'removed'].forEach(k => { if (k in c) b[k] = c[k] || ''; });
+      b.updated = now(); changed++;
+    });
+  });
+  if (added || changed) { U.history.push({ at: now(), part: 'stoic-ranger', note: 'barrels from SR GunSafe', added: { barrels: added }, changed: { barrels: changed } }); writeRaw(); }
 }
 function writeRaw(quiet) {
   if (newer) return false;
@@ -171,29 +264,55 @@ function writeThoughts() {
    permission), Windows a path. The web app has none of these: there the file is opened and saved by hand (Data).
    settings.common.xlsx = {dirty, mtime, size, hash, lastIn, lastOut}; xlsxbase.json = the tables at the last
    sync (the merge base, see sr/xlsxdb.js). */
-const canLink = () => !!(RAW.xlsxInfo && window.SRX);
+const NC = () => window.SRNC && SRNC.active() ? SRNC : null;   // 1.3.0: database.xlsx on Nextcloud instead of a file here
+const canLink = () => !!(window.SRX && (RAW.xlsxInfo || NC()));
 let LINKED = null;
 /* The file can bring news while a part is open (the app goes to the background, the window loses focus). The part
    still holds the tables it loaded, so until the page is opened again (SR.onResume reloads it) a save of that
    part adds to the tables instead of replacing them: nothing that came from the file is lost. */
 let LOADED = false, STALE = false;
-const xlsxInfo = () => { if (!canLink()) return { available: false }; try { return Object.assign({ available: true }, parse(RAW.xlsxInfo()) || {}); } catch (e) { return { available: true }; } };
-const xlsxLinked = () => LINKED != null ? LINKED : (LINKED = canLink() && !!xlsxInfo().linked);
+const xlsxInfo = () => {
+  if (!canLink()) return { available: false };
+  const nc = NC();
+  if (nc) return Object.assign({ available: true }, nc.info());
+  try { return Object.assign({ available: true }, parse(RAW.xlsxInfo()) || {}); } catch (e) { return { available: true }; }
+};
+/** The file's bytes (base64) from wherever it is; the Nextcloud ETag of what was read goes to the sync state. */
+const readFile = () => {
+  const nc = NC();
+  if (nc) { const r = nc.read(); if (r.etag) xlsxState().etag = r.etag; return r.b64 || ''; }
+  try { return RAW.xlsxRead() || ''; } catch (e) { return ''; }
+};
+const writeFile = b64 => {
+  const nc = NC();
+  if (nc) return nc.write(b64, xlsxState().etag || '');
+  try { return parse(RAW.xlsxWrite(b64)); } catch (e) { return null; }
+};
+/* The file as last read or written: its sheets that belong to other Stoic Ranger apps (FK_, PF_, GS_, DT_ …) or to
+   the user are written back unchanged (shared contract, section A). */
+let KEEP = null;
+const xlsxLinked = () => LINKED != null ? LINKED : (LINKED = !!NC() || (canLink() && !!xlsxInfo().linked));
 function xlsxState() { const c = U.settings.common; return (c.xlsx = c.xlsx && typeof c.xlsx === 'object' ? c.xlsx : {}); }
 const bytesB64 = u => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const b64Bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
 const hashBytes = u => { let h = 2166136261; for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + u.length; };
 const loadBase = () => { try { const j = parse(RAW.loadData('xlsxbase') || ''); return j && j.db ? j.db : null; } catch (e) { return null; } };
 const saveBase = db => { try { RAW.saveData('xlsxbase', db ? JSON.stringify({ at: now(), db }) : '{}'); } catch (e) { } };
-const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic Ranger ' + (i.version || '') + (i.android === 'web app' ? ' (web)' : i.windows ? ' (Windows)' : i.android ? ' (Android)' : ''); } catch (e) { return 'Stoic Ranger'; } };
+const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic Ranger Shooting ' + (i.version || '') + (i.android === 'web app' ? ' (web)' : i.windows ? ' (Windows)' : i.android ? ' (Android)' : ''); } catch (e) { return 'Stoic Ranger'; } };
 /** Merge database.xlsx bytes into the one file (three-way against the last sync). The file is written out later. */
 function mergeIn(bytes, meta = {}) {
   if (newer) return { error: 'read-only' };
   let F;
-  try { F = SRX.read(bytes); } catch (e) { return { error: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
+  try { F = SRX.read(bytes, meName()); } catch (e) { return { error: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
   try { RAW.backupDb('db-before-xlsx-' + Date.now() + '.json'); } catch (e) { }
   const r = SRX.merge(meta.first ? null : loadBase(), U, F.db);
   U = normalize(r.db);
+  if (F.shot && F.shot.me && !meName()) U.settings.common.meName = F.shot.me;   // 1.4.0: the user, as the file knew it
+  if (SRX.countOf(r.stats.added)) dropExamples();
+  U.deleted = SRX.mergeDeleted(U.deleted, F.db.deleted);    // 1.4.0: deletes from the other devices
+  const gone = SRX.applyDeleted(U);
+  if (gone) r.stats.deleted = gone;
+  pruneDeleted();
   const S = xlsxState();
   if (meta.info) { S.mtime = meta.info.mtime || 0; S.size = meta.info.size || 0; }
   if (meta.hash) S.hash = meta.hash;
@@ -210,33 +329,44 @@ function xlsxIn(force) {
   const info = xlsxInfo(), S = xlsxState();
   if (!info.linked || !info.size) return null;
   if (!force && info.mtime && S.mtime === info.mtime && S.size === info.size) return null;
-  let b = '';
-  try { b = RAW.xlsxRead() || ''; } catch (e) { b = ''; }
+  if (info.error) return null;                           // offline: the copy here stays in use, the next start tries again
+  const b = readFile();
   if (!b) return { error: 'The linked database.xlsx could not be read.' };
   const bytes = b64Bytes(b), h = hashBytes(bytes);
+  KEEP = bytes;
   if (!force && S.hash === h) { S.mtime = info.mtime || 0; S.size = info.size; writeRaw(true); return null; }
   const r = mergeIn(bytes, { info, hash: h, first: !S.hash });
   SR_LAST.xlsx = r;
   return r;
 }
-/** The app's changes go out to the linked file (after a look whether it was changed meanwhile). */
+/** The app's changes go out to the linked file (after a look whether it was changed meanwhile). On Nextcloud the
+    upload names the version it is based on; if someone saved in between (412) the file is read and merged again,
+    up to 3 times (shared contract, section B). */
 function xlsxOut(force) {
   if (newer || !xlsxLinked()) return null;
   let S = xlsxState();
   if (!S.dirty && !force) return null;
-  const info = xlsxInfo(); if (!info.linked) return null;
-  if (info.size && S.hash && (info.mtime !== S.mtime || info.size !== S.size)) { const r = xlsxIn(); if (r && r.error) return r; }
-  else if (info.size && !S.hash) { const r = xlsxIn(true); if (r && r.error) return r; }   // first sync with a file that has data
-  S = xlsxState();                                       // a merge above made a new U
-  let bytes;
-  try { bytes = SRX.write(U, { by: xlsxBy() }); } catch (e) { return { error: 'database.xlsx could not be made: ' + e.message }; }
-  let res = null;
-  try { res = parse(RAW.xlsxWrite(bytesB64(bytes))); } catch (e) { res = null; }
-  if (!res || !res.ok) return { error: (res && res.msg) || 'database.xlsx could not be saved.' };
-  S.mtime = res.mtime || 0; S.size = res.size || bytes.length; S.hash = hashBytes(bytes); S.dirty = ''; S.lastOut = now();
-  saveBase(SRX.dbPart(U));
-  writeRaw(true);
-  return { ok: true };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const info = xlsxInfo(); if (!info.linked) return null;
+    if (info.error) return { error: info.error, offline: true };   // stays dirty: goes out next time
+    if (info.size && S.hash && (info.mtime !== S.mtime || info.size !== S.size || (info.etag && S.etag && info.etag !== S.etag))) { const r = xlsxIn(true); if (r && r.error) return r; }
+    else if (info.size && !S.hash) { const r = xlsxIn(true); if (r && r.error) return r; }   // first sync with a file that has data
+    else if (info.size && !KEEP) { const b = readFile(); if (b) KEEP = b64Bytes(b); }
+    if (!info.size) S.etag = '';
+    S = xlsxState();                                     // a merge above made a new U
+    let bytes;
+    try { bytes = SRX.write(U, { by: xlsxBy(), keep: info.size ? KEEP : null }); } catch (e) { return { error: 'database.xlsx could not be made: ' + e.message }; }
+    const res = writeFile(bytesB64(bytes));
+    if (res && res.conflict) { S.mtime = 0; continue; }   // changed on Nextcloud meanwhile: read, merge, try again
+    if (!res || !res.ok) return { error: (res && res.msg) || 'database.xlsx could not be saved.' };
+    S.mtime = res.mtime || 0; S.size = res.size || bytes.length; S.hash = hashBytes(bytes); S.dirty = ''; S.lastOut = now();
+    if (res.etag !== undefined) S.etag = res.etag || '';
+    KEEP = bytes;
+    saveBase(SRX.dbPart(U));
+    writeRaw(true);
+    return { ok: true };
+  }
+  return { error: 'database.xlsx kept changing on Nextcloud while saving: try Sync now again.' };
 }
 const SR_LAST = {};
 /** Link a database.xlsx on this device: 'create' a new one (never over an existing file) or 'open' one. */
@@ -251,7 +381,7 @@ const xlsxLink = mode => new Promise(res => {
     res(out && out.error ? { ok: false, msg: out.error } : { ok: true, msg: r.msg, merged: SR_LAST.xlsx || null });
   }));
 });
-function xlsxUnlink() { try { RAW.xlsxUnlink(); } catch (e) { } LINKED = false; U.settings.common.xlsx = {}; saveBase(null); writeRaw(true); }
+function xlsxUnlink() { try { RAW.xlsxUnlink(); } catch (e) { } LINKED = false; KEEP = null; U.settings.common.xlsx = {}; saveBase(null); writeRaw(true); }
 /** By hand (all devices, the only way on iPhone): save the whole database as database.xlsx … */
 const saveXlsx = () => new Promise(res => {
   SR.flush();
@@ -298,9 +428,9 @@ const hasData = part => PARTS[part].tables.some(t => arr(U[t]).length && !(part 
 function usedElsewhere(table, rec, part) {
   const id = rec.id;
   if (!id) return false;
-  const k = table === 'weapons' ? 'weaponId' : table === 'shooters' ? 'shooterId' : 'trainerId';
+  const k = table === 'weapons' ? 'weaponId' : 'trainerId';
   const inT = (t, f) => !PARTS[part].tables.includes(t) && arr(U[t]).some(f);
-  return inT('barrels', r => r.weaponId === id) || inT('sheets', r => r[k] === id || r.weapon === id || r.shooter === id)
+  return inT('barrels', r => r.weaponId === id) || inT('sheets', r => r[k] === id || r.weapon === id)
     || inT('roundsLog', r => r[k] === id) || inT('trainings', t => t[k] === id || arr(t.weapons).some(w => w.weaponId === id))
     || inT('results', r => r[k] === id);
 }
@@ -316,7 +446,9 @@ function mergeShared(table, incoming, part) {
     if (!x.uid) x.uid = uuid();
     return x;
   });
-  old.forEach(r => { if (!seen.has(r) && (STALE || usedElsewhere(table, r, part))) out.push(r); });   // STALE: see xlsx
+  // 1.4.0: a gun deleted in any part is deleted (it used to stay when trainings used it, so it came back); trainers
+  // still stay while the Gun Database uses them. STALE: see xlsx
+  old.forEach(r => { if (!seen.has(r) && (STALE || (table !== 'weapons' && usedElsewhere(table, r, part)))) out.push(r); });
   return out;
 }
 /** Stale part (see STALE): its rows win, rows it does not know are kept. */
@@ -331,10 +463,13 @@ function saveView(part, json) {
   const v = parse(json);
   if (!v) return false;
   const P = PARTS[part];
+  if (window.SRX && SRX.dropShooters) { const r = SRX.dropShooters(v, meName()); if (r.me && !meName()) U.settings.common.meName = r.me; }   // 1.4.0: no shooter in the data
   P.tables.forEach(t => {
     if (!(t in v)) return;
     const k = t, before = k === 'results' ? JSON.stringify(arr(U[k])) : '';
+    const old = arr(U[k]);
     U[k] = SHARED.includes(k) ? mergeShared(k, v[t], part) : STALE ? addTo(U[k], v[t]) : arr(v[t]);
+    stampChanges(k, old, U[k], part);
     if (k === 'results' && JSON.stringify(U[k]) !== before) U.resultsChanged = now();
   });
   U.schemas[part] = +v.schema || U.schemas[part] || 1;
@@ -348,6 +483,63 @@ function saveView(part, json) {
   return writeRaw();
 }
 
+/* 1.4.0, delete on all devices (SHARED-DB-CONTRACT.md, section E): what a part saved is compared with what was there.
+   A changed or new entry gets `updated` (the newer of a change and a delete wins on every device); an entry the part
+   deleted becomes a tombstone that travels in database.xlsx, with a copy for Undo (30 days, Settings). */
+const keyR = r => r && (r.uid || r.id) || '';
+const strip = r => { const o = Object.assign({}, r); delete o.updated; return JSON.stringify(o); };
+const derived = (t, r) => t === 'roundsLog' && SRX.fromTraining(r);   // made from a training
+function labelOf(t, r) {
+  if (r.name) return String(r.name);
+  if (t === 'trainings') return [r.date, r.desc].filter(Boolean).join(' · ') || r.id || 'Training';
+  if (t === 'results') return [r.date, r.drillName || r.drillId].filter(Boolean).join(' · ') || r.id || 'Drill result';
+  if (t === 'sheets') return [r.date, r.no ? 'sheet ' + r.no : '', r.gun].filter(Boolean).join(' · ') || r.id || 'Datasheet';
+  if (t === 'roundsLog') return [r.date, r.rounds != null ? r.rounds + ' rounds' : '', r.note].filter(Boolean).join(' · ') || r.id || 'Rounds';
+  return r.id || t;
+}
+function stampChanges(t, old, cur, part) {
+  if (newer || STALE) return;
+  const t0 = now(), was = new Map(arr(old).filter(r => r && typeof r === 'object').map(r => [keyR(r), r]));
+  const kept = new Set();
+  arr(cur).forEach(r => {
+    if (!r || typeof r !== 'object' || r.example) return;
+    const k = keyR(r), o = was.get(k); kept.add(k);
+    if (!o || strip(o) !== strip(r)) r.updated = t0;
+  });
+  was.forEach((r, k) => {
+    if (!k || kept.has(k) || r.example || derived(t, r)) return;
+    U.deleted.push({ app: 'SR', t, id: r.id || '', uid: r.uid || '', label: labelOf(t, r), at: t0, by: deviceName(), part, row: clone(r) });
+    // a deleted gun: trainings that used it keep its name (shown as "(deleted)" in the Training Log, by name in database.xlsx)
+    if (t === 'weapons' && r.id) arr(U.trainings).forEach(x => arr(x && x.weapons).forEach(w => { if (w && w.weaponId === r.id && !w.name) w.name = String(r.name || ''); }));
+  });
+}
+const deviceName = () => { try { const i = JSON.parse(RAW.appInfo()); return i.windows ? 'Windows' : i.android === 'web app' ? 'web app' : i.device || 'Android'; } catch (e) { return ''; } };
+/** Recently deleted (30 days, this device's copy): newest first. */
+function recentlyDeleted() {
+  const from = new Date(Date.now() - SRX.UNDO_DAYS * 864e5).toISOString();
+  return arr(U.deleted).filter(d => d && d.row && !d.undone && d.at >= from && (!d.app || d.app === 'SR')).sort((a, b) => b.at.localeCompare(a.at))
+    .map(d => ({ key: [d.t, d.uid || d.id, d.at].join('|'), table: d.t, label: d.label, at: d.at, by: d.by }));
+}
+/** Undo: the entry is saved again with a new `updated`, which wins over the tombstone on every device. */
+function undoDelete(key) {
+  if (newer) return { ok: false };
+  const d = arr(U.deleted).find(x => x && x.row && [x.t, x.uid || x.id, x.at].join('|') === key);
+  if (!d || !Array.isArray(U[d.t])) return { ok: false };
+  const r = Object.assign(clone(d.row), { updated: now() });
+  if (r.id && U[d.t].some(x => x.id === r.id && keyR(x) !== keyR(r))) r.id = nextId(U[d.t], (SRX.REG[d.t] || [, 'X'])[1]);
+  U[d.t] = U[d.t].filter(x => keyR(x) !== keyR(r)).concat([r]);
+  d.undone = now(); delete d.row;
+  U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });
+  writeRaw(true);
+  return { ok: true, table: d.t, label: d.label };
+}
+/** Local copies for Undo go after 30 days (the tombstone itself stays a year, see SRX.mergeDeleted). */
+function pruneDeleted() {
+  const from = new Date(Date.now() - SRX.UNDO_DAYS * 864e5).toISOString();
+  U.deleted = SRX.mergeDeleted(U.deleted, []);
+  U.deleted.forEach(d => { if (d.row && d.at < from) delete d.row; });
+}
+
 /* ---------- what the separate apps used to send each other ---------- */
 const isDry = t => t && t.fire === 'dry';
 /** Gun Database rounds log: one entry per live-fire training and gun (ids are the shared ones now). */
@@ -356,20 +548,20 @@ function roundsInbox() {
     const n = Math.round(+String(w.rounds == null ? '' : w.rounds).replace(',', '.') || 0);
     if (!w || !w.weaponId || !(n > 0)) return null;
     const g = arr(U.weapons).find(x => x.id === w.weaponId);
-    return { uid: t.uid + ':' + (g && g.uid || w.weaponId), date: t.date || '', weaponId: w.weaponId, shooterId: t.shooterId || '', rounds: n, note: t.desc || '', trainingId: t.id || '' };
+    return { uid: t.uid + ':' + (g && g.uid || w.weaponId), date: t.date || '', weaponId: w.weaponId, rounds: n, note: t.desc || '', trainingId: t.id || '' };
   })).filter(Boolean);
   return JSON.stringify({ from: 'training-log', full: true, entries, received: hash(JSON.stringify(entries)) || 1 });
 }
 /** Training Log: drill results linked to a training. */
 function drillInbox() {
   const names = window.SR_DRILL_NAMES || {};
-  const name = id => arr(U.shooters).concat(arr(U.weapons)).find(x => x.id === id);
+  const name = id => arr(U.weapons).find(x => x.id === id);
   const results = arr(U.results).filter(r => r && r.training && (r.training.uid || r.training.id)).map(r => ({
     uid: r.uid, trainingUid: r.training.uid || '', trainingId: r.training.id || '', date: r.date || '',
     drill: names[r.drillId] || r.drillName || r.drillId || '', drillId: r.drillId || '',
     result: r.points != null && r.points !== '' ? r.points + ' pts' : r.hits != null && r.hits !== '' ? r.hits + (r.shots ? '/' + r.shots : '') + ' hits' : (r.pass === true ? 'pass' : r.pass === false ? 'fail' : ''),
     time: r.timeS != null && r.timeS !== '' ? r.timeS + ' s' : '', note: r.note || r.notes || '',
-    shooter: (name(r.shooterId) || {}).name || '', gun: (name(r.weaponId) || {}).name || '' }));
+    shooter: '', gun: (name(r.weaponId) || {}).name || '' }));
   return JSON.stringify({ results, received: Date.parse(U.resultsChanged || U.created) || 1, version: '1.0' });   // the Training Log takes a newer 'received' only
 }
 /** Shooting Drills asking the Training Log (LinkProvider.java of the Training Log, run on the one file). */
@@ -378,7 +570,7 @@ function trainingsOn(arg) {
   const from = String(a.date || a.from || ''), to = String(a.date || a.to || '');
   return arr(U.trainings).filter(t => t && !t.example && !(from && String(t.date || '') < from) && !(to && String(t.date || '') > to)).map(t => {
     const c = {};
-    ['id', 'uid', 'date', 'start', 'durationH', 'fire', 'shooterId', 'desc', 'trainerId'].forEach(x => { if (x in t) c[x] = t[x]; });
+    ['id', 'uid', 'date', 'start', 'durationH', 'fire', 'desc', 'trainerId'].forEach(x => { if (x in t) c[x] = t[x]; });
     if (!('fire' in c)) c.fire = 'live';
     c.weaponIds = arr(t.weapons).map(w => String(w.weaponId || ''));
     c.weapons = arr(t.weapons).map(w => { const x = { weaponId: String(w.weaponId || '') }; if ('rounds' in w) x.rounds = w.rounds; return x; });
@@ -422,7 +614,7 @@ function bridge(part) {
    carries, or the same name) and otherwise added; trainings and results are added unless already there (uid).
    Ids that are taken get the next free one, and every reference follows. The part's schema is set back to the
    backup's, so the part's own migrations run over the data at its next start (they only add and convert). */
-const PREFIX = { shooters: 'S', weapons: 'W', trainers: 'T', trainings: 'TR', results: 'R' };
+const PREFIX = { weapons: 'W', trainers: 'T', trainings: 'TR', results: 'R' };
 const PAD = { trainings: 4, results: 4 };
 function nextId(list, prefix, pad = 3) {
   let n = 0; arr(list).forEach(r => { const m = new RegExp('^(?:EX-)?' + prefix + '-(\\d+)$').exec(r && r.id || ''); if (m) n = Math.max(n, +m[1]); });
@@ -444,7 +636,8 @@ function importBackup(j) {
     return { kind, stats: { added: { favs: add.length }, matched: {}, skipped: { favs: arr(j.favs).length - add.length } } };
   }
   try { RAW.backupDb('db-before-import-' + kind + '-' + Date.now() + '.json'); } catch (e) { }
-  const map = { shooters: {}, weapons: {}, trainers: {} }, stats = { added: {}, matched: {}, skipped: {} };
+  j = clone(j); SRX.dropShooters(j, meName());          // 1.4.0: no shooters; others' entries get "Shot by <name>"
+  const map = { weapons: {}, trainers: {} }, stats = { added: {}, matched: {}, skipped: {} };
   const inc = (k, t) => { stats[k][t] = (stats[k][t] || 0) + 1; };
   SHARED.forEach(t => arr(j[t]).forEach(r => {
     if (!r || typeof r !== 'object' || r.example) return;
@@ -471,12 +664,11 @@ function importBackup(j) {
     const x = clone(r);
     if (!x.uid) x.uid = uuid();
     if (!x.id || U[t].some(y => y.id === x.id)) x.id = nextId(U[t], PREFIX[t], PAD[t]);
-    if ('shooterId' in x) x.shooterId = ref('shooters', x.shooterId);
     if ('weaponId' in x) x.weaponId = ref('weapons', x.weaponId);
     if ('trainerId' in x) x.trainerId = ref('trainers', x.trainerId);
     if (Array.isArray(x.weapons)) x.weapons.forEach(w => { if (w) w.weaponId = ref('weapons', w.weaponId); });
-    // older entries without a uid: the same day, shooter and content is the same entry (no double import)
-    const sig = y => [y.date, y.shooterId, y.desc, y.durationH, y.fire, y.drillId, y.time, y.hits, y.weaponId].map(v => v == null ? '' : String(v)).join('|');
+    // older entries without a uid: the same day and content is the same entry (no double import)
+    const sig = y => [y.date, y.desc, y.durationH, y.fire, y.drillId, y.time, y.hits, y.weaponId].map(v => v == null ? '' : String(v)).join('|');
     if (!r.uid && U[t].some(y => sig(y) === sig(x))) { inc('skipped', t); return; }
     if (x.training && x.training.uid) {                  // a drill result linked to a training: point at its id here
       const tr = U.trainings.find(y => y.uid === x.training.uid);
@@ -505,6 +697,7 @@ function restoreAll(j) {
   try { RAW.backupData('thoughts', 'thoughts-before-restore-' + stamp + '.json'); } catch (e) { }
   const th = isThoughtsFile(j.thoughts) ? normalizeThoughts(clone(j.thoughts)) : thoughtsFrom(j);
   U = normalize(clone(j)); delete U.backup; delete U.thoughts;
+  dropShooters140(true);                                // an older backup still has shooters (1.4.0)
   TH = th;
   const a = writeRaw(), b = writeThoughts();
   return a && b;
@@ -530,14 +723,92 @@ window.SRNativeCallback = (id, res) => {
 const cb = f => { const id = 'sr' + Math.random().toString(36).slice(2); hubCbs[id] = f; return id; };
 const b64 = t => { const u = new TextEncoder().encode(t); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = b => new TextDecoder().decode(Uint8Array.from(atob(b), c => c.charCodeAt(0)));
-const backupName = () => `stoic-ranger-backup_${new Date().toISOString().slice(0, 10)}.json`;
+const backupName = () => `sr-shooting-backup_${new Date().toISOString().slice(0, 10)}.json`;
+/** Save any file through the device's save dialog / share sheet; resolves {ok, msg}. */
+const saveAs = (name, mime, b64data) => new Promise(res => RAW.saveFile(name, mime, b64data, cb(res)));
 const saveBackup = () => new Promise(res => { SR.flush(); const txt = SR.backupText(); RAW.saveFile(backupName(), 'application/json', b64(txt), cb(res)); });
-const shareBackup = () => { SR.flush(); RAW.shareFile(backupName(), 'application/json', b64(SR.backupText()), 'Stoic Ranger backup'); };
+const shareBackup = () => { SR.flush(); RAW.shareFile(backupName(), 'application/json', b64(SR.backupText()), 'Stoic Ranger Shooting backup'); };
 const openJson = () => new Promise(res => RAW.openFile('application/json,text/plain,application/octet-stream', cb(r => {
   if (!r || !r.ok) return res({ ok: false, msg: r ? r.msg : 'cancelled' });
   let j = null; try { j = JSON.parse(unb64(r.data)); } catch (e) { }
   res(j && typeof j === 'object' ? { ok: true, name: r.msg, json: j } : { ok: false, msg: 'This is not a backup file.' });
 })));
+
+/* ---------- where the data lives: this device, or synced to the user's Nextcloud (1.3.0) ----------
+   Shared rule (Manuel 2026-11-07): linked apps use one database file and one storage setting; switching in one app
+   switches all of them. On Android the setting goes between the apps through their link providers (only apps signed
+   with the same key; each app answers only apps its user linked there, e.g. SR GunSafe after "Allow"); the newest
+   change wins. */
+const ncState = () => (window.SRNC && SRNC.available() && SRNC.state()) || null;
+function resetSync() { const c = U.settings.common; c.xlsx = { dirty: now() }; saveBase(null); KEEP = null; LINKED = null; try { sessionStorage.removeItem('sr.nc.at'); } catch (e) { } if (window.SRNC) SRNC.resetDirs(); }
+const pushLinked = () => { try { const a = JSON.parse(RAW.linkPush ? RAW.linkPush() || '[]' : '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+/** Connect to Nextcloud: check the login, store the setting (password only in the device's encrypted store), then
+    the first sync merges what is on Nextcloud with this device and uploads. */
+function ncConnect(setting, password) {
+  if (newer) return { ok: false, msg: 'This data is read-only until you update the app.' };
+  const st = ncState(); if (!st) return { ok: false, msg: 'Not available on this device.' };
+  const s = { mode: 'nextcloud', url: String(setting.url || '').trim().replace(/\/+$/, ''), user: String(setting.user || '').trim(),
+    folder: '/' + String(setting.folder || 'Stoic Ranger').trim().replace(/^\/+|\/+$/g, '') + '/', file: 'database.xlsx', changed: now() };
+  if (!s.url || !s.user) return { ok: false, msg: 'Enter the Nextcloud address and your user name.' };
+  if (!password && !st.hasPassword) return { ok: false, msg: 'Enter an app password (Nextcloud › Settings › Security).' };
+  const c = SRNC.check(s, password); if (!c.ok) return c;
+  if (!RAW.ncSet(JSON.stringify(s), password || '')) return { ok: false, msg: 'The app password could not be stored safely on this device, so nothing was changed.' };
+  if (RAW.xlsxInfo) { try { RAW.xlsxUnlink(); } catch (e) { } }      // one place for the file: Nextcloud replaces a linked file here
+  resetSync();
+  const out = xlsxOut(true);
+  const pushed = pushLinked();
+  return out && out.error ? { ok: false, msg: out.error, saved: true } : { ok: true, merged: SR_LAST.xlsx || null, pushed };
+}
+/** 1.4.0, for a device that is hopelessly out of step: its data (guns, trainings, drills … and the deletes) is replaced
+    by what the linked database.xlsx (Nextcloud or a file here) holds. A backup of everything comes first; settings,
+    the storage setting, Daily Thoughts and the history stay. */
+function replaceFromFile() {
+  if (newer) return { ok: false, msg: 'This data is read-only until you update the app.' };
+  LINKED = null;
+  if (!xlsxLinked()) return { ok: false, msg: 'No database.xlsx is linked.' };
+  const info = xlsxInfo();
+  if (info.error) return { ok: false, msg: info.error };
+  if (!info.size) return { ok: false, msg: 'There is no database.xlsx there yet.' };
+  const b = readFile(); if (!b) return { ok: false, msg: 'database.xlsx could not be read.' };
+  const bytes = b64Bytes(b);
+  let F; try { F = SRX.read(bytes, meName()); } catch (e) { return { ok: false, msg: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
+  let saved = false; try { saved = !!RAW.backupDb('db-before-replace-' + Date.now() + '.json'); } catch (e) { saved = false; }
+  if (!saved && RAW.backupDb) return { ok: false, msg: 'No backup of this device\'s data could be made, so nothing was replaced.' };
+  const d = F.db;
+  SRX.TABLES.forEach(t => { U[t] = clone(arr(d[t])); });
+  U.favs = clone(arr(d.favs));
+  if (arr(d.purposes).length) { U.settings.gundb = U.settings.gundb || {}; U.settings.gundb.purposes = clone(d.purposes); }
+  U.deleted = SRX.mergeDeleted([], d.deleted);
+  SRX.applyDeleted(U);
+  normalize(U);
+  const S = xlsxState(); Object.assign(S, { mtime: info.mtime || 0, size: info.size, hash: hashBytes(bytes), etag: info.etag || S.etag || '', dirty: '', lastIn: now() });
+  KEEP = bytes;
+  saveBase(SRX.dbPart(U));
+  U.history.push({ at: now(), part: 'stoic-ranger', note: 'Data on this device replaced by database.xlsx' + (NC() ? ' on Nextcloud' : '') });
+  writeRaw(true);
+  const n = t => arr(U[t]).filter(r => !r.example).length;
+  return { ok: true, counts: { weapons: n('weapons'), munitions: n('munitions'), trainings: n('trainings'), results: n('results'), sheets: n('sheets') } };
+}
+/** Back to this device only: everything stays here, nothing is deleted on Nextcloud. */
+function ncLocal() {
+  const st = ncState(); if (!st) return { ok: false };
+  if (st.mode === 'nextcloud') { const out = run(() => xlsxOut()); if (out && out.error && !out.offline) SR_LAST.xlsxOut = out; }
+  RAW.ncSet(JSON.stringify({ mode: 'local', changed: now() }), '');
+  U.settings.common.xlsx = {}; saveBase(null); KEEP = null; LINKED = null; writeRaw(true);
+  return { ok: true, pushed: pushLinked() };
+}
+/** A linked app switched storage more recently: take its setting (Android, sharing switched on). */
+function adoptLinked() {
+  const st = ncState(); if (!st || !RAW.linkStorage) return null;
+  let list = []; try { list = JSON.parse(RAW.linkStorage() || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  const best = list.filter(o => o && o.changed && o.changed > (st.changed || '')).sort((a, b) => b.changed.localeCompare(a.changed))[0];
+  if (!best || !RAW.linkAdopt(best.app)) return null;
+  const moved = best.mode !== st.mode || best.url !== st.url || best.folder !== st.folder || best.user !== st.user;
+  if (moved) { if (best.mode === 'nextcloud') { if (RAW.xlsxInfo) { try { RAW.xlsxUnlink(); } catch (e) { } } resetSync(); } else { U.settings.common.xlsx = {}; saveBase(null); KEEP = null; LINKED = null; } writeRaw(true); }
+  SR_LAST.adopted = { app: best.app, mode: best.mode };
+  return SR_LAST.adopted;
+}
 
 /* ---------- public ---------- */
 load(); LOADED = true;
@@ -550,11 +821,14 @@ const SR = window.SR = {
   save: writeRaw,
   /** The whole database as one backup file (all parts, Daily Thoughts included). */
   backupText,
-  saveBackup, shareBackup, openJson, importBackup, restoreAll,
+  saveBackup, shareBackup, saveAs, openJson, importBackup, restoreAll,
   /** database.xlsx: link state, sync, by hand */
   xlsx: { canLink, info: xlsxInfo, linked: () => xlsxLinked(), state: () => xlsxState(), link: xlsxLink, unlink: xlsxUnlink,
     syncIn: () => { LINKED = null; return xlsxIn(true); }, syncOut: () => xlsxOut(true), sync: () => { LINKED = null; const a = xlsxIn(); if (a && a.error) return a; return xlsxOut(true) || a; },
     save: saveXlsx, open: openXlsx },
+  storage: { available: () => !!ncState(), state: ncState, connect: ncConnect, local: ncLocal, adopted: () => SR_LAST.adopted || null, replace: replaceFromFile },
+  /** 1.4.0: delete on all devices: Recently deleted (30 days) and Undo */
+  deleted: { recent: recentlyDeleted, undo: undoDelete },
   saveThoughtsFile, hasThoughtFavs: () => arr(TH && TH.favs).length > 0,
   uuid, clone, now, arr,
 };
@@ -562,7 +836,7 @@ if (PARTS[PART]) window[PARTS[PART].prefix + 'Native'] = bridge(PART);
 
 /* ---------- the backup block every part's More page shows ---------- */
 SR.dataSection = (h = 'h2') => `<${h}>Backup</${h}>
-  <p class="note">Stoic Ranger keeps guns, trainings and drill results in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …). Restoring, and bringing in backups of the old SR_Training Log and SR_Shooting Drills apps, is on the home page under Data.</p>
+  <p class="note">Stoic Ranger Shooting keeps guns, trainings and drill results in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …). Restoring, and bringing in backups of the old SR_Training Log and SR_Shooting Drills apps, is on the home page under Data.</p>
   <div class="stack"><button class="btn pri" data-sr="save">Save a backup of everything</button><button class="btn" data-sr="share">Share a backup</button><button class="btn" data-sr="data">Restore or bring in data</button></div>`;
 SR.wireData = (el, toast) => {
   const q = s => el.querySelector(`[data-sr="${s}"]`);
@@ -573,7 +847,6 @@ SR.wireData = (el, toast) => {
 
 /* ---------- Android hooks (MainActivity calls these) and the way home ---------- */
 const T = () => (PARTS[PART] ? window[PARTS[PART].prefix] : null) || {};
-const run = f => { try { return f(); } catch (e) { console.error(e); } };
 SR.flush = () => {
   run(() => T().flush && T().flush());
   const r = run(() => xlsxOut());
@@ -618,12 +891,12 @@ if (PARTS[PART]) document.addEventListener('DOMContentLoaded', () => {
   const bar = document.querySelector('.appbar'), h1 = document.getElementById('hTitle');
   if (!bar || !h1 || document.getElementById('srHome')) return;
   const b = document.createElement('button');
-  b.id = 'srHome'; b.className = 'ib srhome'; b.type = 'button'; b.setAttribute('aria-label', 'Stoic Ranger home');
-  b.innerHTML = T().LOGO_SVG || '⌂';
+  b.id = 'srHome'; b.className = 'ib srhome'; b.type = 'button'; b.setAttribute('aria-label', 'Stoic Ranger Shooting home');
+  b.innerHTML = (T().LOGO_SVG || '⌂') + '<span class="srhl">Home</span>';      // 1.3.1: labelled (Manuel: no way back home)
   b.onclick = SR.home;
   bar.insertBefore(b, h1);
   const st = document.createElement('style');
-  st.textContent = '.srhome{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:4px;background:none;border:0;color:inherit;flex:none}.srhome svg{width:32px;height:32px}';
+  st.textContent = '.srhome{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:44px;height:48px;padding:2px 4px;background:none;border:0;color:inherit;flex:none;cursor:pointer}.srhome svg{width:28px;height:28px}.srhome .srhl{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:1;margin-top:2px}';
   document.head.appendChild(st);
 });
 })();

@@ -6,7 +6,7 @@
    comes back to the front, the app's changes go out when the window loses focus or closes. A backup of the file
    goes to <folder of database.xlsx>\backups before every write; if Excel has the file open, the write waits.
    Settings (database.xlsx path, window size, theme) live in %APPDATA%\Stoic Ranger\config.json. */
-const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme, protocol, net, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeTheme, protocol, net, clipboard, safeStorage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -112,6 +112,7 @@ function guessDir() {
   if (cfg.xlsx) return path.dirname(cfg.xlsx);
   const home = app.getPath('home'), c = [];
   for (const b of [path.join(home, 'Desktop'), path.join(home, 'OneDrive', 'Desktop'), path.join(home, 'Documents'), home]) {
+    c.push(path.join(b, 'Wichtig', 'Claude', '12_Stoic Ranger Apps', '01_SR Shooting', '02_Data', 'pc-dashboard', '03_registry'));   // since 2026-11-06 (remark #12)
     c.push(path.join(b, 'Wichtig', 'Claude', '12_Stoic Ranger Apps', '02_shared', 'pc-dashboard', '03_registry'));
   }
   if (cfg.folder) c.push(path.join(cfg.folder, '03_registry'));
@@ -123,6 +124,49 @@ function dashboardFile() {
   let d = path.dirname(cfg.xlsx);
   for (let i = 0; i < 3; i++, d = path.dirname(d)) { const f = path.join(d, DASH); if (fs.existsSync(f)) return f; }
   return '';
+}
+
+/* ---------- database.xlsx on the user's Nextcloud (1.3.0, remark #15; shared contract 00_docs/SHARED-DB-CONTRACT.md) ----------
+   The setting {mode, url, user, folder, file, changed} is in config.json; the app password only encrypted with
+   Windows DPAPI (Electron safeStorage), never in a file in clear text, never in the database. The sync itself
+   (merge, backups, If-Match) is the page's www/sr/nextcloud.js, the same as on Android; this only sends requests. */
+const ncCfg = () => Object.assign({ mode: 'local', url: '', user: '', folder: '/Stoic Ranger/', file: 'database.xlsx', changed: '', pw: '' }, cfg.nc || {});
+function ncState() { const n = ncCfg(); return { mode: n.mode, url: n.url, user: n.user, folder: n.folder, file: n.file, changed: n.changed, hasPassword: !!n.pw, share: false, windows: true }; }
+function ncSet(json, pw) {
+  let s = {}; try { s = JSON.parse(json) || {}; } catch { }
+  const n = ncCfg();
+  n.mode = s.mode === 'nextcloud' ? 'nextcloud' : 'local';
+  ['url', 'user', 'folder', 'file'].forEach(k => { if (k in s) n[k] = String(s[k] || '').trim(); });
+  n.changed = s.changed || '';
+  // the Linux test run (tools/test-desktop.mjs) has no keyring; Windows always has DPAPI
+  if (pw && process.platform === 'linux' && process.env.SR_TEST === '1' && safeStorage.setUsePlainTextEncryption) safeStorage.setUsePlainTextEncryption(true);
+  if (pw) { if (!safeStorage.isEncryptionAvailable()) return false; n.pw = safeStorage.encryptString(pw).toString('base64'); }
+  cfg.nc = n; saveCfg(); buildMenu();
+  return true;
+}
+const ncPassword = n => { try { return n.pw ? safeStorage.decryptString(Buffer.from(n.pw, 'base64')) : ''; } catch { return ''; } };
+function ncUrl(n, name) {
+  let b = String(n.url || '').trim().replace(/\/+$/, '');
+  if (!b.includes('/remote.php/')) b += '/remote.php/dav/files/' + encodeURIComponent(n.user);
+  const segs = (String(n.folder || '') + '/' + name).split('/').filter(Boolean).map(encodeURIComponent);
+  return b + '/' + segs.join('/') + (name ? '' : '/');
+}
+async function ncRequest(method, name, headersJson, bodyB64, override) {
+  const n = override || ncCfg();
+  if (!n.url || !n.user) return { status: 0, error: 'Nextcloud is not set up.' };
+  if (!/^https:\/\//i.test(n.url)) return { status: 0, error: 'The Nextcloud address must start with https://' };
+  let h = {}; try { h = JSON.parse(headersJson || '{}') || {}; } catch { }
+  if (h['X-Dest-Name']) { h.Destination = ncUrl(n, h['X-Dest-Name']); delete h['X-Dest-Name']; }
+  const pw = override && override.password ? override.password : ncPassword(n);
+  h.Authorization = 'Basic ' + Buffer.from(n.user + ':' + pw).toString('base64');
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
+    const r = await fetch(ncUrl(n, name), { method, headers: h, body: bodyB64 ? Buffer.from(bodyB64, 'base64') : undefined, signal: ctl.signal, redirect: 'follow' });
+    const body = method === 'HEAD' ? Buffer.alloc(0) : Buffer.from(await r.arrayBuffer());
+    clearTimeout(t);
+    const headers = {}; r.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
+    return { status: r.status, headers, body: body.toString('base64') };
+  } catch (e) { return { status: 0, error: e.name === 'AbortError' ? 'timed out' : (e.cause && e.cause.code) || e.message }; }
 }
 
 /* ---------- the bridge (preload.js calls these) ---------- */
@@ -144,9 +188,17 @@ const SYNC = {
   xlsxWrite: b64 => JSON.stringify(xlsxWrite(b64)),
   xlsxUnlink: () => { cfg.xlsx = ''; cfg.pending = ''; saveCfg(); buildMenu(); return true; },
   shareText: (subject, text) => { clipboard.writeText(text || ''); return true; },
+  ncState: () => JSON.stringify(ncState()),
+  ncSet: (json, pw) => ncSet(json, pw),
+  ncRequest: (m, name, h, b) => ncRequest(m, name, h, b).then(r => JSON.stringify(r)),
+  ncTry: (json, pw, m, name, h) => { let o = {}; try { o = JSON.parse(json) || {}; } catch { } o.password = pw || ''; return ncRequest(m, name, h, '', o).then(r => JSON.stringify(r)); },
 };
 ipcMain.on('sr', (e, m, args) => {
-  try { e.returnValue = SYNC[m] ? SYNC[m](...(args || [])) : null; } catch (err) { console.error(m, err); e.returnValue = null; }
+  try {
+    const v = SYNC[m] ? SYNC[m](...(args || [])) : null;
+    if (v && typeof v.then === 'function') v.then(x => { e.returnValue = x; }, err => { console.error(m, err); e.returnValue = null; });   // the page waits, like on Android
+    else e.returnValue = v;
+  } catch (err) { console.error(m, err); e.returnValue = null; }
 });
 ipcMain.handle('sr:xlsxLink', (_, mode) => xlsxLink(mode));
 ipcMain.handle('sr:saveFile', async (_, name, b64) => {
@@ -197,7 +249,7 @@ function buildMenu() {
       { label: 'Open the app data folder', click: () => shell.openPath(DATA()) },
       { label: 'Developer tools', accelerator: 'CmdOrCtrl+Shift+I', click: () => win.webContents.toggleDevTools() },
       { type: 'separator' },
-      { label: 'About Stoic Ranger', click: () => dialog.showMessageBox(win, { type: 'info', title: 'About', icon: path.join(__dirname, 'res', 'icon.png'), message: `Stoic Ranger ${app.getVersion()}`,
+      { label: 'About Stoic Ranger Shooting', click: () => dialog.showMessageBox(win, { type: 'info', title: 'About', icon: path.join(__dirname, 'res', 'icon.png'), message: `Stoic Ranger Shooting ${app.getVersion()}`,
         detail: `Gun Database, Training Log and Shooting Drills: the same app as on Android and iPhone.\n\ndatabase.xlsx:\n${cfg.xlsx || '(none linked yet: File › Data and database.xlsx)'}\n\nThe app's own copy of the data:\n${DATA()}` }) },
     ] },
   ]));
@@ -205,23 +257,24 @@ function buildMenu() {
 
 /** First start without a database.xlsx: ask once (the installer usually set one up already). */
 async function firstStart() {
+  if (ncCfg().mode === 'nextcloud') return;              // database.xlsx is on Nextcloud (1.3.0)
   if (cfg.pending && cfg.pending !== cfg.xlsx) {        // set up by the installer: link it (the first sync merges, nothing is lost)
     const res = await js("window.SR && SR.xlsx ? SR.xlsx.link('pending').then(r => JSON.stringify(r)) : null");
     let o = null; try { o = JSON.parse(res); } catch { }
-    if (o && !o.ok) dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger', message: 'database.xlsx could not be linked', detail: String(o.msg || '') });
+    if (o && !o.ok) dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger Shooting', message: 'database.xlsx could not be linked', detail: String(o.msg || '') });
     else if (o) win.loadURL(HOME + '#/data');
     return;
   }
   if (cfg.xlsx) return;
   if (cfg.asked) return;
   cfg.asked = true; saveCfg();
-  const r = await dialog.showMessageBox(win, { type: 'question', title: 'Stoic Ranger', message: 'Work with a database.xlsx?',
-    detail: 'Stoic Ranger keeps its data in one database.xlsx that the phone, the iPhone web app and Excel can use too. Use your existing file (for example 02_shared\\pc-dashboard\\03_registry\\database.xlsx) or create a new one. You can change this later under File › Data and database.xlsx.',
+  const r = await dialog.showMessageBox(win, { type: 'question', title: 'Stoic Ranger Shooting', message: 'Work with a database.xlsx?',
+    detail: 'Stoic Ranger Shooting keeps its data in one database.xlsx that the phone, the iPhone web app and Excel can use too. Use your existing file (for example 01_SR Shooting\\02_Data\\pc-dashboard\\03_registry\\database.xlsx) or create a new one. You can change this later under File › Data and database.xlsx.',
     buttons: ['Use an existing database.xlsx', 'Create a new database.xlsx', 'Later'], defaultId: 0, cancelId: 2, noLink: true });
   if (r.response === 2) return;
   const res = await js(`window.SR && SR.xlsx && SR.xlsx.link('${r.response === 0 ? 'open' : 'create'}').then(r => JSON.stringify(r))`);
   let o = null; try { o = JSON.parse(res); } catch { }
-  if (o && !o.ok && o.msg !== 'cancelled') dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger', message: o.msg });
+  if (o && !o.ok && o.msg !== 'cancelled') dialog.showMessageBox(win, { type: 'warning', title: 'Stoic Ranger Shooting', message: o.msg });
   if (o && o.ok) win.loadURL(HOME + '#/data');
 }
 
@@ -229,7 +282,7 @@ function createWindow() {
   const b = cfg.bounds || { width: 1100, height: 860 };
   win = new BrowserWindow({
     ...b, minWidth: 380, minHeight: 500, show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? '#111111' : '#ffffff',
-    title: 'Stoic Ranger', icon: path.join(__dirname, 'res', 'icon.png'),
+    title: 'Stoic Ranger Shooting', icon: path.join(__dirname, 'res', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: false, nodeIntegration: false, sandbox: false, spellcheck: false },
   });
   if (cfg.maximized) win.maximize();
@@ -250,7 +303,7 @@ function createWindow() {
   // mouse back button and the keyboard's Back key walk back like the phone's Back (never closes the app here)
   win.on('app-command', (e, cmd) => { if (cmd === 'browser-backward') back(); });
   win.webContents.on('before-input-event', (e, i) => { if (i.type === 'keyDown' && i.key === 'BrowserBack') { e.preventDefault(); back(); } });
-  win.on('page-title-updated', e => { e.preventDefault(); win.setTitle('Stoic Ranger'); });
+  win.on('page-title-updated', e => { e.preventDefault(); win.setTitle('Stoic Ranger Shooting'); });
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith(ORIGIN)) { e.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); } });
   nativeTheme.on('updated', () => js('window.SR && SR.onResume && SR.onResume()'));

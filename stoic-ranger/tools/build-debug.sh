@@ -13,7 +13,7 @@ M="$ROOT/app/src/main"
 sed 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="at.rangebook.app">#; s#\${applicationId}#at.rangebook.app#g' "$M/AndroidManifest.xml" > "$OUT/AndroidManifest.xml"
 "$TOOLS/aapt2" link -o "$OUT/base.apk" -I "$TOOLS/android.jar" --manifest "$OUT/AndroidManifest.xml" \
    -A "$M/assets" --java "$OUT/gen" --min-sdk-version 26 --target-sdk-version 34 \
-   --version-code "${VERSION_CODE:-10}" --version-name "${VERSION_NAME:-1.1.0}" --debug-mode \
+   --version-code "${VERSION_CODE:-15}" --version-name "${VERSION_NAME:-1.4.0}" --debug-mode \
    -0 woff2 -0 png -0 jpg "$OUT/res/res.zip"
 # Eclipse compiler: this D8 build trips over some javac 21 class files
 java -jar "$TOOLS/ecj-3.45.0.jar" -nowarn -8 -cp "$TOOLS/android.jar" -d "$OUT/classes" \
@@ -25,6 +25,11 @@ if [ -f "$TOOLS/d8.jar" ]; then
 else
   dalvik-exchange --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" "$OUT/classes"
 fi
+# dx does not desugar Java lambdas: it emits invoke-custom calls to java.lang.invoke.LambdaMetafactory, which Android
+# does not have, so the app crashes at the first lambda (1.1.0-1.2.0: the Back button "closed" the app). Use anonymous classes.
+if grep -a -q LambdaMetafactory "$OUT/dex/classes.dex"; then
+  echo "classes.dex references LambdaMetafactory: replace the Java lambdas/method references with anonymous classes" >&2; exit 1
+fi
 cp "$OUT/base.apk" "$OUT/unaligned.apk"
 (cd "$OUT/dex" && zip -q -0 ../unaligned.apk classes.dex)
 python3 "$ROOT/tools/zipalign.py" "$OUT/unaligned.apk" "$OUT/aligned.apk"
@@ -32,7 +37,7 @@ KS="${KEYSTORE:-$ROOT/debug.keystore}"
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \
    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 mkdir -p "$ROOT/build/outputs"
-APK="$ROOT/build/outputs/stoic-ranger-${VERSION_NAME:-1.1.0}-debug.apk"
+APK="$ROOT/build/outputs/stoic-ranger-shooting-${VERSION_NAME:-1.4.0}-debug.apk"
 java -jar "$TOOLS/apksigner.jar" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
    --ks-key-alias androiddebugkey --min-sdk-version 26 --out "$APK" "$OUT/aligned.apk"
 java -jar "$TOOLS/apksigner.jar" verify --min-sdk-version 26 "$APK"

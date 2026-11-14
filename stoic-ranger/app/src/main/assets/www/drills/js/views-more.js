@@ -21,7 +21,7 @@ SD._oldRestoreBackup = async () => {
     SD.toast('This is not a Shooting Drills backup.', true); return;
   }
   if (+j.schema > SD.SCHEMA) { SD.toast(`This backup comes from a newer app version (data format ${j.schema}). Update the app first.`, true); return; }
-  const m = SD.sheet('Restore backup', `<p>${esc(f.name)}: ${j.results.length} results, ${(j.favs || []).length} favourites, ${(j.shooters || []).length} shooters, ${(j.weapons || []).length} guns.</p>
+  const m = SD.sheet('Restore backup', `<p>${esc(f.name)}: ${j.results.length} results, ${(j.favs || []).length} favourites, ${(j.weapons || []).length} guns.</p>
     <p class="note">This replaces the data on this phone (now ${SD.db.results.length} results). A copy of the current data is saved on the phone first.</p>
     <div class="stack"><button class="btn pri big" id="rGo">Replace data with this backup</button></div>`);
   $('#rGo', m.body).onclick = () => {
@@ -63,12 +63,12 @@ SD.views.more = {
     const s = SD.db.settings, info = SD.appInfo();
     el.innerHTML = `
       <h2>Database</h2>
-      <div class="stack"><a class="btn" href="#/db/shooters">Shooters <small class="mono">${SD.db.shooters.length}</small></a><a class="btn" href="#/db/weapons">Guns <small class="mono">${SD.db.weapons.length}</small></a></div>
+      <div class="stack"><a class="btn" href="#/db/weapons">Guns <small class="mono">${SD.db.weapons.length}</small></a></div>
       ${SR.dataSection()}
       <h2>Appearance</h2>
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(s.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div>
       <h2>About</h2>
-      <p class="note">Stoic Ranger · Shooting Drills ${esc(info.version || '')} · data format ${SD.SCHEMA}${info.android === 'web app' ? ' · web app' : SD.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
+      <p class="note">Stoic Ranger Shooting · Shooting Drills ${esc(info.version || '')} · data format ${SD.SCHEMA}${info.android === 'web app' ? ' · web app' : SD.native ? ` · Android ${esc(info.android || '')}` : ''}<br>
       ${SD.DRILLS.length} drills · ${SD.PRINTABLES.length} printables · ${SD.db.results.length} results · ${SD.db.favs.length} favourites<br>
       Drill descriptions written for this app; drills named after a person are credited on the drill page. Printable targets are own designs.<br>
       ${esc(SD.SAFETY_LIVE)} ${esc(SD.SAFETY_DRY)}<br>

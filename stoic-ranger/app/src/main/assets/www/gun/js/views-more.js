@@ -2,7 +2,7 @@
 'use strict';
 (() => {
 const { $, $$, esc, fx, num } = RB;
-const TABLE_KEYS = ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'targets', 'roundsLog'];
+const TABLE_KEYS = ['weapons', 'barrels', 'munitions', 'trainers', 'targets', 'roundsLog'];
 
 /* ---------- database.xlsx (same sheets and headers as 03_registry/database.xlsx) ---------- */
 const AUTO = {
@@ -24,13 +24,13 @@ RB.exportXlsx = async () => {
     X.utils.book_append_sheet(wb, ws, T.sheet);
   }
   // datasheets, one row per sheet, plus every shot
-  const sh = [['Sheet ID', 'Date', 'Time', 'Sheet no.', 'Shooter', 'Purpose', 'Weapon', 'Barrel', 'Ammunition', 'Distance m', 'Rounds', 'Hits', 'Score', 'Avg ring', 'ES mm', 'ES mrad', 'Mean radius mm', 'MR mrad', 'MPI X mm', 'MPI Y mm', 'V0 m/s', 'V0 SD m/s', 'Temp °C', 'Pressure hPa', 'Range', 'Remarks']];
-  D.sessions.forEach(s => { const r = RB.sheetById(s.id) || {}; sh.push([s.id, s.date, s.time, s.no, s.shooter, s.purpose, s.rifle, s.barrel, s.ammo, s.dist ?? '', s.rounds ?? '', s.hits, s.score ?? '', rnd(s.avgRing, 2), rnd(s.es, 1), rnd(s.esM, 3), rnd(s.mr, 1), rnd(s.mrM, 3), rnd(s.mx, 1), rnd(s.my, 1), s.v0 ?? '', s.v0sd ?? '', s.temp ?? '', s.press ?? '', s.range, r.remarks || '']); });
+  const sh = [['Sheet ID', 'Date', 'Time', 'Sheet no.', 'Purpose', 'Weapon', 'Barrel', 'Ammunition', 'Distance m', 'Rounds', 'Hits', 'Score', 'Avg ring', 'ES mm', 'ES mrad', 'Mean radius mm', 'MR mrad', 'MPI X mm', 'MPI Y mm', 'V0 m/s', 'V0 SD m/s', 'Temp °C', 'Pressure hPa', 'Range', 'Remarks']];
+  D.sessions.forEach(s => { const r = RB.sheetById(s.id) || {}; sh.push([s.id, s.date, s.time, s.no, s.purpose, s.rifle, s.barrel, s.ammo, s.dist ?? '', s.rounds ?? '', s.hits, s.score ?? '', rnd(s.avgRing, 2), rnd(s.es, 1), rnd(s.esM, 3), rnd(s.mr, 1), rnd(s.mrM, 3), rnd(s.mx, 1), rnd(s.my, 1), s.v0 ?? '', s.v0sd ?? '', s.temp ?? '', s.press ?? '', s.range, r.remarks || '']); });
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(sh), 'Datasheets');
   const shots = [['Sheet ID', 'Date', 'Shot', 'X mm', 'Y mm', 'Ring', 'X mrad', 'Y mrad', 'Ammunition', 'Purpose']];
   D.shots.forEach(t => shots.push([t.sheetId, t.date, t.shot, t.x, t.y, t.ring, t.dist ? rnd(t.x / t.dist, 3) : '', t.dist ? rnd(t.y / t.dist, 3) : '', t.ammo, t.purpose]));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(shots), 'Shots');
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger - Gun Database ' + new Date().toISOString().slice(0, 16).replace('T', ' ')], ['Units', 'Metric: mm, m, g, m/s, mrad.'], ['Auto columns', 'Columns marked (auto) are calculated by the app from the datasheets.']]), 'Info');
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Database', 'Exported from Stoic Ranger Shooting - Gun Database ' + new Date().toISOString().slice(0, 16).replace('T', ' ')], ['Units', 'Metric: mm, m, g, m/s, mrad.'], ['Auto columns', 'Columns marked (auto) are calculated by the app from the datasheets.']]), 'Info');
   const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
   return RB.saveFile(`database_${RB.today()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', new Uint8Array(out));
 };
@@ -75,7 +75,7 @@ RB.importRecords = list => {
     s.source = r.source || { kind: 'import' };
     const same = RB.db.sheets.find(x => x.date === s.date && (x.no || '') === (s.no || '') && (x.time || '') === (s.time || ''));
     RB.autoLink(s);
-    if (!s.weaponId && s.gun) un.add('weapon “' + s.gun + '”'); if (!s.munitionId && s.ammo) un.add('ammo “' + s.ammo + '”'); if (!s.shooterId && s.shooter) un.add('shooter “' + s.shooter + '”');
+    if (!s.weaponId && s.gun) un.add('weapon “' + s.gun + '”'); if (!s.munitionId && s.ammo) un.add('ammo “' + s.ammo + '”');
     if (same) { Object.assign(same, s, { id: same.id }); upd++; } else { s.id = RB.uid('SH'); RB.db.sheets.push(s); add++; }
   }
   return { add, upd, unmatched: [...un] };
@@ -104,7 +104,7 @@ function backupDialog(j) {
   if (+j.schema > RB.SCHEMA) { RB.toast('This backup comes from a newer app version. Update the app first.', true); return; }
   j = RB.migrate(j);                                        // old backups are brought up to the current format first
   const n = k => (j[k] || []).length;
-  const m = RB.sheet('Import backup', `<p>This file has ${n('weapons')} guns, ${n('barrels')} barrels, ${n('munitions')} ammunition entries, ${n('shooters')} shooters, ${n('trainers')} trainers, ${n('roundsLog')} rounds-log entries and ${n('sheets')} datasheets.</p>
+  const m = RB.sheet('Import backup', `<p>This file has ${n('weapons')} guns, ${n('barrels')} barrels, ${n('munitions')} ammunition entries, ${n('trainers')} trainers, ${n('roundsLog')} rounds-log entries and ${n('sheets')} datasheets.</p>
     <div class="stack"><button class="btn pri" id="bMerge">Merge into my data</button></div>
     <p class="note">Merge keeps your entries and adds or updates entries with the same ID.</p>`);
   $('#bMerge', m.body).onclick = () => {
@@ -118,7 +118,7 @@ RB.views.more = {
     RB.header('More');
     const info = RB.appInfo(), S = RB.db.settings, key = RB.secret.get('anthropicKey');
     el.innerHTML = `
-      <a class="choice sm" href="#/download"><div class="ic">⤓</div><div><h3>Download</h3><p>Printable analysis (all or by shooter, gun, ammunition), every datasheet as A4, blank sheets.</p></div></a>
+      <a class="choice sm" href="#/download"><div class="ic">⤓</div><div><h3>Download</h3><p>Printable analysis (all or by gun and ammunition), every datasheet as A4, blank sheets.</p></div></a>
       <div class="card">${SR.dataSection('h3')}</div>
       <div class="card"><h3>Import &amp; exchange</h3>
         <div class="stack">
@@ -152,7 +152,7 @@ RB.views.more = {
       ${RB.hasExamples() ? `<div class="card"><h3>Example data</h3><p class="note">Example entries are still in the database (from an imported file). Your own entries are not touched.</p><div class="row"><button class="btn warn" id="mExDel">Remove all example data now</button></div></div>` : ''}
 
       <div class="card"><h3>About</h3>
-        <p><b>Stoic Ranger</b> · Gun Database ${esc(info.version || '')} · ${info.android === 'web app' ? 'web app' : 'Android ' + esc(info.android || '')} · ${esc(info.device || '')}</p>
+        <p><b>Stoic Ranger Shooting</b> · Gun Database ${esc(info.version || '')} · ${info.android === 'web app' ? 'web app' : 'Android ' + esc(info.android || '')} · ${esc(info.device || '')}</p>
         <p class="note">Training log for long-range and precision shooting (rifles and pistols). Units: ${S.units === 'imperial' ? 'imperial (stored metric)' : 'metric'}. Data: ${RB.db.weapons.length} guns, ${RB.db.barrels.length} barrels, ${RB.db.munitions.length} ammunition, ${RB.db.shooters.length} shooters, ${RB.db.sheets.length} datasheets, ${RB.db.roundsLog.length} rounds-log entries.</p>
         <details><summary>Privacy</summary><p class="note">The app has no account and no tracking. All entries stay on the phone. When you use Claude photo reading, that photo and the request go to Anthropic with your own API key; nothing else leaves the phone unless you export or share it.</p></details>
         <details><summary>Open-source licences</summary><p class="note">Barlow Condensed, Barlow Semi Condensed (Jeremy Tribby) and JetBrains Mono: SIL Open Font License 1.1. SheetJS Community Edition: Apache License 2.0. Hole-finding, statistics, charts and the ballistic solver: own code. G1/G7 drag tables: standard reference data (BRL / JBM, as published in py-ballisticcalc).</p></details>

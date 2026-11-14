@@ -1,9 +1,9 @@
-# Stoic Ranger (Android)
+# Stoic Ranger Shooting (Android)
 
 One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
-phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Launcher name "Stoic Ranger", package id
-`at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0 and keeps its data).
-Version 1.1.0, versionCode 10.
+phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Name "Stoic Ranger Shooting" (from 1.2.0), launcher
+label "SR_Shooting", package id `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0
+and keeps its data). Version 1.3.1, versionCode 14.
 
 ## How it fits together
 
@@ -40,6 +40,9 @@ SR_Database file (the built-in demo data if none is given), opens every part, br
 Drills and Daily Thoughts backups (twice, nothing doubles), checks the parts see each other's data and that data
 from a newer version is never written. Must pass before a release.
 
+`bash tools/test-nextcloud.sh <database.xlsx made in Excel>` (1.3.1) starts a real Nextcloud 30 in Docker and runs
+the Android WebDAV code (`DavHttp.java`, on the desktop JVM) and the app's sync against it. Must pass before a release.
+
 ## Install
 
 1. Copy `stoic-ranger-1.1.0-debug.apk` to the phone and open it. Android shows it as an **update** of
@@ -52,6 +55,60 @@ from a newer version is never written. Must pass before a release.
 
 ## Versions
 
+- **1.4.0** (versionCode 15; Android, web, Windows 1.4.0; 2026-11-14): delete on all devices, shooter out of the
+  data (#20), Excel layout kept (#25).
+  - **Delete on all devices** (SHARED-DB-CONTRACT.md, section E): a delete becomes a tombstone (`deleted` in db.json,
+    hidden sheet `_Deleted` in database.xlsx) that every device applies, so a later sync no longer brings the entry
+    back, also not from an old Excel file that still has the row. Changed entries carry `updated`; the later of a
+    change and a delete wins, which is also how **Undo** works. Settings › **Recently deleted** lists deletes of the
+    last 30 days with Undo (tombstones themselves are kept a year). A gun deleted in any part is really deleted now
+    (it used to stay when trainings used it); those trainings keep its name.
+  - **Replace this device's data** with the Nextcloud copy (or the linked database.xlsx): emergency button in
+    Settings, a backup of the device's data first.
+  - **One shooter, no shooter in the data** (#20): no Shooters table/sheet, no Shooter field or column in trainings,
+    drill results and datasheets, no shooter filter or field in the Gun Database (dashboard, download, datasheet
+    form and print), Training Log or Shooting Drills. Once, with a backup first (`backups/db-before-1.4.0-shooter-*`),
+    entries of another shooter get "Shot by <name>" in their remarks/notes and keep their rounds; older files and
+    backups with shooters still import the same way.
+  - **Excel layout kept** (#25): drop-down lists, column widths, frozen rows and named ranges of an existing
+    database.xlsx survive every write; a drop-down follows its column when columns move.
+  - Rounds_Log in database.xlsx holds only rounds entered by hand: the rounds the app makes from trainings are in
+    Trainings already (the PC dashboard counted them twice).
+- **1.3.1** (versionCode 14; Android, web, Windows 1.3.1; 2026-11-14): the sync fixed after the first test with a
+  real Nextcloud (backlog #21–#24). A database.xlsx made in Excel or by the PC dashboard (no Source uid) no longer adds
+  its rows again at every sync: they are matched to the app's entries by ID or name; the copies 1.3.0 made are merged
+  back into one, once, with a backup first. Brought-in entries replace the example data. After every upload the file
+  is read back from Nextcloud and must be identical, else it is sent again and, if still wrong, the previous version
+  is put back. Size from PROPFIND when a server leaves it out of HEAD. The WebDAV code is now `DavHttp.java` (plain
+  Java), tested against a real Nextcloud 30 in Docker (`tools/test-nextcloud.sh`). Home page: a labelled
+  **Settings** button and a line saying where the data is (tap it for Settings); each part's emblem now says **Home**.
+- **1.3.0** (versionCode 13; Android, web, Windows 1.3.0; 2026-11-07): remarks 12 to 15.
+  - **Where the data is stored** (Data): this device only, or synced to the user's **Nextcloud** (address, user, app
+    password, folder). The device keeps its own copy and works offline; database.xlsx is synced over WebDAV when the
+    app opens, when a part or the app is left, and with Sync now: three-way merge, upload with If-Match (412 → read,
+    merge, retry), a copy to `<folder>/backups/database-YYYYMMDD-HHMMSS.xlsx` before each upload (newest 30 kept).
+    Android: `Nextcloud.java` (plain HTTP/1.1 over TLS, because HttpURLConnection refuses WebDAV methods; password
+    AES-GCM with an Android Keystore key). Windows: `main.js` (fetch in the main process, password with
+    safeStorage/DPAPI). The sync logic is shared: `www/sr/nextcloud.js` + `sr/hub.js`. The iPhone web app cannot reach
+    Nextcloud (Nextcloud blocks other websites): there database.xlsx is saved/opened by hand, e.g. in the Nextcloud app.
+  - **Shared contract** (`00_docs/SHARED-DB-CONTRACT.md`): database.xlsx keeps every sheet Shooting does not own
+    (FK_, PF_, GS_, DT_ and hidden `_XX_Data`); Rounds_Log has an optional `Munition ID` column; the link provider
+    answers `gunsafe`, `putBarrels` (queued in `files/link-inbox.json`, applied when the app opens), `storage` and
+    `setStorage` (one storage setting for linked apps, newest `changed` wins; on start the app takes a newer one).
+  - **One shooter** (#14): the Training Log has no shooter choice any more (own shooter; older trainings of others
+    stay theirs, rounds kept). **+ Rounds** on the home page: rounds for a gun/barrel without a training, with
+    ammunition and a note ("Shot by shooter xy"); they count in the round totals and the home overview.
+  - Windows (#12): the installer and first start look for database.xlsx in `01_SR Shooting\02_Data\pc-dashboard\03_registry`
+    first (the old `02_shared\…` second); an update keeps the Nextcloud setting.
+- **1.2.1** (versionCode 12, Android only): the phone's Back button works (and saving/sharing files): the cloud build
+  crashed on Java lambdas, now replaced by anonymous classes; the build checks for it.
+- **1.2.0** (versionCode 11): renamed **Stoic Ranger Shooting** (launcher "SR_Shooting"; package id, data files and
+  web storage unchanged). The home page gets an **Overview** like the PC dashboard (Guns, Training, Drills, Dope
+  cards; filter by year, shooter, gun; read-only, the filter stays on the device) and the **paper datasheet** (save
+  the empty sheet as PDF, print it, bring a filled-in sheet back by photo). New read-only **link for SR Field Kit**
+  (`LinkProvider.java`, `content://at.rangebook.app.link`, signature permission `at.stoicranger.permission.LINK`;
+  `call("ballistics")` returns guns, loads and the measured V0 per gun and load). Backups are now saved as
+  `sr-shooting-backup_<date>.json` (every older name still imports). Tests: `bash tools/test-link.sh` checks the link data.
 - **1.1.0** (versionCode 10): the shared database.xlsx (link one on the phone under home › Data; changes come in
   at start and when the app comes back, go out when you leave a part or the app); Back button fixed (it closed the
   app) and a second Back at home closes it; Daily Thoughts taken out (its data stays, favourites can be saved for

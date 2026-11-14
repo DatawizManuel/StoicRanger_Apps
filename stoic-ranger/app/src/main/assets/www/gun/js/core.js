@@ -176,7 +176,7 @@ RB.enough = sizes => {
 };
 
 /* Example data: flagged example:true. The first real entry in a table removes that table's examples. */
-RB.EX_TABLES = ['weapons', 'barrels', 'munitions', 'shooters', 'roundsLog', 'sheets'];
+RB.EX_TABLES = ['weapons', 'barrels', 'munitions', 'roundsLog', 'sheets'];   // no shooters from 1.4.0
 RB.purgeExamples = db => {
   const gone = [];
   for (const t of RB.EX_TABLES) {

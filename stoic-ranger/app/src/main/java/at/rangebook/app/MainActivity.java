@@ -135,11 +135,20 @@ public class MainActivity extends Activity {
         if (web != null) pushNight();
     }
 
+    /** Newest file first (backups list, keeps the last few). */
+    private static final java.util.Comparator<File> NEWEST_FIRST = new java.util.Comparator<File>() {
+        @Override public int compare(File a, File b) { return Long.compare(b.lastModified(), a.lastModified()); }
+    };
+
     @Override
     public void onBackPressed() {
-        web.evaluateJavascript("(window.SR && SR.back) ? SR.back() : false", value -> {
-            // only a plain "false" closes the app (1.0.x closed it when the page navigated away mid-call)
-            if ("false".equals(value)) finish();
+        // no lambdas anywhere in the Java code: the cloud build's dx turns them into LambdaMetafactory calls, which
+        // Android does not have, so the first lambda crashed the app (Back looked like "closes the app", 1.2.1)
+        web.evaluateJavascript("(window.SR && SR.back) ? SR.back() : false", new android.webkit.ValueCallback<String>() {
+            @Override public void onReceiveValue(String value) {
+                // only a plain "false" closes the app (1.0.x closed it when the page navigated away mid-call)
+                if ("false".equals(value)) finish();
+            }
         });
     }
 
@@ -250,7 +259,7 @@ public class MainActivity extends Activity {
             o.put("ok", ok); o.put("msg", msg == null ? "" : msg);
             if (data != null) o.put("data", data);
             final String js = "window.SRNativeCallback && SRNativeCallback(" + JSONObject.quote(cb) + "," + o.toString() + ")";
-            runOnUiThread(() -> web.evaluateJavascript(js, null));
+            runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
         } catch (Exception ignored) { }
     }
 
@@ -345,7 +354,7 @@ public class MainActivity extends Activity {
             } catch (IOException e) { return false; }
             File[] all = dir.listFiles();
             if (all != null && all.length > 10) {
-                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                java.util.Arrays.sort(all, NEWEST_FIRST);
                 for (int i = 10; i < all.length; i++) all[i].delete();
             }
             return true;
@@ -391,7 +400,7 @@ public class MainActivity extends Activity {
             } catch (IOException e) { return false; }
             File[] all = dir.listFiles();
             if (all != null && all.length > 10) {
-                java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                java.util.Arrays.sort(all, NEWEST_FIRST);
                 for (int i = 10; i < all.length; i++) all[i].delete();
             }
             return true;
@@ -462,7 +471,7 @@ public class MainActivity extends Activity {
                         try (FileOutputStream os = new FileOutputStream(new File(dir, "database-" + System.currentTimeMillis() + ".xlsx"))) { os.write(prev); }
                         File[] all = dir.listFiles();
                         if (all != null && all.length > 10) {
-                            java.util.Arrays.sort(all, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                            java.util.Arrays.sort(all, NEWEST_FIRST);
                             for (int i = 10; i < all.length; i++) all[i].delete();
                         }
                     }
@@ -481,7 +490,7 @@ public class MainActivity extends Activity {
         /** "create": a new database.xlsx where the user says (the picker never overwrites; it adds " (1)"). "open": an existing one. */
         @JavascriptInterface
         public void xlsxLink(String mode, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 boolean create = "create".equals(mode);
                 Intent i = new Intent(create ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
@@ -495,7 +504,7 @@ public class MainActivity extends Activity {
                     i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{mime(".xlsx"), "application/octet-stream"});
                 }
                 try { startActivityForResult(i, create ? REQ_LINK_CREATE : REQ_LINK_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
@@ -503,6 +512,88 @@ public class MainActivity extends Activity {
             Uri u = linkedXlsx();
             if (u != null) releaseXlsx(u);
             xlsxPrefs().edit().remove("uri").apply();
+        }
+
+        /* ---------- where the data lives: this phone or Nextcloud (1.3.0, see Nextcloud.java) ---------- */
+        @JavascriptInterface
+        public String ncState() { return Nextcloud.state(MainActivity.this).toString(); }
+
+        /** Stores the setting (password empty = keep the stored one). */
+        @JavascriptInterface
+        public boolean ncSet(String json, String password) {
+            try { Nextcloud.set(MainActivity.this, new JSONObject(json), password); return true; } catch (Exception e) { return false; }
+        }
+
+        /** One WebDAV request in the stored folder (runs on the bridge thread, not the UI thread). */
+        @JavascriptInterface
+        public String ncRequest(String method, String name, String headers, String bodyB64) {
+            return Nextcloud.request(MainActivity.this, method, name, headers, bodyB64, null);
+        }
+
+        /** The same with a setting that is not stored yet (the "Connect" check). */
+        @JavascriptInterface
+        public String ncTry(String json, String password, String method, String name, String headers) {
+            try {
+                JSONObject o = new JSONObject(json);
+                o.put("password", password == null ? "" : password);
+                return Nextcloud.request(MainActivity.this, method, name, headers, "", o);
+            } catch (Exception e) { return "{\"status\":0,\"error\":\"bad setting\"}"; }
+        }
+
+        /** The storage setting of the other Stoic Ranger apps on this phone (only apps signed with the same key answer). */
+        @JavascriptInterface
+        public String linkStorage() {
+            org.json.JSONArray out = new org.json.JSONArray();
+            for (String pkg : LinkProvider.APPS) {
+                try {
+                    Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "storage", null, null);
+                    if (b == null || b.getString("json") == null) continue;
+                    JSONObject o = new JSONObject(b.getString("json"));
+                    if (o.has("error")) continue;
+                    o.remove("password");                       // the page never sees a password
+                    o.put("app", pkg);
+                    out.put(o);
+                } catch (Exception ignored) { }
+            }
+            return out.toString();
+        }
+
+        /** Barrel changes SR GunSafe queued through the link (LinkProvider.putBarrels). Read once: the file is kept as link-inbox-<time>.done. */
+        @JavascriptInterface
+        public String takeLinkInbox() {
+            File f = new File(getFilesDir(), "link-inbox.json");
+            if (!f.exists()) return "";
+            try (FileInputStream is = new FileInputStream(f)) {
+                String t = new String(readAll(is), StandardCharsets.UTF_8);
+                f.renameTo(new File(getFilesDir(), "link-inbox-" + System.currentTimeMillis() + ".done"));
+                return t;
+            } catch (Exception e) { return ""; }
+        }
+
+        /** Takes over a newer setting from a linked app (with its password, which stays encrypted on this phone). */
+        @JavascriptInterface
+        public boolean linkAdopt(String pkg) {
+            try {
+                Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "storage", null, null);
+                JSONObject o = new JSONObject(b.getString("json"));
+                o.remove("share");
+                Nextcloud.set(MainActivity.this, o, o.optString("password", ""));
+                return true;
+            } catch (Exception e) { return false; }
+        }
+
+        /** Pushes this app's setting (password included) to the linked apps; each decides by its own consent. */
+        @JavascriptInterface
+        public String linkPush() {
+            org.json.JSONArray done = new org.json.JSONArray();
+            String json = Nextcloud.stateWithPassword(MainActivity.this).toString();
+            for (String pkg : LinkProvider.APPS) {
+                try {
+                    Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), "setStorage", json, null);
+                    if (b != null && b.getString("json") != null && !b.getString("json").contains("error")) done.put(pkg);
+                } catch (Exception ignored) { }
+            }
+            return done.toString();
         }
 
         @JavascriptInterface
@@ -535,7 +626,7 @@ public class MainActivity extends Activity {
         /** Let the user pick where to save (Downloads, Drive, …). */
         @JavascriptInterface
         public void saveFile(String name, String mime, String base64, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 pendingBytes = Base64.decode(base64, Base64.DEFAULT);
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -543,24 +634,24 @@ public class MainActivity extends Activity {
                 i.setType(mime);
                 i.putExtra(Intent.EXTRA_TITLE, name);
                 try { startActivityForResult(i, REQ_CREATE); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void openFile(String mimes, String cb) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 pendingCb = cb;
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
                 if (mimes != null && !mimes.isEmpty()) i.putExtra(Intent.EXTRA_MIME_TYPES, mimes.split(","));
                 try { startActivityForResult(i, REQ_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage(), null); }
-            });
+            }});
         }
 
         @JavascriptInterface
         public void shareFile(String name, String mime, String base64, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try {
                     File dir = new File(getCacheDir(), "shared");
                     dir.mkdirs();
@@ -573,13 +664,13 @@ public class MainActivity extends Activity {
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(i, "Share"));
                 } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Plain text to the share sheet (Daily Thoughts: share a quote). */
         @JavascriptInterface
         public void shareText(String subject, String text) {
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 try {
                     Intent i = new Intent(Intent.ACTION_SEND);
                     i.setType("text/plain");
@@ -587,7 +678,7 @@ public class MainActivity extends Activity {
                     i.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
                     startActivity(Intent.createChooser(i, "Share"));
                 } catch (Exception ignored) { }
-            });
+            }});
         }
 
         /** Print (or "Save as PDF") an HTML document rendered by the web app; A4 portrait. */
@@ -599,7 +690,7 @@ public class MainActivity extends Activity {
         public void printSized(String html, String jobName, String size) {
             final PrintAttributes.MediaSize media = "A6".equals(size) ? PrintAttributes.MediaSize.ISO_A6
                     : "A5".equals(size) ? PrintAttributes.MediaSize.ISO_A5 : PrintAttributes.MediaSize.ISO_A4;
-            runOnUiThread(() -> {
+            runOnUiThread(new Runnable() { @Override public void run() {
                 printView = new WebView(MainActivity.this);
                 printView.getSettings().setJavaScriptEnabled(false);
                 printView.setWebViewClient(new WebViewClient() {
@@ -619,7 +710,7 @@ public class MainActivity extends Activity {
                     }
                 });
                 printView.loadDataWithBaseURL(ORIGIN + "/www/", html, "text/html", "utf-8", null);
-            });
+            }});
         }
     }
 }

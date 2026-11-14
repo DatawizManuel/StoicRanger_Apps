@@ -163,7 +163,7 @@ const DRAW = {
   },
   'sr-plot'() {
     let s = t(10, 14, 4.5, 'SHOT PLOT & DATA CARD', { disp: true, w: 700, ls: 0.4 });
-    const f = [['Date', 10, 45], ['Shooter', 55, 45], ['Gun', 100, 55], ['Ammo / lot', 155, 45], ['Distance m', 10, 45], ['Temp °C', 55, 45], ['Wind m/s · dir', 100, 55], ['Cold / clean bore', 155, 45]];
+    const f = [['Date', 10, 45], ['Position', 55, 45], ['Gun', 100, 55], ['Ammo / lot', 155, 45], ['Distance m', 10, 45], ['Temp °C', 55, 45], ['Wind m/s · dir', 100, 55], ['Cold / clean bore', 155, 45]];
     f.forEach(([l, x, w], i) => { const y = i < 4 ? 20 : 34; s += rect(x, y, w, 12, { sw: 0.3 }) + t(x + 1.5, y + 3.6, 2.6, l, { fill: '#555' }); });
     for (let i = 0; i < 5; i++) { const cx = 25 + i * 40, cy = 75; s += circle(cx, cy, 17, { sw: 0.4 }) + circle(cx, cy, 8.5, { sw: 0.2, dash: true }) + line(cx - 18, cy, cx + 18, cy, 0.15) + line(cx, cy - 18, cx, cy + 18, 0.15) + t(cx, cy + 23, 3, 'Group ' + (i + 1), { a: 'middle' }); }
     const cols = [['#', 10, 8], ['Dist. m', 18, 18], ['Elev. mrad', 36, 20], ['Wind mrad', 56, 20], ['Call', 76, 30], ['Impact', 106, 30], ['Notes', 136, 64]];
@@ -172,7 +172,7 @@ const DRAW = {
     return s;
   },
   'sr-log'() {
-    let s = t(10, 14, 4.5, 'DRILL SCORE LOG', { disp: true, w: 700, ls: 0.4 }) + t(200, 14, 3, 'Shooter: ______________________', { a: 'end' });
+    let s = t(10, 14, 4.5, 'DRILL SCORE LOG', { disp: true, w: 700, ls: 0.4 });
     const cols = [['Date', 10, 22], ['Drill', 32, 52], ['L/D', 84, 10], ['Dist. m', 94, 14], ['Time s', 108, 16], ['Hits', 124, 14], ['Points', 138, 14], ['Pass', 152, 10], ['Notes', 162, 38]];
     const y0 = 22; cols.forEach(([l, x, w]) => { s += rect(x, y0, w, 8, { sw: 0.3, fill: '#eee' }) + t(x + 1.5, y0 + 5.4, 3, l, { w: 700 }); });
     for (let r = 0; r < 24; r++) cols.forEach(([, x, w]) => { s += rect(x, y0 + 8 + r * 9.6, w, 9.6, { sw: 0.25 }); });
