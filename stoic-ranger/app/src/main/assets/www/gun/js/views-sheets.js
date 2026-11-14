@@ -9,18 +9,17 @@ RB.nextSheetNo = () => {
   let n = 0; RB.db.sheets.forEach(s => { const m = new RegExp('^' + p + '-(\\d+)/' + yy + '$').exec(s.no || ''); if (m) n = Math.max(n, +m[1]); });
   return `${p}-${String(n + 1).padStart(3, '0')}/${yy}`;
 };
-/** New sheet, carrying over gun, ammo, shooter and range from the most recent sheet. */
+/** New sheet, carrying over gun, ammo and range from the most recent sheet. */
 RB.newSheet = () => {
   const s = RB.blankSheet();
   const real = RB.db.sheets.filter(x => !x.example);
   const last = [...(real.length ? real : [])].sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || '')))[0];
-  const keep = ['weaponId', 'barrelId', 'munitionId', 'shooterId', 'gun', 'barrel', 'optic', 'caliber', 'ammo', 'bullet', 'zero', 'preset', 'bd', 'd10', 'w', 'shooter', 'range', 'coords', 'elev', 'setting', 'position', 'discipline', 'purpose'];
+  const keep = ['weaponId', 'barrelId', 'munitionId', 'gun', 'barrel', 'optic', 'caliber', 'ammo', 'bullet', 'zero', 'preset', 'bd', 'd10', 'w', 'range', 'coords', 'elev', 'setting', 'position', 'discipline', 'purpose'];
   if (last) keep.forEach(k => { if (last[k] != null && last[k] !== '') s[k] = last[k]; });
   else {
     const W = RB.db.weapons.filter(x => !x.example).concat(RB.db.weapons.filter(x => x.example));
     const w = W.find(x => x.status !== 'Sold' && x.status !== 'Retired') || W[0];
     if (w) linkWeapon(s, w);
-    const sh = RB.db.shooters.find(x => !x.example) || RB.db.shooters[0]; if (sh) { s.shooterId = sh.id; s.shooter = sh.name; }
   }
   if (!s.preset) { s.preset = RB.PRESETS[RB.db.settings.preset] ? RB.db.settings.preset : 'T-ISSF300'; const p = RB.PRESETS[s.preset] || {}; if (p.d10) { s.d10 = String(p.d10); s.w = String(p.w); } }
   Object.assign(s, { id: RB.uid('SH'), no: RB.nextSheetNo(), date: RB.today(), time: RB.nowTime(), created: new Date().toISOString() });
@@ -40,7 +39,6 @@ RB.autoLink = s => {
   if (!s.weaponId && s.gun) { const w = RB.matchName(RB.db.weapons, s.gun); if (w) { s.weaponId = w.id; s.gun = w.name; n++; } }
   if (s.weaponId && !s.barrelId) { const b = (s.barrel && RB.db.barrels.find(x => x.weaponId === s.weaponId && x.name.toLowerCase() === s.barrel.toLowerCase())) || RB.barrelAt(s.weaponId, s.date); if (b) { s.barrelId = b.id; s.barrel = b.name; } }
   if (!s.munitionId && s.ammo) { const m = RB.matchName(RB.db.munitions, s.ammo); if (m) { s.munitionId = m.id; s.ammo = m.name; n++; } }
-  if (!s.shooterId && s.shooter) { const p = RB.matchName(RB.db.shooters, s.shooter); if (p) { s.shooterId = p.id; s.shooter = p.name; n++; } }
   return n;
 };
 
@@ -57,7 +55,7 @@ RB.views.sheets = {
       $('#shList').innerHTML = rows.length ? rows.map(s => {
         const d = by.get(s.id) || {};
         return `<a class="item" href="#/sheet/${encodeURIComponent(s.id)}"><div class="main"><div class="t">${esc(RB.fmtDate(s.date))} <span class="id">${esc(s.no || '')}</span>${s.purpose ? `<span class="pill ${RB.evalAs(s.purpose)}">${esc(RB.purposeName(s.purpose))}</span>` : ''}${s.example ? '<span class="pill example">example</span>' : ''}</div>
-          <div class="kvs"><span>${esc(s.gun || '–')}</span><span>${esc(s.ammo || '')}</span>${s.dist ? `<span>${RB.U.fmt('dist', num(s.dist))}</span>` : ''}${s.shooter ? `<span>${esc(s.shooter)}</span>` : ''}</div></div>
+          <div class="kvs"><span>${esc(s.gun || '–')}</span><span>${esc(s.ammo || '')}</span>${s.dist ? `<span>${RB.U.fmt('dist', num(s.dist))}</span>` : ''}</div></div>
           <div class="side">${d.mrM != null ? `<div class="big">${RB.U.num('ang', d.mrM)}</div><div class="u">MR ${RB.U.label('ang')} · ${d.hits} sh</div>` : d.hits ? `<div class="big">${d.hits}</div><div class="u">hits</div>` : '<div class="u">no hits</div>'}</div></a>`;
       }).join('') : `<div class="empty">${RB.db.sheets.length ? 'No sheet matches.' : 'No datasheets yet. Start one at the range, or print blank sheets and read them in later from a photo.'}</div>`;
     };
@@ -126,13 +124,11 @@ function dataTab(body, s) {
   const warn = [];
   if (!s.weaponId && s.gun) warn.push(['weapons', s.gun]);
   if (!s.munitionId && s.ammo) warn.push(['munitions', s.ammo]);
-  if (!s.shooterId && s.shooter) warn.push(['shooters', s.shooter]);
   body.innerHTML = `
     ${warn.length ? `<div class="msg">${warn.map(([t, n]) => `“${esc(n)}” is not in your ${RB.TABLES[t].title.toLowerCase()}. Pick an entry below, or <a href="#/db/${t}/new?name=${encodeURIComponent(n)}">add it to the database</a>.`).join('<br>')}</div>` : ''}
     <div class="card"><h3>Session</h3><div class="fg">
       ${I('no', 'Sheet no.', 2)}${I('date', 'Date', 2, 'date')}${I('time', 'Time', 2, 'time')}
-      <label class="s3"><span>Shooter</span><select data-ref="shooter">${unmatched(s.shooter, s.shooterId)}${opt(RB.db.shooters, s.shooterId)}</select></label>
-      <label class="s3"><span>Purpose</span><select data-k="purpose"><option value=""></option>${RB.purposes().map(p => `<option value="${esc(p.id)}" ${s.purpose === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${s.purpose && !RB.purpose(s.purpose) ? `<option value="${esc(s.purpose)}" selected>${esc(s.purpose)}</option>` : ''}</select></label>
+      <label class="s6"><span>Purpose</span><select data-k="purpose"><option value=""></option>${RB.purposes().map(p => `<option value="${esc(p.id)}" ${s.purpose === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${s.purpose && !RB.purpose(s.purpose) ? `<option value="${esc(s.purpose)}" selected>${esc(s.purpose)}</option>` : ''}</select></label>
       ${I('discipline', 'Discipline', 3, 'text', 'placeholder="Group, zeroing, DOPE …"')}${I('position', 'Position / support', 3, 'text', 'placeholder="Prone · bipod + rear bag"')}
       ${I('series', 'Series', 3, 'text', 'placeholder="1 / 3"')}${I('rounds', 'Rounds fired (incl. sighters)', 3, 'number')}
     </div><p class="note">The purpose decides the evaluation: gun/ammo purposes (Test, Load development …) feed barrel wear and ammo precision, shooter purposes (Training, Competition …) the shooter's progress. Set them up under More.</p></div>
@@ -158,7 +154,6 @@ function dataTab(body, s) {
     <div class="row"><a class="btn pri" href="#/sheet/${encodeURIComponent(s.id)}/hits" id="toHits">Next: hits</a></div>`;
   $('#toHits').onclick = e => { e.preventDefault(); location.replace(e.target.getAttribute('href')); };
   $$('[data-k]', body).forEach(i => i.addEventListener('input', () => { s[i.dataset.k] = i.dataset.u ? RB.U.store(i.dataset.u, i.value) : i.value; s.modified = new Date().toISOString(); RB.save(); }));
-  $('[data-ref=shooter]', body).onchange = e => { const p = RB.shooter(e.target.value); if (p) { s.shooterId = p.id; s.shooter = p.name; } RB.save(); };
   $('[data-ref=weapon]', body).onchange = e => { const w = RB.weapon(e.target.value); if (w) { linkWeapon(s, w); RB.save(); dataTab(body, s); } };
   $('[data-ref=barrel]', body).onchange = e => { const b = RB.barrel(e.target.value); if (b) { s.barrelId = b.id; s.barrel = b.name; RB.save(); } };
   $('[data-ref=munition]', body).onchange = e => { const m = RB.munition(e.target.value); if (m) { linkMunition(s, m); RB.save(); dataTab(body, s); } };

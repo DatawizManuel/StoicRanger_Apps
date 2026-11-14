@@ -138,8 +138,8 @@ async function bringIn() {
     return;
   }
   const tl = SR.isTrainingLog(j);
-  const m = sheet('Bring in ' + kind, `<p>${esc(f.name)}: ${tl ? `${count(j, 'trainings')} trainings, ${count(j, 'trainers')} trainers` : `${count(j, 'results')} drill results, ${arr(j.favs).length} favourites`}, ${count(j, 'shooters')} shooters, ${count(j, 'weapons')} guns.</p>
-    <p class="note">Merged into your data, nothing is deleted: shooters and guns with the same name (or already linked) are used once, everything else is added. Bringing in the same backup twice adds nothing new. A copy of the current data is kept on the device first.</p>
+  const m = sheet('Bring in ' + kind, `<p>${esc(f.name)}: ${tl ? `${count(j, 'trainings')} trainings, ${count(j, 'trainers')} trainers` : `${count(j, 'results')} drill results, ${arr(j.favs).length} favourites`}, ${count(j, 'weapons')} guns.</p>
+    <p class="note">Merged into your data, nothing is deleted: guns with the same name (or already linked) are used once, everything else is added. Bringing in the same backup twice adds nothing new. A copy of the current data is kept on the device first.</p>
     <div class="stack"><button class="btn pri big" id="iGo">Bring in</button></div>`);
   $('#iGo', m.body).onclick = () => {
     const r = SR.importBackup(j);
@@ -147,7 +147,7 @@ async function bringIn() {
     if (r.error) { toast('Read-only: update the app first.', true); return; }
     const a = r.stats.added, mt = r.stats.matched, sk = r.stats.skipped;
     const own = tl ? 'trainings' : 'results';
-    toast(`Brought in: ${a[own] || 0} ${tl ? 'trainings' : 'drill results'}${sk[own] ? ` (${sk[own]} were already here)` : ''}, ${a.shooters || 0} new shooters, ${a.weapons || 0} new guns${mt.weapons || mt.shooters ? `, ${(mt.weapons || 0) + (mt.shooters || 0)} matched` : ''}.`);
+    toast(`Brought in: ${a[own] || 0} ${tl ? 'trainings' : 'drill results'}${sk[own] ? ` (${sk[own]} were already here)` : ''}, ${a.weapons || 0} new guns${mt.weapons ? `, ${mt.weapons} matched` : ''}.`);
     route();
   };
 }
@@ -156,6 +156,7 @@ function data(el) {
   el.innerHTML = `
     ${storageCard()}
     ${xlsxCard()}
+    ${deletedCard()}
     <div class="card"><h3>Backup</h3>
       <p class="note">Guns, datasheets, trainings and drill results live in one database on this device. A backup holds all of it: save one now and then (cloud drive, e-mail to yourself …); it is also how you move to a new phone.</p>
       <div class="stack"><button class="btn pri" data-sr="save">Save a backup of everything</button><button class="btn" data-sr="share">Share a backup</button></div></div>
@@ -169,12 +170,13 @@ function data(el) {
       <div class="seg">${[['auto', 'Follow phone'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<a href="javascript:void 0" data-theme="${k}" class="${(d.settings.common.theme || 'auto') === k ? 'on' : ''}">${l}</a>`).join('')}</div></div>
     <div class="card"><h3>About</h3>
       <p><b>Stoic Ranger Shooting</b> ${esc(info.version || '')}${info.android && info.android !== 'web app' ? ' · Android ' + esc(info.android) : info.android ? ' · web app' : info.windows ? ' · Windows' : ''}</p>
-      <p class="note">One app: Gun Database, Training Log and Shooting Drills share one database (until version 0.x separate apps). The same app runs on Android, iPhone and Windows and reads and writes the same database.xlsx. ${count(d, 'weapons')} guns · ${count(d, 'shooters')} shooters · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results.</p>
+      <p class="note">One app: Gun Database, Training Log and Shooting Drills share one database (until version 0.x separate apps). The same app runs on Android, iPhone and Windows and reads and writes the same database.xlsx. ${count(d, 'weapons')} guns · ${count(d, 'trainers')} trainers · ${count(d, 'sheets')} datasheets · ${count(d, 'trainings')} trainings · ${count(d, 'results')} drill results.</p>
       <p class="note">No account, no tracking: all entries stay on this device unless you export or share them.</p>
       <div class="row"><button class="btn warn" id="dWipe">Delete all data on this device</button></div></div>`;
   SR.wireData(el, toast);
   wireStorage(el);
   wireXlsx(el);
+  wireDeleted(el);
   $('#dIn', el).onclick = bringIn;
   if ($('#dThoughts', el)) $('#dThoughts', el).onclick = async () => { const r = await SR.saveThoughtsFile(); if (r.ok) toast('Saved: ' + r.msg); else if (r.msg !== 'cancelled') toast('Not saved: ' + r.msg, true); };
   el.querySelectorAll('[data-theme]').forEach(a => a.onclick = () => { d.settings.common.theme = a.dataset.theme; SR.save(); applyTheme(); route(); });
@@ -216,7 +218,8 @@ function storageCard() {
     <div class="seg" id="stMode"><a href="javascript:void 0" data-m="local" class="${on ? '' : 'on'}">${st.windows ? 'On this PC only' : 'On this phone only'}</a><a href="javascript:void 0" data-m="nextcloud" class="${on ? 'on' : ''}">Synced to my Nextcloud</a></div>
     ${on ? `<p>Synced with <b>${v('url')}</b>, folder <b>${v('folder')}</b>${last ? ` · last sync ${esc(last)}` : ''}</p>
       <p class="note">This ${st.windows ? 'PC' : 'phone'} keeps its own copy and works offline. database.xlsx is synced when the app opens, when you leave a part or the app, and with Sync now. Changes made elsewhere are merged, never overwritten, and a copy goes to <b>${v('folder')}backups</b> before every upload (the newest 30 are kept).</p>
-      <div class="stack"><button class="btn pri" id="stSync">Sync now</button><button class="btn" id="stLocal">Stop syncing (keep the data ${st.windows ? 'on this PC' : 'on this phone'})</button></div>` : ''}
+      <div class="stack"><button class="btn pri" id="stSync">Sync now</button><button class="btn" id="stLocal">Stop syncing (keep the data ${st.windows ? 'on this PC' : 'on this phone'})</button></div>
+      ${replaceBlock('the Nextcloud copy', st.windows ? 'PC' : 'phone')}` : ''}
     <div id="stForm" ${on ? 'hidden' : 'hidden'}>
       <label class="fld"><span>Nextcloud address</span><input id="stUrl" type="url" inputmode="url" placeholder="https://cloud.example.com" value="${v('url')}"></label>
       <label class="fld"><span>User name</span><input id="stUser" autocapitalize="off" autocomplete="username" value="${v('user')}"></label>
@@ -245,6 +248,7 @@ function wireStorage(el) {
     }, 30);
   };
   if (q('#stSync')) q('#stSync').onclick = () => { q('#stSync').disabled = true; setTimeout(() => { SR.flush(); const a = SR.xlsx.syncIn(), b = SR.xlsx.syncOut(); const e = (a && a.error) || (b && b.error); if (e) toast(e, true); else toast('Synced' + (a && a.stats ? ' (' + statsText(a.stats) + ')' : '') + '.'); route(); }, 30); };
+  wireReplace(el);
   if (q('#stLocal')) armed(q('#stLocal'), () => { SR.storage.local(); toast('Not syncing any more. Everything stays on this device; nothing was deleted on Nextcloud.'); route(); });
 }
 function xlsxCard() {
@@ -254,10 +258,11 @@ function xlsxCard() {
   const can = SR.xlsx.canLink(), i = can ? SR.xlsx.info() : {}, s = SR.xlsx.state();
   const linked = can && i.linked;
   return `<div class="card"><h3>Shared database (database.xlsx)</h3>
-    <p class="note">Android, iPhone and Windows use the same <b>database.xlsx</b>, and you can edit it in Excel. Its sheets are those of the database on the PC (Weapons, Barrels, Munitions, Shooters, Trainers, Trainings, Drill_Results …) plus Datasheets and Shots. Nothing is deleted when files meet: rows deleted in Excel stay in the app (delete entries in the app).</p>
+    <p class="note">Android, iPhone and Windows use the same <b>database.xlsx</b>, and you can edit it in Excel. Its sheets are those of the database on the PC (Weapons, Barrels, Munitions, Trainers, Trainings, Drill_Results …) plus Datasheets and Shots. Nothing is deleted when files meet: rows deleted in Excel stay in the app (delete entries in the app).</p>
     ${can ? (linked ? `<p>Linked: <b>${esc(i.name || 'database.xlsx')}</b>${s.lastOut || s.lastIn ? ` · last sync ${esc(when(s.lastOut > (s.lastIn || '') ? s.lastOut : s.lastIn))}` : ''}</p>
       <p class="note">Changes in the file come in when the app starts or comes back; your changes go out when you leave a part or the app.</p>
-      <div class="stack"><button class="btn pri" id="xSync">Sync now</button><button class="btn" id="xUnlink">Unlink this file</button></div>`
+      <div class="stack"><button class="btn pri" id="xSync">Sync now</button><button class="btn" id="xUnlink">Unlink this file</button></div>
+      ${replaceBlock('this database.xlsx', 'device')}`
       : `<p class="note">Link a file and this device keeps it in step: create a new database.xlsx (in a folder you choose, e.g. your cloud drive) or use the one you already have (e.g. the one on your PC). An existing file is never overwritten: its entries are merged with the ones on this device first.</p>
       <div class="stack"><button class="btn pri" id="xNew">Create a new database.xlsx</button><button class="btn" id="xOpen">Use an existing database.xlsx</button></div>`)
     : `<p class="note">On iPhone the file is saved and opened by hand: <b>Save database.xlsx</b> puts the whole database into a file (Files, iCloud Drive, e-mail …); <b>Open database.xlsx</b> brings a file in (merged, nothing on this device is deleted).</p>`}
@@ -269,9 +274,41 @@ function wireXlsx(el) {
   if (q('#xNew')) q('#xNew').onclick = async () => done(await SR.xlsx.link('create'), 'database.xlsx linked');
   if (q('#xOpen')) q('#xOpen').onclick = async () => { const r = await SR.xlsx.link('open'); done(r && r.merged && r.merged.stats ? Object.assign({}, r, { stats: r.merged.stats }) : r, 'database.xlsx linked'); };
   if (q('#xSync')) q('#xSync').onclick = () => { SR.flush(); const a = SR.xlsx.syncIn(), b = SR.xlsx.syncOut(); const e = (a && a.error) || (b && b.error); if (e) toast(e, true); else { toast('Synced' + (a && a.stats ? ' (' + statsText(a.stats) + ')' : '') + '.'); route(); } };
+  wireReplace(el);
   if (q('#xUnlink')) armed(q('#xUnlink'), () => { SR.xlsx.unlink(); toast('Unlinked. The file and the data on this device stay as they are.'); route(); });
   q('#xSave').onclick = async () => { const r = await SR.xlsx.save(); if (r.ok) toast('Saved: ' + r.msg); else if (r.msg !== 'cancelled') toast('Not saved: ' + r.msg, true); };
   q('#xIn').onclick = async () => { const r = await SR.xlsx.open(); if (r.ok) { toast('Brought in ' + (r.name || 'database.xlsx') + ': ' + statsText(r.stats)); route(); } else if (r.msg !== 'cancelled') toast(r.msg, true); };
+}
+
+/* ---------- 1.4.0: deletes reach every device; Undo; replace this device's data (Manuel 2026-11-14) ---------- */
+const TLAB = { weapons: 'Gun', barrels: 'Barrel', munitions: 'Ammunition', trainers: 'Trainer', targets: 'Target', roundsLog: 'Rounds', sheets: 'Datasheet', trainings: 'Training', results: 'Drill result' };
+function deletedCard() {
+  if (!SR.deleted) return '';
+  const list = SR.deleted.recent();
+  return `<div class="card" id="delCard"><h3>Recently deleted</h3>
+    <p class="note">What you delete here is deleted on every device that shares this database (through database.xlsx${ncOn() ? ' on Nextcloud' : ''}), so a later sync does not bring it back. Deleted entries stay here for 30 days: Undo brings an entry back on every device.</p>
+    ${list.length ? `<div class="dellist">${list.map(d => `<div class="delrow"><span><b>${esc(TLAB[d.table] || d.table)}:</b> ${esc(d.label || '(no name)')}<small>${esc(when(d.at))}${d.by ? ' · ' + esc(d.by) : ''}</small></span><button class="btn" data-undo="${esc(d.key)}">Undo</button></div>`).join('')}</div>`
+      : `<p class="note"><i>Nothing deleted in the last 30 days.</i></p>`}</div>`;
+}
+function wireDeleted(el) {
+  el.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => {
+    const r = SR.deleted.undo(b.dataset.undo);
+    if (r && r.ok) { SR.flush && SR.flush(); toast(`Brought back: ${r.label || TLAB[r.table] || 'entry'}. It comes back on the other devices with the next sync.`); route(); }
+    else toast('Could not bring this entry back.', true);
+  });
+}
+function replaceBlock(what, dev) {
+  return `<details class="srrepl"><summary>Something wrong with the data on this ${dev}?</summary>
+    <p class="note">Replace the data on this ${dev} with ${what}. A backup of this ${dev}'s data is made first. Changes on this ${dev} that were not synced yet are lost (they stay in the backup).</p>
+    <div class="stack"><button class="btn warn" id="stReplace">Replace this ${dev}'s data with ${what}</button></div></details>`;
+}
+function wireReplace(el) {
+  const b = $('#stReplace', el); if (!b || b.dataset.wired) return; b.dataset.wired = 1;
+  armed(b, () => {
+    const r = SR.storage.replace();
+    if (r && r.ok) { const c = r.counts || {}; toast(`Replaced (a backup was made first): ${c.weapons || 0} guns, ${c.trainings || 0} trainings, ${c.results || 0} drill results.`); route(); }
+    else toast((r && r.msg) || 'Nothing was replaced.', true);
+  });
 }
 
 /* ---------- router ---------- */

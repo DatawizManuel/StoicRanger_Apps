@@ -37,7 +37,6 @@ function chartHTML(fn, opts) {
 }
 
 RB.selectionLabel = f => [
-  f.shooter ? 'Shooter: ' + ((RB.shooter(f.shooter) || {}).name || f.shooter.replace(/^n:/, '')) : 'All shooters',
   f.weapon ? 'Gun: ' + ((RB.weapon(f.weapon) || {}).name || '?') : 'All guns',
   f.munition ? 'Ammunition: ' + ((RB.munition(f.munition) || {}).name || f.munition.replace(/^n:/, '')) : 'All ammunition',
 ].join(' · ');
@@ -103,8 +102,8 @@ RB.reportHTML = f => {
   <div class="fig"><h3>Group size over time</h3>${trend}</div>
 
   <h2>Sheets</h2>
-  <table><thead><tr><th class="t">Date</th><th class="t">No.</th><th class="t">Purpose</th><th class="t">Shooter</th><th class="t">Gun · ammo</th><th>${U.label('dist')}</th><th>Shots</th><th>MR ${A}</th><th>Ring</th></tr></thead><tbody>
-  ${sorted.map(s => `<tr><td class="t">${esc(RB.fmtDate(s.date))}</td><td class="t">${esc(s.no)}</td><td class="t">${esc(RB.purposeName(s.purpose))}</td><td class="t">${esc(s.shooter)}</td><td class="t">${esc(s.rifle + ' · ' + s.ammo)}</td><td>${s.dist != null ? U.num('dist', s.dist) : ''}</td><td>${s.hits}</td><td>${s.mrM != null ? U.num('ang', s.mrM, AD) : ''}</td><td>${s.avgRing != null ? fx(s.avgRing, 1) : ''}</td></tr>`).join('') || '<tr><td class="t" colspan="9">No sheets.</td></tr>'}
+  <table><thead><tr><th class="t">Date</th><th class="t">No.</th><th class="t">Purpose</th><th class="t">Gun · ammo</th><th>${U.label('dist')}</th><th>Shots</th><th>MR ${A}</th><th>Ring</th></tr></thead><tbody>
+  ${sorted.map(s => `<tr><td class="t">${esc(RB.fmtDate(s.date))}</td><td class="t">${esc(s.no)}</td><td class="t">${esc(RB.purposeName(s.purpose))}</td><td class="t">${esc(s.rifle + ' · ' + s.ammo)}</td><td>${s.dist != null ? U.num('dist', s.dist) : ''}</td><td>${s.hits}</td><td>${s.mrM != null ? U.num('ang', s.mrM, AD) : ''}</td><td>${s.avgRing != null ? fx(s.avgRing, 1) : ''}</td></tr>`).join('') || '<tr><td class="t" colspan="9">No sheets.</td></tr>'}
   </tbody></table>
   <div class="ftr">${U.imperial() ? 'Imperial units (yd, MOA, fps). 1 MOA ≈ 1.047 in at 100 yd.' : 'Metric units. 1 mrad = 10 cm at 100 m.'} Figures are only calculated from ${RB.MIN_SETS} sets of ${RB.SET_ROUNDS} rounds on. Stoic Ranger - Gun Database ${esc(RB.appInfo().version || '')}</div>
   </body></html>`;
@@ -123,7 +122,6 @@ RB.views.download = {
     el.innerHTML = `
       <p class="note">Everything opens the print dialog: pick <b>Save as PDF</b> to get a file, or a printer for paper.</p>
       <div class="filters">
-        ${RB.pickSel('xS', 'Shooter', 'All shooters', shooterOpts, f.shooter)}
         ${RB.pickSel('xW', 'Gun', 'All guns', weaponOpts, f.weapon)}
         ${RB.pickSel('xM', 'Ammunition', 'All ammunition', ammoOpts, f.munition)}
       </div>
@@ -135,9 +133,9 @@ RB.views.download = {
         <div class="row"><button class="btn" data-dc="A6" ${dc.cards.length ? '' : 'disabled'}>Dope cards A6</button><button class="btn" data-dc="A5" ${dc.cards.length ? '' : 'disabled'}>A5</button><button class="btn" data-dc="A4" ${dc.cards.length ? '' : 'disabled'}>A4</button><a class="btn" href="#/analyse/dope">Open dope cards</a></div></div>
       <div class="card"><h3>Datasheets</h3><p class="note">Each shooting result as its A4 datasheet, as entered or read in (no photos).</p>
         <div class="row"><button class="btn" id="xAll" ${list.length ? '' : 'disabled'}>All ${list.length} sheets in one PDF</button></div>
-        <div class="list">${list.map(s => `<div class="item"><div class="main"><div class="t">${esc(RB.fmtDate(s.date))} <span class="id">${esc(s.no || '')}</span>${s.purpose ? `<span class="pill ${RB.evalAs(s.purpose)}">${esc(RB.purposeName(s.purpose))}</span>` : ''}</div><div class="kvs"><span>${esc(s.gun || '–')}</span><span>${esc(s.ammo || '')}</span>${s.shooter ? `<span>${esc(s.shooter)}</span>` : ''}</div></div><div class="side"><button class="btn sm" data-dl="${esc(s.id)}">PDF</button></div></div>`).join('') || '<div class="empty">No sheets for this selection.</div>'}</div></div>
+        <div class="list">${list.map(s => `<div class="item"><div class="main"><div class="t">${esc(RB.fmtDate(s.date))} <span class="id">${esc(s.no || '')}</span>${s.purpose ? `<span class="pill ${RB.evalAs(s.purpose)}">${esc(RB.purposeName(s.purpose))}</span>` : ''}</div><div class="kvs"><span>${esc(s.gun || '–')}</span><span>${esc(s.ammo || '')}</span></div></div><div class="side"><button class="btn sm" data-dl="${esc(s.id)}">PDF</button></div></div>`).join('') || '<div class="empty">No sheets for this selection.</div>'}</div></div>
       <div class="card"><h3>Blank datasheets</h3><div class="row"><button class="btn" id="xBlank">1 blank sheet</button><button class="btn" id="xBlank4">4 blank sheets</button></div></div>`;
-    [['xS', 'shooter'], ['xW', 'weapon'], ['xM', 'munition']].forEach(([id, k]) => $('#' + id).onchange = e => { f[k] = e.target.value; RB.views.download.render(el); });
+    [['xW', 'weapon'], ['xM', 'munition']].forEach(([id, k]) => $('#' + id).onchange = e => { f[k] = e.target.value; RB.views.download.render(el); });
     $('#xClear').onclick = () => { Object.assign(f, { shooter: '', weapon: '', munition: '' }); RB.views.download.render(el); };
     $('#xReport').onclick = () => RB.print(RB.reportHTML(f), `analysis_${RB.today()}${filtered ? '_' + fileBit(f) : ''}`);
     $('#xAll').onclick = () => RB.printSheets([...list].reverse(), `datasheets_${RB.today()}${filtered ? '_' + fileBit(f) : ''}`);

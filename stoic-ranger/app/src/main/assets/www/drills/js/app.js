@@ -50,7 +50,6 @@ SD.newChooser = () => {
     ['#/result/new', '⏱', 'Log a drill result', 'Time, hits, points and whether you met the standard.'],
     ['#/drill/' + dod.id, '◎', 'Drill of the day', dod.name],
     ['#/random', '⚄', 'Random drill', 'From the drills that match your library filter.'],
-    ['#/db/shooters/new', '☺', 'Add new shooter', 'A person whose results you log.'],
     ['#/db/weapons/new', '⌖', 'Add new gun', 'Pistol or rifle, caliber and zero distance.'],
   ];
   const m = SD.sheet('New', opts.map(([h, ic, t, d]) => `<a class="choice sm" href="${h}" data-go><div class="ic">${ic}</div><div><h3>${t}</h3><p>${SD.esc(d)}</p></div></a>`).join(''));

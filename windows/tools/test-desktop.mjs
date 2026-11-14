@@ -50,9 +50,9 @@ ok(!a.errors.length && await a.page.evaluate(() => SR.xlsx.canLink() && !SR.xlsx
 ok(await a.page.evaluate(() => JSON.parse(SRNative.appInfo()).windows === true), 'the app knows it runs on Windows');
 await a.page.evaluate(() => { location.href = 'training/index.html'; });
 await a.page.waitForFunction(() => window.TL, null, { timeout: 15000 }); await a.page.waitForTimeout(800);
-await a.page.evaluate(() => { TL.db.shooters.push({ id: 'S-701', uid: 'u-desk-701', name: 'Desk Shooter' }); TL.save(true); });
+await a.page.evaluate(() => { TL.db.weapons.push({ id: 'W-701', uid: 'u-desk-701', name: 'Desk Gun' }); TL.save(true); });
 await close(a);
-ok(db().shooters.some(s => s.uid === 'u-desk-701'), "the app's own data is saved in %APPDATA%\\Stoic Ranger\\data\\db.json");
+ok(db().weapons.some(s => s.uid === 'u-desk-701'), "the app's own data is saved in %APPDATA%\\Stoic Ranger\\data\\db.json");
 
 // 2. the installer put an existing database.xlsx (the real PC dashboard file, if there) in place
 const real = '/mnt/project-files/stoic-ranger-apps/02_shared/pc-dashboard/03_registry/database.xlsx';
@@ -65,23 +65,23 @@ await a.page.waitForTimeout(2500);
 const c1 = cfg();
 ok(c1.xlsx === XLSX_FILE && !c1.pending, "the installer's database.xlsx is linked at the first start");
 let d = db();
-ok(d.shooters.some(s => s.uid === 'u-desk-701') && (fs.existsSync(real) ? d.weapons.length >= 6 && d.trainings.length >= 38 : true), `its entries came in, the app's stayed (${d.weapons.length} guns, ${d.trainings.length} trainings)`);
+ok(d.weapons.some(s => s.uid === 'u-desk-701') && (fs.existsSync(real) ? d.weapons.length >= 6 && d.trainings.length >= 38 : true), `its entries came in, the app's stayed (${d.weapons.length} guns, ${d.trainings.length} trainings)`);
 const bk = path.join(DATA, 'backups');
 ok(fs.existsSync(bk) && fs.readdirSync(bk).some(f => f.startsWith('database_before-app_') && fs.readFileSync(path.join(bk, f)).equals(before)), 'the file as it was is kept in backups\\ before the first write');
-const rd = await a.page.evaluate(() => { const r = SRX.read(Uint8Array.from(atob(SRNative.xlsxRead()), c => c.charCodeAt(0))); return { s: r.db.shooters.map(x => x.name), w: r.db.weapons.length, t: r.db.trainings.length }; });
-ok(rd.s.includes('Desk Shooter') && rd.w === d.weapons.length && rd.t === d.trainings.length, 'database.xlsx now also holds the app\'s entries');
+const rd = await a.page.evaluate(() => { const r = SRX.read(Uint8Array.from(atob(SRNative.xlsxRead()), c => c.charCodeAt(0))); return { s: r.db.weapons.map(x => x.name), w: r.db.weapons.length, t: r.db.trainings.length }; });
+ok(rd.s.includes('Desk Gun') && rd.w === d.weapons.length && rd.t === d.trainings.length, 'database.xlsx now also holds the app\'s entries');
 
 // 3. a change in the app goes out when the window loses focus
 await a.page.evaluate(() => { location.href = 'drills/index.html'; });
 await a.page.waitForFunction(() => window.SD, null, { timeout: 15000 }); await a.page.waitForTimeout(800);
-await a.page.evaluate(() => { SD.db.shooters.push({ id: 'S-702', uid: 'u-desk-702', name: 'Blur Shooter' }); SD.save(true); });
+await a.page.evaluate(() => { SD.db.weapons.push({ id: 'W-702', uid: 'u-desk-702', name: 'Blur Gun' }); SD.save(true); });
 await a.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].emit('blur'));
 await a.page.waitForTimeout(1500);
-ok(await a.page.evaluate(() => SRX.read(Uint8Array.from(atob(SRNative.xlsxRead()), c => c.charCodeAt(0))).db.shooters.some(s => s.name === 'Blur Shooter')), 'leaving the window writes the change to database.xlsx');
+ok(await a.page.evaluate(() => SRX.read(Uint8Array.from(atob(SRNative.xlsxRead()), c => c.charCodeAt(0))).db.weapons.some(s => s.name === 'Blur Gun')), 'leaving the window writes the change to database.xlsx');
 // 4. locked file: the write fails cleanly, the file stays whole
 const lockedBefore = fs.readFileSync(XLSX_FILE);
 fs.mkdirSync(XLSX_FILE + '.sr-tmp');          // the write cannot happen (like a file Excel holds open)
-await a.page.evaluate(() => { SD.db.shooters.push({ id: 'S-703', uid: 'u-desk-703', name: 'Locked Shooter' }); SD.save(true); });
+await a.page.evaluate(() => { SD.db.weapons.push({ id: 'W-703', uid: 'u-desk-703', name: 'Locked Gun' }); SD.save(true); });
 const lr = await a.page.evaluate(() => SR.flush());
 fs.rmdirSync(XLSX_FILE + '.sr-tmp');
 ok(lr && lr.error && fs.readFileSync(XLSX_FILE).equals(lockedBefore), 'a locked file is left whole and the app says so: ' + (lr && lr.error));
@@ -91,19 +91,19 @@ await close(a);
 execSync(`python3 - <<'PY'
 import openpyxl
 wb = openpyxl.load_workbook(r'''${XLSX_FILE}''')
-ws = wb['Shooters']; head = [c.value for c in ws[1]]
-row = [None] * len(head); row[head.index('Name')] = 'Excel Shooter'; ws.append(row)
+ws = wb['Weapons']; head = [c.value for c in ws[1]]
+row = [None] * len(head); row[head.index('Name')] = 'Excel Gun'; ws.append(row)
 wb.save(r'''${XLSX_FILE}''')
 PY`);
 a = await launch();
 await a.page.waitForTimeout(1000);
 d = db();
-ok(!a.errors.length && d.shooters.some(s => s.name === 'Excel Shooter') && d.shooters.some(s => s.name === 'Locked Shooter'), 'a row added in Excel comes in at the next start; nothing of the app was lost ' + a.errors.join(' | '));
+ok(!a.errors.length && d.weapons.some(s => s.name === 'Excel Gun') && d.weapons.some(s => s.name === 'Locked Gun'), 'a row added in Excel comes in at the next start; nothing of the app was lost ' + a.errors.join(' | '));
 await close(a);
 const fin = await (async () => { const b2 = await pw.chromium.launch(), p = await b2.newPage(); await p.setContent('<html></html>');
   for (const f of ['gun/lib/xlsx.mini.min.js', 'sr/drill-names.js', 'sr/xlsxdb.js']) await p.addScriptTag({ path: path.join(STAGE, 'www', f) });
-  const r = await p.evaluate(b64 => SRX.read(Uint8Array.from(atob(b64), c => c.charCodeAt(0))).db.shooters.map(s => s.name), fs.readFileSync(XLSX_FILE).toString('base64')); await b2.close(); return r; })();
-ok(['Desk Shooter', 'Blur Shooter', 'Locked Shooter', 'Excel Shooter'].every(n => fin.includes(n)), 'at the end database.xlsx holds every shooter (the failed write was done again later): ' + fin.join(', '));
+  const r = await p.evaluate(b64 => SRX.read(Uint8Array.from(atob(b64), c => c.charCodeAt(0))).db.weapons.map(s => s.name), fs.readFileSync(XLSX_FILE).toString('base64')); await b2.close(); return r; })();
+ok(['Desk Gun', 'Blur Gun', 'Locked Gun', 'Excel Gun'].every(n => fin.includes(n)), 'at the end database.xlsx holds every entry (the failed write was done again later): ' + fin.join(', '));
 
 // 1.3.0: database.xlsx on Nextcloud (remark #15): a small WebDAV server over https on this machine
 {
@@ -135,7 +135,7 @@ ok(['Desk Shooter', 'Blur Shooter', 'Locked Shooter', 'Excel Shooter'].every(n =
   ok(auth.includes('Basic ' + Buffer.from('u:app-pw-123').toString('base64')), 'Windows: the requests log in with the app password');
   const c = cfg();
   ok(c.nc && c.nc.mode === 'nextcloud' && !JSON.stringify(c).includes('app-pw-123'), 'Windows: the password is not in config.json in clear text (DPAPI / safeStorage)');
-  await a.page.evaluate(() => { SR.db.shooters.push({ id: 'S-990', uid: 'u-nc-990', name: 'Cloud Shooter' }); SR.save(); });
+  await a.page.evaluate(() => { SR.db.weapons.push({ id: 'W-990', uid: 'u-nc-990', name: 'Cloud Gun' }); SR.save(); });
   const o = await a.page.evaluate(() => SR.xlsx.syncOut());
   ok(o && o.ok && Object.keys(files).some(k => /^backups\/database-\d{8}-\d{6}\.xlsx$/.test(k)), 'Windows: the next upload makes a backup copy first');
   await close(a);

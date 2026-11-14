@@ -93,7 +93,7 @@ TL.TABLES = {
     ],
   },
 };
-TL.TRAINING_FIELDS = ['shooterId', 'date', 'start', 'durationH', 'fire', 'desc', 'weapons', 'trainerId', 'remarks'];
+TL.TRAINING_FIELDS = ['date', 'start', 'durationH', 'fire', 'desc', 'weapons', 'trainerId', 'remarks'];
 /** Live fire or dry fire (Manuel 2026-10-27): dry fire never counts as rounds (totals, print, Gun Database). */
 TL.FIRE = { live: 'Live fire', dry: 'Dry fire' };
 TL.isDry = t => !!t && t.fire === 'dry';
@@ -216,7 +216,7 @@ TL.shooter = id => TL.byId(TL.db.shooters, id);
     Trainings of other shooters logged before 1.3.0 stay as they were, with their rounds. */
 TL.meId = () => { const db = TL.db, l = TL.shooter(db.settings.lastShooter); if (l) return l.id; const a = TL.sorted('shooters').find(s => !s.example); return a ? a.id : null; };
 TL.ensureMe = () => TL.meId() || TL.addRecord('shooters', { name: 'Me', status: 'Active', notes: 'Your own entry (rename it in the Gun Database › Shooters)' }).id;
-TL.isOther = t => !!(t && t.shooterId && TL.meId() && t.shooterId !== TL.meId());
+TL.isOther = () => false;   // 1.4.0 (remark #20): no shooter in the data; others' entries carry "Shot by <name>" in their remarks
 TL.weapon = id => TL.byId(TL.db.weapons, id);
 TL.trainer = id => TL.byId(TL.db.trainers, id);
 TL.training = id => TL.byId(TL.db.trainings, id);
@@ -274,7 +274,6 @@ TL.summary = (list, f) => {
     last: list[0] ? list[0].date : '', trainers: new Set(list.map(t => t.trainerId).filter(Boolean)).size };
 };
 TL.filterText = f => [
-  ['Shooter', f.shooter ? TL.nameOf('shooters', f.shooter) : 'All'],
   ['Year', f.year || 'All'],
   ['Gun', f.weapon ? TL.nameOf('weapons', f.weapon) : 'All'],
   ['Trainer', f.trainer ? TL.nameOf('trainers', f.trainer) : 'All'],

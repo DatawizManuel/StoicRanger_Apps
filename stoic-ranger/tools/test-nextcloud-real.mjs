@@ -1,9 +1,12 @@
-/* Stoic Ranger Shooting — the sync against a REAL Nextcloud (1.3.1).
+/* Stoic Ranger Shooting — the sync against a REAL Nextcloud (1.3.1, 1.4.0).
    node stoic-ranger/tools/test-nextcloud-real.mjs <https base> <user> <app password> <excel-made database.xlsx>
    The page runs with a bridge whose ncRequest does what Nextcloud.java/DavHttp does, as a synchronous request to the
    server (tools/test-nextcloud.sh starts Nextcloud in Docker with an https proxy that allows the test page in).
    Checks: first connect with a file made in Excel (no hidden sheet, no Source uid) pulls its data, adds nothing twice,
-   repeated syncs add nothing, the file on Nextcloud opens (zip + sheets) after every upload, backups are made. */
+   repeated syncs add nothing, the file on Nextcloud opens (zip + sheets) after every upload, backups are made.
+   1.4.0: no shooter in the data any more ("Shot by <name>" for others), Excel drop-downs kept (also where a column moved),
+   delete on all devices with two devices (two browser contexts = two phones): a delete reaches the other device and
+   stays gone, also when the old Excel file comes back; Undo comes back everywhere; Replace makes a backup first. */
 import fs from 'fs'; import path from 'path'; import { createRequire } from 'module'; import { execFileSync } from 'child_process';
 const require = createRequire(import.meta.url);
 let chromium; try { ({ chromium } = require('playwright')); } catch (e) { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); }
@@ -36,10 +39,11 @@ const MOCK = (cfg) => {
     } catch (e) { return JSON.stringify({ status: 0, error: String(e) }); }
   };
   window.SRNative = {
-    loadDb: () => g('m.db') || '', saveDb: t => { s('m.db', t); return true; }, backupDb: () => true, loadDbBackup: () => '',
+    loadDb: () => g('m.db') || '', saveDb: t => { s('m.db', t); return true; }, backupDb: n => { s('m.backup.' + n, g('m.db') || ''); return true; }, loadDbBackup: () => '',
     loadData: n => n === 'xlsxbase' ? g('m.xb') || '' : '', saveData: (n, t) => { if (n === 'xlsxbase') s('m.xb', t); return true; },
     backupData: () => true, loadDataBackup: () => '', isNight: () => false, getSecret: () => '', setSecret() { },
-    appInfo: () => JSON.stringify({ version: '1.3.1', code: 14, android: '14', device: 'test' }),
+    appInfo: () => JSON.stringify({ version: '1.4.0', code: 15, android: '14', device: cfg || 'test' }),
+    deviceName: () => cfg || 'test',
     shareFile() { }, shareText() { }, print() { }, printSized() { },
     ncState: () => g('m.nc') || JSON.stringify({ mode: 'local', folder: '/Stoic Ranger/', hasPassword: false }),
     ncSet: (json, pw) => { const o = JSON.parse(json), cur = JSON.parse(g('m.nc') || '{}'); Object.assign(cur, o); if (pw) { cur.hasPassword = true; s('m.pw', pw); } s('m.nc', JSON.stringify(cur)); return true; },
@@ -48,12 +52,20 @@ const MOCK = (cfg) => {
     takeLinkInbox: () => '', linkStorage: () => '[]', linkAdopt: () => false, linkPush: () => '[]',
   };
 };
-const sheetsOf = buf => {   // the file on Nextcloud: a valid xlsx? its sheets and row counts (python openpyxl, like Excel would check)
+const sheetsOf = buf => {   // the file on Nextcloud: a valid xlsx? its sheets and row counts, drop-downs by column header (openpyxl, like Excel)
   const f = '/tmp/claude-nc-check.xlsx'; fs.writeFileSync(f, buf);
-  try { return JSON.parse(execFileSync('python3', ['-I', '-c', `import openpyxl,json,sys,zipfile
+  try { return JSON.parse(execFileSync('python3', ['-I', '-c', `import openpyxl,json,sys,zipfile,re
 z=zipfile.ZipFile(sys.argv[1]); bad=z.testzip()
-wb=openpyxl.load_workbook(sys.argv[1],read_only=True)
-print(json.dumps({'ok':bad is None,'sheets':{ws.title:sum(1 for r in ws.iter_rows(values_only=True) if any(c not in (None,'') for c in r)) for ws in wb.worksheets}}))`, f]).toString()); }
+wb=openpyxl.load_workbook(sys.argv[1])
+dv=[]
+for ws in wb.worksheets:
+  head=[c.value for c in ws[1]]
+  for v in ws.data_validations.dataValidation:
+    for rg in str(v.sqref).split():
+      col=openpyxl.utils.column_index_from_string(re.match('[A-Z]+',rg).group(0))
+      dv.append(ws.title+'.'+str(head[col-1] if col<=len(head) else '?')+'='+str(v.formula1))
+heads={ws.title:[c.value for c in ws[1]] for ws in wb.worksheets}
+print(json.dumps({'ok':bad is None,'sheets':{ws.title:sum(1 for r in ws.iter_rows(values_only=True) if any(c not in (None,'') for c in r)) for ws in wb.worksheets},'dv':sorted(dv),'heads':heads}))`, f]).toString()); }
   catch (e) { return { ok: false, error: String(e.stderr || e) }; }
 };
 
@@ -63,83 +75,118 @@ const src = fs.readFileSync(XLSX);
 ok((await dav('PUT', 'database.xlsx', src)).status === 201, 'Excel-made database.xlsx uploaded (' + src.length + ' bytes)');
 const before = sheetsOf(src);
 console.log('  file has', JSON.stringify(before.sheets));
+console.log('  drop-downs', JSON.stringify(before.dv));
 
 const browser = await chromium.launch({ args: ['--no-proxy-server'] });
-const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 393, height: 852 } });
-await ctx.route(ORIGIN + '/**', r => {
-  const p = decodeURIComponent(new URL(r.request().url()).pathname), f = path.join(WWW, p.replace(/^\/www\//, ''));
-  if (!p.startsWith('/www/') || !f.startsWith(WWW) || !fs.existsSync(f)) return r.fulfill({ status: 404, body: 'nf' });
-  r.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
-});
-// the page talks to https://cloud.test; each request is passed on to the real Nextcloud by this script (no CORS on the server)
 const CLOUD = 'https://cloud.test';
 const CORS = { 'access-control-allow-origin': ORIGIN, 'access-control-allow-methods': 'GET,HEAD,PUT,DELETE,MKCOL,COPY,MOVE,PROPFIND', 'access-control-allow-headers': 'authorization,depth,destination,overwrite,if-match,if-none-match,content-type', 'access-control-expose-headers': 'etag,oc-etag,last-modified,content-length', 'access-control-allow-private-network': 'true' };
-await ctx.route(CLOUD + '/**', async r => {
-  const q = r.request();
-  if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS });
-  const h = Object.assign({}, await q.allHeaders()); ['origin', 'referer', 'host', 'content-length'].forEach(k => delete h[k]);
-  Object.keys(h).forEach(k => { if (k.startsWith('sec-') || k.startsWith(':')) delete h[k]; });
-  if (h.destination) h.destination = h.destination.replace(CLOUD, BASE);
-  const res = await fetch(q.url().replace(CLOUD, BASE), { method: q.method(), headers: h, body: q.postDataBuffer() || undefined, redirect: 'manual' });
-  const rh = {}; res.headers.forEach((v, k) => { if (k !== 'set-cookie' && k !== 'content-encoding' && k !== 'transfer-encoding') rh[k] = v; });
-  r.fulfill({ status: res.status, headers: Object.assign(rh, CORS), body: Buffer.from(await res.arrayBuffer()) });
-});
-await ctx.addInitScript(MOCK);
-const page = await ctx.newPage();
-const errors = []; page.on('pageerror', e => errors.push(e.message));
-await page.goto(`${ORIGIN}/www/index.html`); await page.waitForTimeout(800);
-const count = () => page.evaluate(() => { const d = SR.db, n = t => (d[t] || []).filter(r => !r.example).length, ex = t => (d[t] || []).filter(r => r.example).length;
-  return { weapons: n('weapons'), munitions: n('munitions'), shooters: n('shooters'), trainers: n('trainers'), trainings: n('trainings'), barrels: n('barrels'), exMunitions: ex('munitions'), shooterNames: (d.shooters || []).filter(r => !r.example).map(r => r.name).sort() }; });
+const errors = [];
+/** One phone: its own browser context (own storage), the app pages from the source, Nextcloud through this script. */
+async function device(name) {
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 393, height: 852 } });
+  await ctx.route(ORIGIN + '/**', r => {
+    const p = decodeURIComponent(new URL(r.request().url()).pathname), f = path.join(WWW, p.replace(/^\/www\//, ''));
+    if (!p.startsWith('/www/') || !f.startsWith(WWW) || !fs.existsSync(f)) return r.fulfill({ status: 404, body: 'nf' });
+    r.fulfill({ status: 200, contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
+  });
+  // the page talks to https://cloud.test; each request is passed on to the real Nextcloud by this script (no CORS on the server)
+  await ctx.route(CLOUD + '/**', async r => {
+    const q = r.request();
+    if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS });
+    const h = Object.assign({}, await q.allHeaders()); ['origin', 'referer', 'host', 'content-length'].forEach(k => delete h[k]);
+    Object.keys(h).forEach(k => { if (k.startsWith('sec-') || k.startsWith(':')) delete h[k]; });
+    if (h.destination) h.destination = h.destination.replace(CLOUD, BASE);
+    const res = await fetch(q.url().replace(CLOUD, BASE), { method: q.method(), headers: h, body: q.postDataBuffer() || undefined, redirect: 'manual' });
+    const rh = {}; res.headers.forEach((v, k) => { if (k !== 'set-cookie' && k !== 'content-encoding' && k !== 'transfer-encoding') rh[k] = v; });
+    r.fulfill({ status: res.status, headers: Object.assign(rh, CORS), body: Buffer.from(await res.arrayBuffer()) });
+  });
+  await ctx.addInitScript(MOCK, name);
+  const page = await ctx.newPage();
+  page.on('pageerror', e => errors.push(name + ': ' + e.message));
+  await page.goto(`${ORIGIN}/www/index.html`); await page.waitForTimeout(800);
+  return page;
+}
+const count = pg => pg.evaluate(() => { const d = SR.db, n = t => (d[t] || []).filter(r => !r.example).length, ex = t => (d[t] || []).filter(r => r.example).length;
+  return { weapons: n('weapons'), munitions: n('munitions'), trainers: n('trainers'), trainings: n('trainings'), results: n('results'), barrels: n('barrels'), exMunitions: ex('munitions'),
+    shooters: 'shooters' in d, shotBy: (d.trainings || []).filter(t => /Shot by/.test(t.remarks || '')).map(t => t.id + ':' + t.remarks).sort(),
+    withShooter: ['trainings', 'results', 'sheets', 'roundsLog'].reduce((a, t) => a + (d[t] || []).filter(r => 'shooterId' in r).length, 0) }; });
+const sync = pg => pg.evaluate(() => { SR.flush(); const a = SR.xlsx.syncIn(), b = SR.xlsx.syncOut(); return (a && a.error) || (b && b.error) || ''; });
+const fileNow = async () => sheetsOf(Buffer.from(await (await dav('GET', 'database.xlsx')).arrayBuffer()));
+
+const A = await device('Phone A');
 // like a new phone: the Gun Database's example data is in (Manuel still saw the sample ammunition after the sync)
-await page.goto(`${ORIGIN}/www/gun/index.html`); await page.waitForTimeout(800);
-await page.evaluate(() => RB.loadExamples()); await page.waitForTimeout(300);
-await page.goto(`${ORIGIN}/www/index.html`); await page.waitForTimeout(800);
-const c0 = await count(); console.log('  app before:', JSON.stringify(c0));
+await A.goto(`${ORIGIN}/www/gun/index.html`); await A.waitForTimeout(800);
+await A.evaluate(() => RB.loadExamples()); await A.waitForTimeout(300);
+await A.goto(`${ORIGIN}/www/index.html`); await A.waitForTimeout(800);
+const c0 = await count(A); console.log('  app before:', JSON.stringify(c0));
 ok(c0.exMunitions > 0, 'example ammunition is there before the sync (' + c0.exMunitions + ')');
-const r1 = await page.evaluate(([u, us, f, pw]) => SR.storage.connect({ url: u, user: us, folder: f }, pw), ['https://cloud.test', USER, FOLDER, PW]);
+const connect = pg => pg.evaluate(([u, us, f, pw]) => SR.storage.connect({ url: u, user: us, folder: f }, pw), ['https://cloud.test', USER, FOLDER, PW]);
+const r1 = await connect(A);
 ok(r1.ok, 'connect and first sync: ' + JSON.stringify(r1.ok ? r1.merged && r1.merged.stats : r1.msg));
-const c1 = await count(); console.log('  app after connect:', JSON.stringify(c1));
+const c1 = await count(A); console.log('  app after connect:', JSON.stringify(c1));
 const want = before.sheets;
 ok(c1.exMunitions === 0, 'the example ammunition is gone once the real ammunition came in');
 ok(c1.munitions >= (want.Munitions || 1) - 1, `ammunition from the file is in the app (${c1.munitions}, file rows incl. header ${want.Munitions})`);
 ok(c1.weapons >= (want.Weapons || 1) - 1, `guns from the file are in the app (${c1.weapons})`);
-const dupes = c1.shooterNames.filter((n, i, a) => a.indexOf(n) !== i);
-ok(!dupes.length, 'no shooter twice after the first sync ' + JSON.stringify(c1.shooterNames));
-let got = Buffer.from(await (await dav('GET', 'database.xlsx')).arrayBuffer());
-let chk = sheetsOf(got); ok(chk.ok, 'database.xlsx on Nextcloud opens after the first upload ' + JSON.stringify(chk.sheets || chk.error).slice(0, 300));
-for (let i = 2; i <= 4; i++) {
-  await page.evaluate(() => { SR.flush(); SR.xlsx.syncIn(); SR.xlsx.syncOut(); });
-  await page.reload(); await page.waitForTimeout(600);
-}
-const c4 = await count(); console.log('  app after 4 syncs:', JSON.stringify(c4));
+ok(c1.trainings === (want.Trainings || 1) - 1, `every training of the file is in the app (${c1.trainings})`);
+ok(!c1.shooters && !c1.withShooter, '1.4.0 (#20): no shooters table and no shooter field in the app');
+const others = await A.evaluate(() => SR.db.settings.common.meName);
+console.log('  the user is', others, '· others:', JSON.stringify(c1.shotBy));
+let chk = await fileNow(); ok(chk.ok, 'database.xlsx on Nextcloud opens after the first upload ' + JSON.stringify(chk.sheets || chk.error).slice(0, 300));
+ok(!chk.sheets.Shooters && !chk.heads.Trainings.includes('Shooter') && !chk.heads.Drill_Results.includes('Shooter') && !chk.heads.Datasheets.includes('Shooter'), '1.4.0 (#20): the file has no Shooters sheet and no Shooter column');
+const wantDv = before.dv.filter(x => !x.startsWith('Shooters.'));
+ok(JSON.stringify(chk.dv) === JSON.stringify(wantDv), `#25: the Excel drop-downs are kept, on the right columns (${chk.dv.length} of ${before.dv.length}; the Shooters sheet's one went with it) ` + JSON.stringify(chk.dv));
+for (let i = 2; i <= 4; i++) { await sync(A); await A.reload(); await A.waitForTimeout(600); }
+const c4 = await count(A);
 ok(JSON.stringify(c4) === JSON.stringify(c1), 'four more syncs (with app restarts) change nothing');
-got = Buffer.from(await (await dav('GET', 'database.xlsx')).arrayBuffer());
-chk = sheetsOf(got); ok(chk.ok, 'database.xlsx on Nextcloud still opens');
-ok(chk.sheets && chk.sheets.Shooters === want.Shooters, `Shooters sheet has as many rows as before (${chk.sheets && chk.sheets.Shooters} vs ${want.Shooters})`);
-// Manuel's case: the Excel-made file (no Source uid) is put on Nextcloud again over the app's file
+chk = await fileNow(); ok(chk.ok && JSON.stringify(chk.dv) === JSON.stringify(wantDv), 'database.xlsx on Nextcloud still opens, drop-downs still there');
+// Manuel's case: the Excel-made file (no Source uid, still with shooters) is put on Nextcloud again over the app's file
 ok((await dav('PUT', 'database.xlsx', src)).status === 204, 'the Excel-made file uploaded again over the synced one');
-await page.evaluate(() => { SR.flush(); SR.xlsx.syncIn(); SR.xlsx.syncOut(); }); await page.reload(); await page.waitForTimeout(600);
-const c5 = await count(); console.log('  app after the Excel file came back:', JSON.stringify(c5));
-ok(JSON.stringify(c5) === JSON.stringify(c1), 'nothing added twice when the Excel file comes back (shooters ' + JSON.stringify(c5.shooterNames) + ', trainings ' + c5.trainings + ')');
-got = Buffer.from(await (await dav('GET', 'database.xlsx')).arrayBuffer()); chk = sheetsOf(got);
-ok(chk.ok && chk.sheets.Shooters === want.Shooters && chk.sheets.Trainings === want.Trainings, 'the file on Nextcloud has no copies either ' + JSON.stringify(chk.sheets));
-// a change in Excel comes in: a new ammunition row added on the PC (no uid) arrives once
-// 1.3.0 left copies behind: three of every shooter, trainings twice → 1.3.1 merges them once, trainings keep pointing right
-await page.evaluate(() => {
-  const d = SR.db, cp = (r, id) => Object.assign(JSON.parse(JSON.stringify(r)), { id, uid: 'dup-' + Math.random().toString(36).slice(2) });
-  const sh = d.shooters.filter(r => !r.example), n = sh.length;
-  sh.forEach((r, i) => { d.shooters.push(cp(r, 'S-' + String(10 + i).padStart(3, '0'))); d.shooters.push(cp(r, 'S-' + String(20 + i).padStart(3, '0'))); });
-  const t0 = d.trainings.find(t => t.shooterId); if (t0) { const c = cp(t0, t0.id); c.shooterId = 'S-010'; d.trainings.push(c); }
-  delete d.settings.common.cleanup131; SR.save(true);
-});
-const dirty = await count(); console.log('  app with 1.3.0 copies:', JSON.stringify(dirty));
-await page.reload(); await page.waitForTimeout(800);
-const c6 = await count(); console.log('  app after the 1.3.1 clean-up:', JSON.stringify(c6));
-ok(dirty.shooters === c1.shooters * 3 && JSON.stringify(c6) === JSON.stringify(c1), 'the copies are merged back into one (shooters ' + dirty.shooters + ' → ' + c6.shooters + ', trainings ' + dirty.trainings + ' → ' + c6.trainings + ')');
-ok(await page.evaluate(() => SR.db.trainings.every(t => !t.shooterId || SR.db.shooters.some(s => s.id === t.shooterId))), 'every training still points at an existing shooter');
-await page.evaluate(() => { SR.flush(); SR.xlsx.syncOut(); });
-got = Buffer.from(await (await dav('GET', 'database.xlsx')).arrayBuffer()); chk = sheetsOf(got);
-ok(chk.ok && chk.sheets.Shooters === want.Shooters, 'the cleaned list is on Nextcloud too ' + JSON.stringify(chk.sheets && chk.sheets.Shooters));
+await sync(A); await A.reload(); await A.waitForTimeout(600);
+const c5 = await count(A);
+ok(JSON.stringify(c5) === JSON.stringify(c1), 'nothing added twice and no second "Shot by" when the old Excel file comes back (trainings ' + c5.trainings + ')');
+chk = await fileNow();
+ok(chk.ok && chk.sheets.Trainings === want.Trainings && !chk.sheets.Shooters, 'the file on Nextcloud has no copies either ' + JSON.stringify(chk.sheets));
+
+// two devices: phone B joins the same folder
+const B = await device('Phone B');
+const rB = await connect(B);
+const cB = await count(B);
+ok(rB.ok && cB.weapons === c1.weapons && cB.trainings === c1.trainings && cB.munitions === c1.munitions, 'phone B connects and has the same data ' + JSON.stringify(cB));
+// delete a gun on A
+const gone = await A.evaluate(() => { const w = SR.db.weapons.filter(x => !x.example).find(x => SR.db.trainings.some(t => (t.weapons || []).some(g => g.weaponId === x.id))) || SR.db.weapons.filter(x => !x.example)[0]; return { id: w.id, uid: w.uid, name: w.name }; });
+await A.goto(`${ORIGIN}/www/gun/index.html`); await A.waitForTimeout(800);
+await A.evaluate(id => { RB.db.weapons = RB.db.weapons.filter(x => x.id !== id); RB.save(true); }, gone.id);
+await A.goto(`${ORIGIN}/www/index.html`); await A.waitForTimeout(800);
+let e = await sync(A);
+const inA = await A.evaluate(id => ({ has: SR.db.weapons.some(w => w.id === id), tomb: SR.db.deleted.some(d => d.id === id), list: SR.deleted.recent().map(d => d.label) }), gone.id);
+ok(!e && !inA.has && inA.tomb && inA.list.includes(gone.name), `delete "${gone.name}" on phone A: gone, in Recently deleted, tombstone made`);
+chk = await fileNow();
+ok(chk.ok && chk.sheets._Deleted === 2 && chk.sheets.Weapons === want.Weapons - 1, 'Nextcloud: the gun is out of Weapons, the _Deleted sheet has its row');
+ok(chk.sheets.Rounds_Log === want.Rounds_Log, `Rounds_Log holds only rounds entered by hand, not the ones made from trainings (${chk.sheets.Rounds_Log} rows, the PC dashboard would count them twice)`);
+const keptT = await A.evaluate(id => SR.db.trainings.filter(t => (t.weapons || []).some(w => w.weaponId === id && w.name)).length, gone.id);
+ok(keptT > 0 && (await count(A)).trainings === c1.trainings, `the trainings with that gun stay, with its name (${keptT})`);
+e = await sync(B);
+ok(!e && !(await B.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id)), 'phone B syncs: the gun is gone there too');
+await sync(B); await sync(A); await sync(B);
+ok(!(await A.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id)) && !(await B.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id)), 'more syncs both ways: it does not come back');
+// the old Excel file (with that gun, no _Deleted sheet) comes back once more
+await dav('PUT', 'database.xlsx', src);
+await sync(B); await sync(A);
+ok(!(await A.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id)) && !(await B.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id)), 'even the old Excel file with its row does not bring it back');
+console.log('  A guns:', JSON.stringify(await A.evaluate(() => SR.db.weapons.map(w => w.id + ' ' + w.name + ' ' + (w.uid || '').slice(0, 8)))), ' B guns:', JSON.stringify(await B.evaluate(() => SR.db.weapons.map(w => w.id + ' ' + w.name + ' ' + (w.uid || '').slice(0, 8)))), JSON.stringify(gone));
+chk = await fileNow(); ok(chk.ok && chk.sheets._Deleted === 2 && chk.sheets.Weapons === want.Weapons - 1, 'and the file is right again after the next upload ' + JSON.stringify(chk.sheets));
+// Undo on A comes back on B
+const key = await A.evaluate(() => SR.deleted.recent()[0].key);
+await A.evaluate(k => SR.deleted.undo(k), key);
+await sync(A); await sync(B);
+ok(await B.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id) && await A.evaluate(id => SR.db.weapons.some(w => w.id === id), gone.id), 'Undo on phone A: the gun is back on both phones');
+// Replace on B: a local entry that never went out goes, a backup first
+await B.evaluate(() => { SR.db.weapons.push({ id: 'W-LOCAL', uid: 'uid-local-only', name: 'Only on B', type: 'Rifle' }); SR.save(); });
+const rr = await B.evaluate(() => SR.storage.replace());
+const cR = await count(B);
+ok(rr.ok && !(await B.evaluate(() => SR.db.weapons.some(w => w.uid === 'uid-local-only'))) && cR.weapons === c1.weapons && await B.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('m.backup.db-before-replace-'))), 'Replace on phone B: same data as Nextcloud, the local-only entry went, a backup was made first');
+chk = await fileNow(); ok(chk.ok && JSON.stringify(chk.dv) === JSON.stringify(wantDv), 'the file on Nextcloud opens and keeps its drop-downs at the end ' + JSON.stringify(chk.sheets));
 const prop = await (await dav('PROPFIND', 'backups', '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getlastmodified/></d:prop></d:propfind>', { Depth: '1' })).text();
 ok(/database-\d{8}-\d{6}\.xlsx/.test(prop), 'backups/ holds copies made before the uploads');
 ok(!errors.length, 'no page errors ' + errors.join(' | '));

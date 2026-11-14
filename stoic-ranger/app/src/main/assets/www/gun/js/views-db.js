@@ -2,7 +2,7 @@
 'use strict';
 (() => {
 const { $, $$, esc, fx, num } = RB;
-const ORDER = ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'targets', 'roundsLog'];
+const ORDER = ['weapons', 'barrels', 'munitions', 'trainers', 'targets', 'roundsLog'];
 
 function refLabel(table, id) {
   const r = RB.byId(RB.db[table], id); if (!r) return id ? `${id} (missing)` : '';

@@ -18,6 +18,9 @@
 const FORMAT = 1;
 const MARK = 'stoic-ranger-database';
 const HIDDEN = '_StoicRanger';
+const DELETED = '_Deleted';                        // 1.4.0: tombstones shared by all apps (SHARED-DB-CONTRACT.md, section E)
+const DEL_COLS = ['App', 'Table', 'ID', 'Source uid', 'Label', 'Deleted at', 'Deleted by'];
+const KEEP_DAYS = 365, UNDO_DAYS = 30;
 const CHUNK = 30000;                               // Excel holds at most 32767 characters in a cell
 const arr = a => Array.isArray(a) ? a : [];
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -42,28 +45,32 @@ const REG = {
     ['Bullet', 'bullet'], ['Bullet weight g', 'bulletWeightG', 'n'], ['BC G7', 'bcG7', 'n'], ['Manufacturer V0 m/s', 'nominalV0', 'n'], ['Powder', 'powder'], ['Charge g', 'chargeG', 'n'],
     ['Primer', 'primer'], ['Brass', 'brass'], ['CBTO mm', 'cbtoMm', 'n'], ['COAL mm', 'coalMm', 'n'], ['Lot', 'lot'], ['Added', 'added', 'd'], ['Status', 'status'], ['Notes', 'notes'],
     ['BC G1', 'bcG1', 'n'], ['Bullet diameter mm', 'bulletDiaMm', 'n'], ['Bullet length mm', 'bulletLengthMm', 'n'], ['Manufacturer test barrel mm', 'mfrBarrelMm', 'n']]],
-  shooters: ['Shooters', 'S', [['ID', 'id'], ['Name', 'name'], ['Aliases (as written on sheets)', 'aliases'], ['Added', 'added', 'd'], ['Status', 'status'], ['Notes', 'notes']]],
   roundsLog: ['Rounds_Log', 'R', [['Date', 'date', 'd'], ['Weapon ID', 'weaponId'], ['Barrel ID', 'barrelId'], ['Rounds', 'rounds', 'i'], ['Note', 'note'], ['ID', 'id'], ['Munition ID', 'munitionId']]],
   targets: ['Targets', 'TG', [['ID', 'id'], ['Name', 'name'], ['Type', 'type'], ['Scoring rings', 'rings', 'i'], ['10-ring or plate diameter mm', 'd10', 'n'], ['Ring width mm', 'w', 'n'],
     ['Inner ten (X) diameter mm', 'xd', 'n'], ['Intended distance m', 'distM', 'n'], ['Card / plate size', 'sizeMm'], ['Source', 'source'], ['Notes', 'notes']]],
   trainers: ['Trainers', 'T', [['ID', 'id'], ['Name', 'name'], ['Contact person', 'contact'], ['Phone', 'phone'], ['E-mail', 'email'], ['Website', 'website'], ['Notes', 'notes']]],
 };
-const SHEET_KEYS = ['no', 'date', 'time', 'shooter', 'purpose', 'discipline', 'position', 'series', 'rounds', 'gun', 'barrel', 'optic', 'caliber', 'ammo', 'bullet', 'v0', 'v0sd',
+/* 1.4.0 (remark #20): one shooter only, so no Shooters sheet and no Shooter column any more. Older files still have
+   them: they are read, and dropShooters() turns another shooter's name into "Shot by <name>" in the entry's note. */
+const OLD_SHOOTERS = ['Shooters', 'S', [['ID', 'id'], ['Name', 'name'], ['Aliases (as written on sheets)', 'aliases'], ['Added', 'added', 'd'], ['Status', 'status'], ['Notes', 'notes']]];
+const SHEET_KEYS = ['no', 'date', 'time', 'purpose', 'discipline', 'position', 'series', 'rounds', 'gun', 'barrel', 'optic', 'caliber', 'ammo', 'bullet', 'v0', 'v0sd',
   'zero', 'dialE', 'dialW', 'range', 'coords', 'elev', 'dist', 'setting', 'temp', 'hum', 'press', 'wind', 'light', 'preset', 'bd', 'd10', 'w', 'remarks'];
-const SHEET_COLS = [['ID', 'id'], ['Date', 'date', 'd'], ['Time', 'time', 'h'], ['Sheet no.', 'no'], ['Shooter', 'shooter'], ['Shooter ID', 'shooterId'], ['Purpose', 'purpose'],
+const SHEET_COLS = [['ID', 'id'], ['Date', 'date', 'd'], ['Time', 'time', 'h'], ['Sheet no.', 'no'], ['Purpose', 'purpose'],
   ['Discipline', 'discipline'], ['Position', 'position'], ['Series', 'series'], ['Rounds', 'rounds'], ['Gun', 'gun'], ['Weapon ID', 'weaponId'], ['Barrel', 'barrel'], ['Barrel ID', 'barrelId'],
   ['Optic', 'optic'], ['Caliber', 'caliber'], ['Ammunition', 'ammo'], ['Munition ID', 'munitionId'], ['Bullet g', 'bullet'], ['V0 m/s', 'v0'], ['V0 SD m/s', 'v0sd'], ['Zero m', 'zero'],
   ['Dial elevation', 'dialE'], ['Dial windage', 'dialW'], ['Range', 'range'], ['Coordinates', 'coords'], ['Elevation m ASL', 'elev'], ['Distance m', 'dist'], ['Setting', 'setting'],
   ['Temp °C', 'temp'], ['Humidity %', 'hum'], ['Pressure hPa', 'press'], ['Wind', 'wind'], ['Light', 'light'], ['Target', 'preset'], ['Bullet diameter mm', 'bd'],
   ['10-ring diameter mm', 'd10'], ['Ring width mm', 'w'], ['Remarks', 'remarks'], ['Hits', 'hitCount']];
-const RESULT_COLS = [['ID', 'id'], ['Date', 'date', 'd'], ['Drill ID', 'drillId'], ['Drill', 'drillName'], ['Shooter', 'shooter'], ['Weapon ID', 'weaponId'], ['Mode', 'mode'],
+const RESULT_COLS = [['ID', 'id'], ['Date', 'date', 'd'], ['Drill ID', 'drillId'], ['Drill', 'drillName'], ['Weapon ID', 'weaponId'], ['Mode', 'mode'],
   ['Time s', 'timeS', 'n'], ['Hits', 'hits', 'n'], ['Shots', 'shots', 'n'], ['Points', 'points', 'n'], ['Distance m', 'distanceM', 'n'], ['Pass', 'pass', 'b'], ['Training ID', 'trainingId'], ['Notes', 'notes']];
 const EVAL = { rifle: 'Gun/ammo', shooter: 'Shooter', rounds: 'Rounds only' };
-const TABLES = ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'targets', 'roundsLog', 'sheets', 'trainings', 'results'];
-const SHEETS = { weapons: 'Weapons', barrels: 'Barrels', munitions: 'Munitions', shooters: 'Shooters', roundsLog: 'Rounds_Log', targets: 'Targets', trainers: 'Trainers',
+const TABLES = ['weapons', 'barrels', 'munitions', 'trainers', 'targets', 'roundsLog', 'sheets', 'trainings', 'results'];
+const SHEETS = { weapons: 'Weapons', barrels: 'Barrels', munitions: 'Munitions', roundsLog: 'Rounds_Log', targets: 'Targets', trainers: 'Trainers',
   trainings: 'Trainings', results: 'Drill_Results', sheets: 'Datasheets', purposes: 'Purposes', favs: 'Drill_Favourites', shots: 'Shots' };
 
 const keyOf = r => r && (r.uid || r.id) || '';
+/** A rounds log entry the app made from a training (Gun Database link): its rounds are in the Trainings sheet already. */
+const fromTraining = r => !!(r && ((r.link && r.link.app === 'training-log') || r.trainingId || String(r.uid || '').includes(':')));
 const blank = v => v == null || v === '' || (Array.isArray(v) && !v.length);
 const same = (a, b) => (blank(a) && blank(b)) || (typeof a === 'object' || typeof b === 'object' ? JSON.stringify(a) === JSON.stringify(b) : String(a) === String(b));
 const purposesOf = u => arr(u.settings && u.settings.gundb && u.settings.gundb.purposes);
@@ -84,7 +91,8 @@ function write(u, info = {}) {
   const own = t => arr(u[t]).filter(r => r && typeof r === 'object' && !r.example);
   for (const [t, [sheet, , cols]] of Object.entries(REG)) {
     if (t === 'trainers') continue;                    // keeps the order of the PC workbook: … Purposes, Trainers, Trainings
-    X.utils.book_append_sheet(wb, sheetOf(X, cols.map(c => c[0]).concat('Source uid'), own(t).map(r => cellsOf(cols, r).concat(r.uid || ''))), sheet);
+    const list = t === 'roundsLog' ? own(t).filter(r => !fromTraining(r)) : own(t);   // 1.4.0: training rounds are in Trainings already
+    X.utils.book_append_sheet(wb, sheetOf(X, cols.map(c => c[0]).concat('Source uid'), list.map(r => cellsOf(cols, r).concat(r.uid || ''))), sheet);
     if (t === 'targets') {
       X.utils.book_append_sheet(wb, sheetOf(X, ['ID', 'Name', 'Evaluated as', 'Notes'], purposesOf(u).map(p => [p.id || '', p.name || '', EVAL[p.evalAs] || p.evalAs || '', p.notes || ''])), SHEETS.purposes);
       const T = REG.trainers[2];
@@ -94,17 +102,17 @@ function write(u, info = {}) {
   // Trainings: names as on the PC (Weapon 1/Rounds 1 …, at least 4 pairs)
   const tr = own('trainings').slice().sort((a, b) => txt(a.date).localeCompare(txt(b.date)));
   const nW = Math.max(4, ...tr.map(t => arr(t.weapons).length));
-  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Shooter', 'Description', 'Trainer / organizer'];
+  const head = ['ID', 'Date', 'Start', 'Duration h', 'Type', 'Description', 'Trainer / organizer'];
   for (let i = 1; i <= nW; i++) head.push('Weapon ' + i, 'Rounds ' + i);
   head.push('Remarks', 'Source uid');
   X.utils.book_append_sheet(wb, sheetOf(X, head, tr.map(t => {
-    const r = [t.id || '', t.date || '', t.start || '', t.durationH ?? '', t.fire === 'dry' ? 'Dry fire' : 'Live fire', nameOf(u, 'shooters', t.shooterId), t.desc || '', nameOf(u, 'trainers', t.trainerId)];
-    for (let i = 0; i < nW; i++) { const w = arr(t.weapons)[i]; r.push(w ? nameOf(u, 'weapons', w.weaponId) || w.weaponId || '' : '', w && w.rounds != null ? w.rounds : ''); }
+    const r = [t.id || '', t.date || '', t.start || '', t.durationH ?? '', t.fire === 'dry' ? 'Dry fire' : 'Live fire', t.desc || '', nameOf(u, 'trainers', t.trainerId)];
+    for (let i = 0; i < nW; i++) { const w = arr(t.weapons)[i]; r.push(w ? nameOf(u, 'weapons', w.weaponId) || w.name || w.weaponId || '' : '', w && w.rounds != null ? w.rounds : ''); }
     r.push(t.remarks || '', t.uid || '');
     return r;
   })), SHEETS.trainings);
   X.utils.book_append_sheet(wb, sheetOf(X, RESULT_COLS.map(c => c[0]).concat('Source uid'), own('results').map(r => cellsOf(RESULT_COLS,
-    Object.assign({}, r, { drillName: names[r.drillId] || r.drillName || '', shooter: nameOf(u, 'shooters', r.shooterId), trainingId: (r.training && r.training.id) || '' })).concat(r.uid || ''))), SHEETS.results);
+    Object.assign({}, r, { drillName: names[r.drillId] || r.drillName || '', trainingId: (r.training && r.training.id) || '' })).concat(r.uid || ''))), SHEETS.results);
   // only in the app until now: datasheets (one row each) and their shots, favourite drills
   X.utils.book_append_sheet(wb, sheetOf(X, SHEET_COLS.map(c => c[0]).concat('Source uid'), own('sheets').map(s => cellsOf(SHEET_COLS, Object.assign({}, s, { hitCount: arr(s.hits).length })).concat(s.uid || ''))), SHEETS.sheets);
   const shots = [];
@@ -112,9 +120,9 @@ function write(u, info = {}) {
   X.utils.book_append_sheet(wb, sheetOf(X, ['Sheet ID', 'Date', 'Shot', 'X mm', 'Y mm'], shots), SHEETS.shots);
   X.utils.book_append_sheet(wb, sheetOf(X, ['Drill ID', 'Drill'], arr(u.favs).map(id => [id, names[id] || ''])), SHEETS.favs);
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([
-    ['Database', 'Stoic Ranger database: guns, barrels, ammunition, shooters, trainers, targets, datasheets, trainings and drill results. The same file for Android, iPhone and Windows.'],
+    ['Database', 'Stoic Ranger database: guns, barrels, ammunition, trainers, targets, datasheets, trainings and drill results. The same file for Android, iPhone and Windows.'],
     ['Editing', 'You can edit this file in Excel. Keep the ID and Source uid columns as they are; new rows may leave Source uid empty. To delete an entry, delete it in the app: rows deleted here are kept by the apps.'],
-    ['Trainings', 'Shooter, trainer and guns by name (as in the sheets above). Type: Live fire or Dry fire; dry-fire Rounds are repetitions, never rounds.'],
+    ['Trainings', 'Trainer and guns by name (as in the sheets above). Type: Live fire or Dry fire; dry-fire Rounds are repetitions, never rounds.'],
     ['Datasheets', 'One row per datasheet; its shots are in Shots (X right, Y up, mm on the target). Shots are kept by the app: change them in the app.'],
     ['Units', 'Metric: mm, m, g, m/s, °C, hPa, mrad.'],
     ['Saved', (info.by || 'Stoic Ranger Shooting') + ' ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
@@ -124,20 +132,130 @@ function write(u, info = {}) {
   const rows = [[MARK, FORMAT, 'Do not edit: a copy of the whole database for the Stoic Ranger apps. The sheets before this one win over it.']];
   for (let i = 0; i < full.length; i += CHUNK) rows.push([full.slice(i, i + CHUNK)]);
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), HIDDEN);
+  // tombstones of every app (section E): ours from the app, the others' as they were read
+  const tomb = arr(u.deleted).filter(d => d && d.at);
+  X.utils.book_append_sheet(wb, sheetOf(X, DEL_COLS, tomb.map(d => [d.app || 'SR', d.app && d.app !== 'SR' ? d.table || '' : SHEETS[d.t] || d.table || d.t || '', d.id || '', d.uid || '', d.label || '', d.at, d.by || ''])), DELETED);
   // every sheet this app does not own stays as it was (other Stoic Ranger apps: FK_, PF_, GS_, DT_ and their hidden
   // _XX_Data sheets; the user's own sheets), hidden ones stay hidden (shared contract 2026-11-07)
-  const hidden = { [HIDDEN]: 1 };
+  const hidden = { [HIDDEN]: 1, [DELETED]: 1 };
   if (info.keep && info.keep.length) {
     let old = null;
     try { old = X.read(info.keep, { type: 'array', cellDates: true }); } catch (e) { old = null; }
     if (old) {
-      const mine = new Set(wb.SheetNames), vis = {};
+      const mine = new Set(wb.SheetNames.concat(OLD_SHOOTERS[0])), vis = {};   // the old Shooters sheet goes (1.4.0)
       ((old.Workbook && old.Workbook.Sheets) || []).forEach(x => { if (x && x.name) vis[x.name] = x.Hidden || 0; });
       old.SheetNames.forEach(n => { if (mine.has(n) || !old.Sheets[n]) return; X.utils.book_append_sheet(wb, old.Sheets[n], n); if (vis[n]) hidden[n] = vis[n]; });
     }
   }
   wb.Workbook = wb.Workbook || {}; wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: hidden[n] || 0 }));
-  return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
+  const out = new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
+  if (info.keep && info.keep.length) { try { return keepLayout(X, out, info.keep); } catch (e) { return out; } }
+  return out;
+}
+
+/* 1.4.0 (backlog #25): the workbook is written anew, so what Excel or the PC dashboard put around the data would be
+   lost. Taken over from the previous file, for every sheet that was already there: drop-down lists (data validations),
+   column widths and frozen header rows, plus the workbook's named ranges the lists may use. Data stays as written. */
+function keepLayout(X, fresh, old) {
+  const C = X.CFB, A = C.read(fresh, { type: 'array' }), B = C.read(old, { type: 'array' });
+  const txtOf = (z, p) => { const i = z.FullPaths.findIndex(f => f.replace(/^Root Entry\//, '') === p); return i < 0 ? null : { i, s: new TextDecoder().decode(z.FileIndex[i].content) }; };
+  const put = (z, i, str) => { z.FileIndex[i].content = new TextEncoder().encode(str); };
+  const sheetPaths = z => {
+    const wb = txtOf(z, 'xl/workbook.xml'), rel = txtOf(z, 'xl/_rels/workbook.xml.rels'); if (!wb || !rel) return {};
+    const targets = {}; rel.s.replace(/<Relationship\b[^>]*>/g, t => { const id = (/Id="([^"]+)"/.exec(t) || [])[1], tg = (/Target="([^"]+)"/.exec(t) || [])[1]; if (id && tg) targets[id] = tg.replace(/^\/?(xl\/)?/, 'xl/'); return t; });
+    const out = {}; wb.s.replace(/<sheet\b[^>]*>/g, t => { const n = (/name="([^"]+)"/.exec(t) || [])[1], id = (/r:id="([^"]+)"/.exec(t) || [])[1]; if (n && targets[id]) out[n] = targets[id]; return t; });
+    return out;
+  };
+  const pa = sheetPaths(A), pb = sheetPaths(B);
+  let changed = false;
+  // header rows of both files: a column that moved (1.4.0: the Shooter column went) takes its drop-down along
+  let hA = {}, hB = {};
+  try {
+    const head = wb => { const o = {}; wb.SheetNames.forEach(n => { const a = X.utils.sheet_to_json(wb.Sheets[n], { header: 1, range: 0, defval: '' })[0]; o[n] = arr(a).map(v => String(v)); }); return o; };
+    hA = head(X.read(fresh, { type: 'array', sheetRows: 1 })); hB = head(X.read(old, { type: 'array', sheetRows: 1 }));
+  } catch (e) { hA = {}; hB = {}; }
+  const colN = l => l.split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1, colL = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+  const remapDv = (dv, name) => {
+    const ha = hA[name], hb = hB[name];
+    if (!ha || !hb || ha.join('\u0001') === hb.join('\u0001')) return dv;
+    const map = c => { const h = hb[c]; if (h == null || h === '') return c < hb.length ? -1 : c; const i = ha.indexOf(h); return i; };
+    let n = 0;
+    const out = dv.replace(/<dataValidation\b[^>]*?(\/>|>[\s\S]*?<\/dataValidation>)/g, el => {
+      const sq = (/sqref="([^"]*)"/.exec(el) || [])[1]; if (sq == null) return el;
+      if (/<formula1>[^<]*Shooters!/.test(el)) return '';
+      const parts = [];
+      sq.split(/\s+/).filter(Boolean).forEach(rg => {
+        const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/.exec(rg); if (!m) { parts.push(rg); return; }
+        const c1 = colN(m[1]), c2 = m[3] ? colN(m[3]) : c1, r1 = m[2], r2 = m[4] || m[2];
+        for (let c = c1; c <= c2; c++) { const to = map(c); if (to >= 0) parts.push(colL(to) + r1 + (r2 !== r1 || m[3] ? ':' + colL(to) + r2 : '')); }
+      });
+      if (!parts.length) return '';
+      n++;
+      return el.replace(/sqref="[^"]*"/, 'sqref="' + parts.join(' ') + '"');
+    });
+    if (!n) return '';
+    return out.replace(/count="\d+"/, 'count="' + n + '"');
+  };
+  const sameHead = name => !hA[name] || !hB[name] || hA[name].join('\u0001') === hB[name].join('\u0001');
+  const grab = (x, tag) => { const m = new RegExp('<' + tag + '\\b[\\s\\S]*?</' + tag + '>|<' + tag + '\\b[^>]*/>').exec(x); return m ? m[0] : ''; };
+  Object.keys(pa).forEach(name => {
+    if (!pb[name]) return;
+    const a = txtOf(A, pa[name]), b = txtOf(B, pb[name]); if (!a || !b) return;
+    let x = a.s;
+    const dv = remapDv(grab(b.s, 'dataValidations'), name), cols = sameHead(name) ? grab(b.s, 'cols') : '', views = grab(b.s, 'sheetViews');
+    if (views) x = grab(x, 'sheetViews') ? x.replace(grab(x, 'sheetViews'), views) : x.replace(/(<sheetFormatPr\b|<cols\b|<sheetData\b)/, views + '$1');
+    if (cols) x = grab(x, 'cols') ? x.replace(grab(x, 'cols'), cols) : x.replace(/<sheetData\b/, cols + '<sheetData');
+    if (dv && !grab(x, 'dataValidations')) x = x.replace(/(<hyperlinks\b|<printOptions\b|<pageMargins\b|<pageSetup\b|<headerFooter\b|<drawing\b|<legacyDrawing\b|<tableParts\b|<extLst\b|<\/worksheet>)/, dv + '$1');
+    if (x !== a.s) { put(A, a.i, x); changed = true; }
+  });
+  // named ranges (not the built-in _xlnm ones) that the drop-down lists may point at
+  const wa = txtOf(A, 'xl/workbook.xml'), wbOld = txtOf(B, 'xl/workbook.xml');
+  if (wa && wbOld) {
+    const names = (grab(wbOld.s, 'definedNames').match(/<definedName\b[\s\S]*?<\/definedName>/g) || []).filter(d => !/name="_xlnm\./.test(d) && /!/.test(d));
+    const sheetsNow = Object.keys(pa);
+    const ok = names.filter(d => sheetsNow.some(n => d.includes(n + '!') || d.includes("'" + n + "'!")));
+    if (ok.length && !/<definedName\b/.test(wa.s)) {
+      put(A, wa.i, wa.s.replace(/<\/sheets>/, '</sheets><definedNames>' + ok.map(d => d.replace(/\s*localSheetId="\d+"/, '')).join('') + '</definedNames>')); changed = true;
+    }
+  }
+  if (!changed) return fresh;
+  const junk = A.FullPaths.findIndex(f => /Sh33tJ5/.test(f)); if (junk >= 0) { A.FullPaths.splice(junk, 1); A.FileIndex.splice(junk, 1); }
+  return new Uint8Array(C.write(A, { fileType: 'zip', type: 'array', compression: true }));
+}
+/* 1.4.0 (remark #20, Manuel 2026-11-07: "it is only ever the user of the app"): the shooter goes out of the data.
+   The user is `me` (a name), else the shooter with the most entries. Entries of another shooter keep everything
+   (their rounds stay in the totals) and get "Shot by <name>" in their note, once. Then the shooters table and every
+   shooter field go. Returns { me, moved, dropped }; nothing to do = { moved: 0, dropped: 0 }. */
+const NOTE_OF = { trainings: 'remarks', results: 'notes', sheets: 'remarks', roundsLog: 'note' };
+function dropShooters(db, me) {
+  const S = arr(db.shooters);
+  const nameOf2 = id => { const r = id && S.find(x => x && x.id === id); return r ? txt(r.name) : ''; };
+  const recs = [];
+  Object.keys(NOTE_OF).forEach(t => arr(db[t]).forEach(r => { if (r && typeof r === 'object') recs.push([t, r]); }));
+  const who = r => nameOf2(r.shooterId) || txt(r.shooter);
+  const has = r => ('shooterId' in r) || ('shooter' in r);
+  if (!S.length && !recs.some(([, r]) => has(r)) && !('shooters' in db)) return { me: me || '', moved: 0, dropped: 0 };
+  let mine = txt(me);
+  if (!mine) {
+    const n = new Map();
+    recs.forEach(([, r]) => { if (r.example) return; const w = who(r); if (w) n.set(low(w), (n.get(low(w)) || 0) + 1); });
+    let best = '', top = 0;
+    S.filter(x => x && !x.example).map(x => txt(x.name)).concat([...n.keys()]).forEach(w => { const c = n.get(low(w)) || 0; if (w && c > top) { best = w; top = c; } });
+    mine = best || txt((S.find(x => x && !x.example) || {}).name);
+  }
+  let moved = 0, dropped = 0;
+  recs.forEach(([t, r]) => {
+    if (!has(r)) return;
+    const w = who(r), k = NOTE_OF[t];
+    if (w && low(w) !== low(mine) && !r.example) {
+      const tag = 'Shot by ' + w, cur = txt(r[k]);
+      if (!cur.toLowerCase().includes(tag.toLowerCase())) r[k] = cur ? cur + ' · ' + tag : tag;
+      moved++;
+    }
+    delete r.shooterId; delete r.shooter; dropped++;
+  });
+  if ('shooters' in db) { dropped += S.length; delete db.shooters; }
+  return { me: mine, moved, dropped };
 }
 /** What of the one file goes into database.xlsx: the tables, favourites and the shared settings (not the history). */
 function dbPart(u) {
@@ -148,7 +266,7 @@ function dbPart(u) {
 
 /* ---------- read ---------- */
 /** database.xlsx bytes → { db: tables like the one file, purposes, favs, hasCopy, sheets: [found] }. Throws if it is no xlsx. */
-function read(bytes) {
+function read(bytes, me) {
   const X = window.XLSX; if (!X) throw new Error('xlsx library missing');
   const wb = X.read(bytes, { type: 'array', cellDates: true });
   const rowsOf = n => wb.Sheets[n] ? X.utils.sheet_to_json(wb.Sheets[n], { defval: '', raw: true }) : null;
@@ -166,9 +284,10 @@ function read(bytes) {
   }
   const F = { app: 'stoic-ranger', format: 1, schemas: {}, favs: [], purposes: [] };
   TABLES.forEach(t => { F[t] = []; });
+  F.shooters = [];                                    // only while reading an older file (see dropShooters)
   if (base) {
     const d = base.db;
-    TABLES.forEach(t => { F[t] = arr(d[t]).filter(r => r && typeof r === 'object').map(clone); });   // base stays as written
+    TABLES.concat('shooters').forEach(t => { F[t] = arr(d[t]).filter(r => r && typeof r === 'object').map(clone); });   // base stays as written
     F.favs = arr(d.favs); F.purposes = arr(d.purposes); F.schemas = d.schemas || {};
   }
   const found = [], created = [];
@@ -205,9 +324,21 @@ function read(bytes) {
       // an entry without a uid in the app (older Gun Database rows) keeps going by its ID: no new uid here
     });
   };
-  for (const [t, [sheet, prefix, cols]] of Object.entries(REG)) overlay(t, sheet, cols, {
+  for (const [t, [sheet, prefix, cols]] of Object.entries(Object.assign({ shooters: OLD_SHOOTERS }, REG))) overlay(t, sheet, cols, {
     prefix, pad: t === 'roundsLog' ? 4 : 3,
     need: t === 'roundsLog' ? r => !!(r.date || r.rounds) : t === 'barrels' ? r => !!(r.weaponId || r.name) : r => !!(r.name || r.id),
+  });
+  // tombstones (section E): every app's rows; ours get their table key
+  const BY_SHEET = {}; Object.entries(SHEETS).forEach(([k, n]) => { BY_SHEET[n] = k; });
+  F.deleted = [];
+  const D = rowsOf(DELETED);
+  if (D) D.forEach(row => {
+    const at = row['Deleted at'] instanceof Date ? row['Deleted at'].toISOString() : txt(row['Deleted at']);
+    const app = txt(row.App) || 'SR', table = txt(row.Table), id = txt(row.ID), uid = txt(row['Source uid']);
+    if (!at || !table || (!id && !uid)) return;
+    const d = { app, table, id, uid, label: txt(row.Label), at, by: txt(row['Deleted by']) };
+    if (app === 'SR') { if (!BY_SHEET[table]) return; d.t = BY_SHEET[table]; }
+    F.deleted.push(d);
   });
   // names → ids (Trainings and Drill_Results write names); a name that is nowhere yet becomes a new entry
   // the names as the app wrote them: a gun renamed in Excel is still found under its old name in Trainings
@@ -218,7 +349,8 @@ function read(bytes) {
     const L = F[t], was = OLD[t] && OLD[t].get(low(s));
     let r = L.find(x => x.id === s) || L.find(x => low(x.name) === low(s)) || L.find(x => txt(x.aliases).split(';').some(a => low(a) && low(a) === low(s)))
       || (was && L.find(x => x.id === was));
-    if (!r) { r = noUid({ id: nextId(L, REG[t][1]), uid: uuid(), name: s, notes: 'Created from database.xlsx' }); L.push(r); created.push([t, r]); }
+    if (!r) { const d = F.deleted.find(x => x.app === 'SR' && x.t === t && x.id && (x.id === s || low(x.label) === low(s))); if (d) return d.id; }   // deleted on purpose: no new entry (1.4.0)
+    if (!r) { r = noUid({ id: nextId(L, (REG[t] || OLD_SHOOTERS)[1]), uid: uuid(), name: s, notes: 'Created from database.xlsx' }); L.push(r); created.push([t, r]); }
     return r.id;
   };
   const P = rowsOf(SHEETS.purposes);
@@ -261,7 +393,7 @@ function read(bytes) {
       }
     });
   }
-  overlay('results', SHEETS.results, RESULT_COLS, {
+  overlay('results', SHEETS.results, RESULT_COLS.concat([['Shooter', 'shooter']]), {
     prefix: 'R', pad: 4, need: r => !!(r.drillId || r.date),
     fix: (rec, row) => {
       if ('shooter' in rec) { rec.shooterId = idFor('shooters', rec.shooter); delete rec.shooter; }
@@ -277,7 +409,7 @@ function read(bytes) {
     const t = F.trainings.find(x => x.id === id);
     r.training = t ? { app: 'training-log', id: t.id, uid: t.uid, date: t.date || r.date || '' } : (r.training || null);
   });
-  overlay('sheets', SHEETS.sheets, SHEET_COLS, { prefix: 'SH', pad: 3, need: r => !!(r.date || r.id), fix: rec => { delete rec.hitCount; } });
+  overlay('sheets', SHEETS.sheets, SHEET_COLS.concat([['Shooter', 'shooter'], ['Shooter ID', 'shooterId']]), { prefix: 'SH', pad: 3, need: r => !!(r.date || r.id), fix: rec => { delete rec.hitCount; } });
   // shots: only for datasheets the full copy does not have (typed in Excel, or a file without the copy)
   const S = rowsOf(SHEETS.shots);
   if (S) {
@@ -293,7 +425,8 @@ function read(bytes) {
   const Fv = rowsOf(SHEETS.favs);
   if (Fv) { found.push(SHEETS.favs); F.favs = [...new Set(Fv.map(r => txt(r['Drill ID'])).filter(Boolean))]; }
   if (!base && !found.length) throw new Error('This file has none of the Stoic Ranger sheets (Weapons, Trainings, …).');
-  return { db: F, hasCopy: !!base, saved: base ? base.saved : '', by: base ? base.by : '', sheets: found, created: created.length };
+  const shot = dropShooters(F, me);
+  return { db: F, shot, hasCopy: !!base, saved: base ? base.saved : '', by: base ? base.by : '', sheets: found, created: created.length };
 }
 function nextId(list, prefix, pad = 3) {
   let n = 0; arr(list).forEach(r => { const m = new RegExp('^(?:EX-)?' + prefix + '-(\\d+)$').exec(r && r.id || ''); if (m) n = Math.max(n, +m[1]); });
@@ -320,7 +453,11 @@ function mergeTable(B, A, F, firstSync, stats, t) {
       const take = firstSync || !b ? blank(av) && !blank(fv) : !same(fv, b[key]);
       if (take) { r[key] = clone(fv); changed = true; }
     });
-    if (changed) { r.updated = new Date().toISOString(); stats.changed[t] = (stats.changed[t] || 0) + 1; }
+    if (changed) {                                     // 1.4.0: the time of the change itself, not of this sync (tombstones compare it)
+      const fu = f.updated || '', au = a.updated || '';
+      if (fu || au) r.updated = fu > au ? fu : au; else delete r.updated;
+      stats.changed[t] = (stats.changed[t] || 0) + 1;
+    }
     out.push(r);
   });
   arr(F).forEach(f => {
@@ -350,7 +487,12 @@ function merge(base, app, file) {
       let a = (f.id && A.find(x => x.id === f.id && free(x) && (!f.name || !x.name || sameName(x)))) || null;
       if (!a && f.name) a = A.find(x => free(x) && sameName(x)) || null;
       if (!a && t === 'roundsLog') a = A.find(x => free(x) && txt(x.date) === txt(f.date) && x.weaponId === f.weaponId && +x.rounds === +f.rounds) || null;
-      if (!a) return;
+      if (!a) {                                           // 1.4.0: an entry deleted in the app stays deleted
+        const tombs = arr(U.deleted).concat(arr(file.deleted)).filter(d => d && d.t === t && (!d.app || d.app === 'SR'));
+        const d = (f.id && tombs.find(x => x.id === f.id && (!f.name || !x.label || low(x.label) === low(f.name)))) || (f.name && tombs.find(x => x.label && low(x.label) === low(f.name))) || null;
+        if (d) { f.uid = d.uid || f.uid; if (d.id) f.id = d.id; delete f.updated; }
+        return;
+      }
       used.add(keyOf(a));
       f.uid = a.uid || f.uid;
       if (!a.uid) { delete f.uid; }                       // the app's entry goes by its ID only
@@ -386,6 +528,43 @@ function merge(base, app, file) {
   return { db: U, stats };
 }
 const countOf = s => Object.values(s).reduce((a, n) => a + n, 0);
+/* ---------- 1.4.0: delete on all devices (SHARED-DB-CONTRACT.md, section E) ---------- */
+const delKey = d => [d.app || 'SR', d.app && d.app !== 'SR' ? d.table : d.t, d.uid || d.id].join('|');
+/** Both sides' tombstones in one list: one per entry, the newer delete wins; the local copy for Undo is kept;
+    tombstones older than a year go. */
+function mergeDeleted(a, b) {
+  const m = new Map(), limit = new Date(Date.now() - KEEP_DAYS * 864e5).toISOString();
+  arr(a).concat(arr(b)).forEach(d => {
+    if (!d || !d.at || d.at < limit) return;
+    const k = delKey(d), o = m.get(k);
+    if (!o) { m.set(k, Object.assign({}, d)); return; }
+    const n = d.at > o.at ? Object.assign({}, o, d) : Object.assign({}, d, o);
+    if (o.row && !n.row) n.row = o.row;
+    if (o.undone && !n.undone) n.undone = o.undone;
+    m.set(k, n);
+  });
+  return [...m.values()];
+}
+/** An entry is deleted when a tombstone of ours names it and it was not saved after the delete. */
+function isDeleted(d, r) {
+  if (!d || (d.app && d.app !== 'SR') || !r) return false;
+  const hit = (d.uid && r.uid && d.uid === r.uid) || (d.id && r.id && d.id === r.id && (!d.uid || !r.uid || d.uid === r.uid));
+  return !!hit && !(r.updated && r.updated > d.at);
+}
+/** Takes out of db every entry a tombstone deletes (its copy goes onto the tombstone for Undo). Returns the count. */
+function applyDeleted(db) {
+  let n = 0;
+  arr(db.deleted).forEach(d => {
+    if (!d || (d.app && d.app !== 'SR') || !d.t || !Array.isArray(db[d.t])) return;
+    db[d.t] = db[d.t].filter(r => { if (r && !r.example && isDeleted(d, r)) { if (!d.row) d.row = JSON.parse(JSON.stringify(r)); n++; return false; } return true; });
+  });
+  // trainings keep the name of a deleted gun (every device the same way, so database.xlsx shows a name, not an id)
+  const gone = new Map(arr(db.deleted).filter(d => d && (!d.app || d.app === 'SR') && d.t === 'weapons' && d.id && !d.undone).map(d => [d.id, d.label || '']));
+  if (gone.size) arr(db.trainings).forEach(t => arr(t && t.weapons).forEach(w => {
+    if (w && gone.has(w.weaponId) && !w.name && !arr(db.weapons).some(x => x && x.id === w.weaponId)) w.name = gone.get(w.weaponId);
+  }));
+  return n;
+}
 /** 1.3.1 one-time clean-up of the entries 1.3.0 added twice or more from files made in Excel (see merge()).
     Only exact copies go: guns, ammunition, barrels, shooters, trainers with the same name and the same data;
     trainings, drill results, datasheets, rounds log rows with the same ID and the same data. References to a copy
@@ -402,6 +581,7 @@ function dedupe(db) {
   }));
   const pass = (t, byName) => {
     const keep = new Map(); remap[t] = remap[t] || {};
+    if (!Array.isArray(U[t])) return;                // no shooters table any more (1.4.0)
     U[t] = arr(U[t]).filter(r => {
       if (!r || typeof r !== 'object' || r.example) return true;
       if (byName ? !r.name : !r.id) return true;
@@ -426,5 +606,5 @@ function dedupe(db) {
   return { db: U, removed, total: countOf(removed) };
 }
 
-window.SRX = { FORMAT, write, read, merge, dedupe, dbPart, nextId, countOf, SHEETS, REG, TABLES, MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+window.SRX = { FORMAT, fromTraining, write, read, merge, dedupe, dropShooters, mergeDeleted, isDeleted, applyDeleted, UNDO_DAYS, dbPart, nextId, countOf, SHEETS, REG, TABLES, MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 })();

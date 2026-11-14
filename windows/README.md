@@ -40,6 +40,16 @@ app data are not removed.
 - Before each save the file on Nextcloud is copied to `<folder>/backups/` (newest 30 kept).
 - Linked Stoic Ranger apps on a phone take over the same setting (each device still needs the app password once).
 
+## Deleting and starting over (1.4.0)
+- An entry you delete is deleted on every device that shares database.xlsx (the phone, this PC, Nextcloud): the
+  next sync does not bring it back, even from an old Excel copy. Settings › **Recently deleted** keeps deletes for
+  30 days with **Undo** (it comes back everywhere).
+- Settings › "Something wrong with the data on this PC?" › **Replace this PC's data** with the Nextcloud copy (or the
+  linked database.xlsx). A backup of the PC's data is made first.
+- One shooter only: there is no shooter in the data any more. Entries of other shooters say "Shot by <name>" in
+  their remarks and keep their rounds.
+- The drop-down lists, column widths and frozen header rows you set in Excel stay when the app saves the file.
+
 ## Build (Claude, on Linux)
 `windows/tools/build-win.sh` → `windows/dist/vX.Y.Z` (Electron 33.2.1 for Windows x64, the page code from
 `stoic-ranger/app/src/main/assets/www`, icon and version set with resedit, app zip split into 20 MB parts, installer,

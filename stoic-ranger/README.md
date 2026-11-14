@@ -55,6 +55,25 @@ the Android WebDAV code (`DavHttp.java`, on the desktop JVM) and the app's sync 
 
 ## Versions
 
+- **1.4.0** (versionCode 15; Android, web, Windows 1.4.0; 2026-11-14): delete on all devices, shooter out of the
+  data (#20), Excel layout kept (#25).
+  - **Delete on all devices** (SHARED-DB-CONTRACT.md, section E): a delete becomes a tombstone (`deleted` in db.json,
+    hidden sheet `_Deleted` in database.xlsx) that every device applies, so a later sync no longer brings the entry
+    back, also not from an old Excel file that still has the row. Changed entries carry `updated`; the later of a
+    change and a delete wins, which is also how **Undo** works. Settings › **Recently deleted** lists deletes of the
+    last 30 days with Undo (tombstones themselves are kept a year). A gun deleted in any part is really deleted now
+    (it used to stay when trainings used it); those trainings keep its name.
+  - **Replace this device's data** with the Nextcloud copy (or the linked database.xlsx): emergency button in
+    Settings, a backup of the device's data first.
+  - **One shooter, no shooter in the data** (#20): no Shooters table/sheet, no Shooter field or column in trainings,
+    drill results and datasheets, no shooter filter or field in the Gun Database (dashboard, download, datasheet
+    form and print), Training Log or Shooting Drills. Once, with a backup first (`backups/db-before-1.4.0-shooter-*`),
+    entries of another shooter get "Shot by <name>" in their remarks/notes and keep their rounds; older files and
+    backups with shooters still import the same way.
+  - **Excel layout kept** (#25): drop-down lists, column widths, frozen rows and named ranges of an existing
+    database.xlsx survive every write; a drop-down follows its column when columns move.
+  - Rounds_Log in database.xlsx holds only rounds entered by hand: the rounds the app makes from trainings are in
+    Trainings already (the PC dashboard counted them twice).
 - **1.3.1** (versionCode 14; Android, web, Windows 1.3.1; 2026-11-14): the sync fixed after the first test with a
   real Nextcloud (backlog #21–#24). A database.xlsx made in Excel or by the PC dashboard (no Source uid) no longer adds
   its rows again at every sync: they are matched to the app's entries by ID or name; the copies 1.3.0 made are merged

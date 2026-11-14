@@ -8,12 +8,12 @@ TL.views.trainings = {
   render(el, parts, q) {
     TL.header('Trainings');
     const term = (q.q || '').toLowerCase();
-    const hay = t => [t.desc, t.remarks, t.date, TL.FIRE[t.fire], TL.nameOf('shooters', t.shooterId), TL.nameOf('trainers', t.trainerId), ...t.weapons.map(w => TL.nameOf('weapons', w.weaponId))].join(' ').toLowerCase();
+    const hay = t => [t.desc, t.remarks, t.date, TL.FIRE[t.fire], TL.nameOf('trainers', t.trainerId), ...t.weapons.map(w => TL.nameOf('weapons', w.weaponId))].join(' ').toLowerCase();
     const list = TL.filtered({}).filter(t => !term || hay(t).includes(term));
     const byYear = {};
     list.forEach(t => (byYear[(t.date || '????').slice(0, 4)] = byYear[(t.date || '????').slice(0, 4)] || []).push(t));
     el.innerHTML = `
-      <input class="search" type="search" id="tq" placeholder="Search description, shooter, gun, trainer …" value="${esc(q.q || '')}">
+      <input class="search" type="search" id="tq" placeholder="Search description, gun, trainer …" value="${esc(q.q || '')}">
       ${Object.keys(byYear).sort().reverse().map(y => {
         const L = byYear[y], s = TL.summary(L, {});
         return `<div class="ytitle"><span>${esc(y)}</span><span>${L.length}${s.nDry ? ` (${s.nDry} dry)` : ''} · ${TL.fh(s.hours) || 0} h · ${fmtInt(s.rounds) || 0} rds</span></div><div class="list">${L.map(t => TL.trainingItem(t)).join('')}</div>`;
@@ -54,7 +54,6 @@ TL.views.training = {
       ${src ? `<div class="idline">${esc(src.id)}${src.example ? ' · <span class="pill example">Example</span>' : ''}</div>` : ''}
       <div class="seg" id="fFire">${Object.entries(TL.FIRE).map(([k, l]) => `<a href="javascript:void 0" data-k="${k}" class="${fire === k ? 'on' : ''}">${l}</a>`).join('')}</div>
       <div class="card"><div class="fg">
-        ${TL.isOther(t) ? `<p class="note s6">Logged for <b>${esc(TL.nameOf('shooters', t.shooterId))}</b> (before 1.3.0). It stays theirs; rounds shot by others now go to the gun as a rounds entry with a note.</p>` : ''}
         <label class="s2"><span>Date *</span><input type="date" id="fDate" value="${esc(t.date)}"></label>
         <label class="s2"><span>Start time</span><input type="time" id="fStart" value="${esc(t.start)}"></label>
         <label class="s2"><span>Duration [h]</span><input type="text" inputmode="decimal" id="fDur" placeholder="e.g. 2.5" value="${esc(TL.fh(t.durationH))}"></label>
@@ -113,7 +112,7 @@ TL.views.training = {
     const save = () => {
       if (TL.readOnly) { TL.toast('Read-only: update the app first.', true); return; }
       const v = {
-        shooterId: (src && src.shooterId) || '', date: $('#fDate', el).value, start: $('#fStart', el).value,
+        date: $('#fDate', el).value, start: $('#fStart', el).value,
         durationH: num($('#fDur', el).value), fire, desc: $('#fDesc', el).value.trim(), weapons: readWeapons(),
         trainerId: $('#fTrainer', el).value, remarks: $('#fRem', el).value.trim(),
       };
@@ -125,11 +124,9 @@ TL.views.training = {
       if ($('#fDur', el).value.trim() && (v.durationH == null || v.durationH < 0 || v.durationH > 24)) err.push('duration must be a number of hours (e.g. 2.5)');
       if (v.weapons.some(w => w.rounds != null && (w.rounds < 0 || !Number.isInteger(w.rounds)))) err.push(fire === 'dry' ? 'reps must be whole numbers' : 'rounds must be whole numbers');
       if (err.length) { $('#fMsg', el).textContent = 'Please ' + err.join(', ') + '.'; $('#fMsg', el).scrollIntoView({ block: 'center' }); return; }
-      if (!v.shooterId) v.shooterId = TL.ensureMe();
       const now = new Date().toISOString();
-      if (src) { Object.assign(src, v, { updated: now }); delete src.example; }
+      if (src) { Object.assign(src, v, { updated: now }); delete src.example; delete src.shooterId; }
       else db.trainings.push(Object.assign({ id: TL.nextId(db.trainings, 'TR', 4), uid: TL.uuid(), created: now, updated: now }, v));
-      if (!TL.isOther(v)) db.settings.lastShooter = v.shooterId;
       db.settings.lastFire = fire;
       if (send && send.checked && src) delete src.sendRounds;
       TL.save(true);

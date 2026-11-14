@@ -45,6 +45,21 @@ Daily Thoughts is not part of the shooting database (Manuel 2026-10-28). From 1.
   from its `thoughtFavs` / `settings.dt`. Old SR_Daily Thoughts backups are merged into `thoughts.json`.
 - Tests: `node tools/test-web.mjs` (part 6) and `node stoic-ranger/tools/test-one-app.mjs` (part 6).
 
+## Stoic Ranger Shooting 1.4.0: tombstones, no shooter in the data
+
+- `db.json` gets `deleted: [{ app: 'SR', t, id, uid, label, at, by, part, row?, undone? }]` (added, nothing changed):
+  one entry per delete. `row` is the local copy for Undo (dropped after 30 days), the tombstone itself goes after
+  365 days. Changed and new entries get `updated` (ISO time). database.xlsx gets the hidden sheet `_Deleted`
+  (App, Table, ID, Source uid, Label, Deleted at, Deleted by), see SHARED-DB-CONTRACT.md section E; rows of other
+  apps in it are kept as they are.
+- **Shooter (#20), once and again whenever older data comes in** (start, restored backup, brought-in backup, a
+  database.xlsx with a Shooters sheet): `backups/db-before-1.4.0-shooter-<time>.json` first, then the user is
+  `settings.common.meName` (else the shooter with the most entries, then stored there). Every training, drill result,
+  datasheet and rounds entry of another shooter gets "Shot by <name>" in `remarks` / `notes` / `note` (once), then
+  `shooterId` / `shooter` and the `shooters` table are removed. Rounds and everything else stay. The backup holds the
+  old shape; a history entry records it.
+- **Replace** (Settings) writes `backups/db-before-replace-<time>.json` first and refuses if that fails.
+
 ## Stoic Ranger Shooting 1.3.1: sync fixes, clean-up of copies
 
 - No format change (database FORMAT and database.xlsx columns as in 1.3.0).

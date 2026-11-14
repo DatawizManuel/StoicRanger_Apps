@@ -110,7 +110,9 @@ ok(!errors.length, 'home starts without errors ' + errors.join(' | '));
 ok(await page.evaluate(() => SR.converted), 'SR_Database data converted on first start');
 let U = await unified();
 ok(U.app === 'stoic-ranger' && U.format === 1, 'db.json is now the one Stoic Ranger database');
-ok(['weapons', 'barrels', 'munitions', 'shooters', 'sheets'].every(t => U[t].length === GUN[t].length), 'no guns, barrels, ammo, shooters or datasheets lost');
+ok(['weapons', 'barrels', 'munitions', 'sheets'].every(t => U[t].length === GUN[t].length), 'no guns, barrels, ammo or datasheets lost');
+ok(!('shooters' in U) && U.sheets.every(x => !('shooterId' in x) && !('shooter' in x)) && !!U.settings.common.meName, '1.4.0 (#20): no shooters table and no shooter field, the user is ' + U.settings.common.meName);
+ok((await keys()).some(k => k.startsWith('m.backup.db-before-1.4.0-shooter-')), '1.4.0 (#20): backup before the shooter went');
 ok((await keys()).some(k => k.startsWith('m.backup.db-before-stoic-ranger-1.0')), 'backup of the old file kept before converting');
 
 // 2. home and the parts
@@ -126,7 +128,7 @@ ok(U.schemas.gundb === 5 && U.weapons.length === GUN.weapons.length, 'Gun Databa
 await open('index.html');   // backups are brought in on the home page (Data)
 
 // 3. bring in old backups
-const sh0 = U.shooters[0];
+const sh0 = { name: U.settings.common.meName };
 const TLB = { app: 'sr-training-log', schema: 3, settings: {}, history: [],
   shooters: [{ id: 'S-001', name: sh0.name, status: 'Active' }, { id: 'S-002', name: 'Test Friend', status: 'Active' }],
   weapons: [{ id: 'W-001', name: 'Test Pistol', type: 'Pistol', caliber: '9x19' }],
@@ -140,13 +142,13 @@ const DTB = { app: 'sr-daily-thoughts', schema: 1, settings: { theme: 'auto' }, 
 const bring = async j => page.evaluate(j => SR.importBackup(j), j);
 let r = await bring(TLB); U = await unified();
 ok(!r.error && U.trainings.length === 2, 'Training Log backup: 2 trainings brought in');
-ok(U.shooters.filter(s => s.name === sh0.name).length === 1 && U.shooters.some(s => s.name === 'Test Friend'), 'same-name shooter used once, new shooter added');
+ok(!('shooters' in U) && /Shot by Test Friend/.test(U.trainings.find(t => t.desc === 'Test dry').remarks || '') && !U.trainings.find(t => t.desc === 'Test live').remarks, 'old backup: no shooter brought in; the training of another shooter says "Shot by Test Friend"');
 const pistol = U.weapons.find(w => w.name === 'Test Pistol');
 ok(pistol && U.trainings.every(t => t.weapons[0].weaponId === pistol.id), 'training guns point at the gun in the one database');
 r = await bring(TLB); U = await unified();
 ok(U.trainings.length === 2 && U.weapons.filter(w => w.name === 'Test Pistol').length === 1, 'bringing in the same backup twice adds nothing');
 await bring(SDB); await bring(DTB); await bring(DTB); U = await unified();
-ok(U.results.length === 1 && U.results[0].weaponId === pistol.id, 'Shooting Drills result brought in, linked to the same gun');
+ok(U.results.length === 1 && U.results[0].weaponId === pistol.id && U.results[0].notes === 'Shot by Test Friend', 'Shooting Drills result brought in, linked to the same gun, "Shot by" its shooter');
 ok((await thoughts()).favs.length === 2 && !(U.thoughtFavs || []).length, 'Daily Thoughts favourites brought in once, into thoughts.json');
 ok((await keys()).some(k => k.startsWith('m.backup.db-before-import-tl')), 'backup kept before an import');
 
@@ -225,18 +227,18 @@ ok(await page.locator('#xNew').count() === 1 && await page.locator('#xOpen').cou
 r = await page.evaluate(() => SR.xlsx.link('create'));
 let X = await xl();
 U = await unified();
-ok(r.ok && X && X.Weapons.length === U.weapons.length && X.Trainings.length === U.trainings.length && X.Shooters.length === U.shooters.length, 'a new database.xlsx holds every gun, training and shooter ' + JSON.stringify(r));
-ok(['Weapons', 'Barrels', 'Munitions', 'Shooters', 'Rounds_Log', 'Targets', 'Purposes', 'Trainers', 'Trainings', 'Drill_Results', 'Info'].every(n => X[n]), 'with every sheet of the PC dashboard');
-// Excel: rename a gun, add a trainer, delete a shooter row; the app meanwhile changes another field of the same gun
+ok(r.ok && X && X.Weapons.length === U.weapons.length && X.Trainings.length === U.trainings.length && !X.Shooters && !('Shooter' in X.Trainings[0]) && !('Shooter' in (X.Drill_Results[0] || {})), 'a new database.xlsx holds every gun and training, no shooters (1.4.0) ' + JSON.stringify(r));
+ok(['Weapons', 'Barrels', 'Munitions', 'Rounds_Log', 'Targets', 'Purposes', 'Trainers', 'Trainings', 'Drill_Results', 'Info'].every(n => X[n]), 'with every sheet of the PC dashboard');
+// Excel: rename a gun, add a trainer, delete a trainer row; the app meanwhile changes another field of the same gun
 const gun = U.weapons.find(w => w.name === 'Test Pistol');
 await excel(() => {
   const w = rows('Weapons'); w.find(x => x.Name === 'Test Pistol').Name = 'Test Pistol (Excel)'; put('Weapons', w);
   const t = rows('Trainers'); t.push({ Name: 'Excel Trainer' }); put('Trainers', t);
-  put('Shooters', rows('Shooters').filter(x => x.Name !== 'Test Friend'));
+  put('Trainers', rows('Trainers').filter(x => x.Name !== 'Test Trainer'));
 });
 await open('training/index.html', 700);
 ok(!errors.length && await page.evaluate(() => TL.db.weapons.some(w => w.name === 'Test Pistol (Excel)') && TL.db.trainers.some(t => t.name === 'Excel Trainer')), 'Excel changes come in when a part starts ' + errors.join(' | '));
-ok(await page.evaluate(() => TL.db.shooters.some(s => s.name === 'Test Friend')), 'a row deleted in Excel is not lost in the app');
+ok(await page.evaluate(() => TL.db.trainers.some(s => s.name === 'Test Trainer')), 'a row deleted in Excel is not lost in the app');
 await page.evaluate(id => { const w = TL.db.weapons.find(x => x.id === id); w.caliber = '9mm Luger'; TL.save(true); }, gun.id);
 await page.evaluate(() => SR.flush());
 X = await xl();
@@ -314,14 +316,15 @@ await open('training/index.html#/training/new', 700);
 ok(await page.locator('#fShooter').count() === 0, 'the training form has no shooter choice any more');
 await page.fill('#fDate', '2026-11-07'); await page.fill('#fDesc', 'One shooter test');
 await page.click('#tSaveTop'); await page.waitForTimeout(400);
-const tr13 = await page.evaluate(() => { const t = TL.db.trainings.find(x => x.desc === 'One shooter test'); return t && { sh: t.shooterId, me: TL.meId() }; });
-ok(tr13 && tr13.sh && tr13.sh === tr13.me, 'a new training goes to the own shooter');
-const other = await page.evaluate(() => { const f = TL.db.shooters.find(s => s.name === 'Test Friend'); const t = TL.db.trainings.find(x => x.shooterId === f.id); return t ? t.id : ''; });
+const tr13 = await page.evaluate(() => { const t = JSON.parse(localStorage.getItem('m.db')).trainings.find(x => x.desc === 'One shooter test'); return t ? { has: 'shooterId' in t } : null; });
+ok(tr13 && !tr13.has, 'a new training has no shooter (1.4.0)');
+const other = await page.evaluate(() => { const t = TL.db.trainings.find(x => /Shot by Test Friend/.test(x.remarks || '')); return t ? t.id : ''; });
+ok(!!other, 'the older training of another shooter is still there, with "Shot by Test Friend"');
 if (other) {
   await open('training/index.html#/training/' + other, 700);
-  ok(/Logged for/.test(await page.evaluate(() => document.body.innerText)), 'an older training of another shooter says whose it is');
+  ok(/Shot by Test Friend/.test(await page.evaluate(() => document.querySelector('#fRem').value)), 'its remarks say whose it is');
   await page.click('#tSaveTop'); await page.waitForTimeout(400);
-  ok(await page.evaluate(id => { const t = TL.db.trainings.find(x => x.id === id); return TL.nameOf('shooters', t.shooterId) === 'Test Friend'; }, other), 'and keeps that shooter when saved');
+  ok(await page.evaluate(id => { const t = JSON.parse(localStorage.getItem('m.db')).trainings.find(x => x.id === id); return /Shot by Test Friend/.test(t.remarks) && !('shooterId' in t); }, other), 'and keeps it when saved');
 }
 await open('index.html', 600);
 ok(await page.locator('.srnew a[href="gun/index.html#/db/roundsLog/new"]').count() === 1, 'home has + Rounds');
@@ -389,6 +392,40 @@ ok(off && off.offline && await page.evaluate(() => !!SR.xlsx.state().dirty), 'of
 await page.evaluate(() => localStorage.removeItem('m.davdown'));
 await page.evaluate(() => SR.xlsx.syncOut());
 ok(await page.evaluate(() => !SR.xlsx.state().dirty), 'and goes out when Nextcloud is back');
+// 1.4.0: delete on all devices (SHARED-DB-CONTRACT section E), Recently deleted with Undo, replace this device's data
+const davFile = () => page.evaluate(() => { const d = JSON.parse(localStorage.getItem('m.dav')); const F = SRX.read(Uint8Array.from(atob(d.files['database.xlsx'].b64), c => c.charCodeAt(0)));
+  const wb = XLSX.read(atob(d.files['database.xlsx'].b64), { type: 'binary' }); return { guns: F.db.weapons.map(w => w.name), del: F.db.deleted, sheet: wb.SheetNames.includes('_Deleted'), hidden: ((wb.Workbook || {}).Sheets || []).some(x => x.name === '_Deleted' && x.Hidden) }; });
+await open('gun/index.html', 700);
+await page.evaluate(() => { RB.db.weapons = RB.db.weapons.filter(x => x.name !== 'Local Rifle'); RB.save(true); });
+await open('index.html', 600); await page.evaluate(() => SR.xlsx.syncOut());
+let F14 = await davFile();
+ok(await page.evaluate(() => !SR.db.weapons.some(w => w.name === 'Local Rifle') && SR.db.deleted.some(d => d.uid === 'uid-local-gun' && d.t === 'weapons' && d.at && d.row)), 'deleting a gun leaves a tombstone (with a copy for Undo)');
+ok(!F14.guns.includes('Local Rifle') && F14.del.some(d => d.uid === 'uid-local-gun' && d.app === 'SR' && d.table === 'Weapons') && F14.sheet && F14.hidden, 'database.xlsx on Nextcloud: the gun is gone and the hidden _Deleted sheet has its row');
+await open('index.html#/data', 600);
+ok(/Local Rifle/.test(await page.evaluate(() => (document.querySelector('#delCard') || {}).innerText || '')), 'Settings › Recently deleted lists it');
+await page.click('#delCard [data-undo]'); await page.waitForTimeout(300);
+await page.evaluate(() => SR.xlsx.syncOut());
+F14 = await davFile();
+ok(await page.evaluate(() => SR.db.weapons.some(w => w.name === 'Local Rifle' && w.uid === 'uid-local-gun')) && F14.guns.includes('Local Rifle'), 'Undo brings it back here and on Nextcloud');
+// another device deleted "Cloud Rifle"; its row is still in the Weapons sheet (an older app or Excel kept it)
+await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('m.dav')), u = JSON.parse(JSON.stringify(SR.db));
+  u.deleted.push({ app: 'SR', t: 'weapons', id: (u.weapons.find(w => w.uid === 'uid-nc-gun') || {}).id, uid: 'uid-nc-gun', label: 'Cloud Rifle', at: new Date(Date.now() + 1000).toISOString(), by: 'Other phone' });
+  const b = SRX.write(u, { by: 'other', keep: Uint8Array.from(atob(d.files['database.xlsx'].b64), c => c.charCodeAt(0)) });
+  let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+  d.n++; d.files['database.xlsx'] = { b64: btoa(s), etag: '"e' + d.n + '"', t: 1700000000000 + d.n * 1000 }; localStorage.setItem('m.dav', JSON.stringify(d));
+});
+await page.evaluate(() => { SR.xlsx.syncIn(); SR.xlsx.syncOut(); });
+F14 = await davFile();
+ok(await page.evaluate(() => !SR.db.weapons.some(w => w.uid === 'uid-nc-gun')) && !F14.guns.includes('Cloud Rifle'), 'a gun deleted on another device goes here too, and stays gone after the next sync');
+await page.evaluate(() => { SR.xlsx.syncIn(); });
+ok(await page.evaluate(() => !SR.db.weapons.some(w => w.uid === 'uid-nc-gun')), 'a second sync does not bring it back');
+// replace this device's data with the Nextcloud copy
+await page.evaluate(() => { SR.db.weapons.push({ id: 'W950', uid: 'uid-only-here', name: 'Only Here', type: 'Rifle' }); });
+const rep = await page.evaluate(() => SR.storage.replace());
+ok(rep && rep.ok && await page.evaluate(() => !SR.db.weapons.some(w => w.uid === 'uid-only-here')) && (await keys()).some(k => k.startsWith('m.backup.db-before-replace-')), 'Replace: this device now has the Nextcloud copy, a backup was made first');
+await open('index.html#/data', 600);
+ok(await page.locator('#stReplace').count() === 1, 'Settings offers the Replace button while synced');
 // back to this phone only
 const davFiles = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('m.dav')).files).length);
 const lr = await page.evaluate(() => SR.storage.local());

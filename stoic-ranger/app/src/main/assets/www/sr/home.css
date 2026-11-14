@@ -59,3 +59,11 @@ body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
 .srset span{font-size:16px}
 .srstore{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 12px;padding:10px 14px;border-radius:10px;border:1px solid var(--line,#8884);text-decoration:none;color:inherit;font-size:14px}
 .srstore b{white-space:nowrap}
+/* 1.4.0 Recently deleted + replace */
+.dellist{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.delrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line,#8884)}
+.delrow span{flex:1;min-width:0;overflow-wrap:anywhere}
+.delrow small{display:block;opacity:.7;font-size:12px}
+.delrow .btn{flex:none;width:auto;padding:6px 14px}
+.srrepl{margin-top:12px}
+.srrepl summary{cursor:pointer;font-size:14px;opacity:.85}

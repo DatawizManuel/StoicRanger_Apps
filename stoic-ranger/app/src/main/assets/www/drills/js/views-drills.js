@@ -82,7 +82,7 @@ SD.views.drill = {
         ${p ? `<div class="card prt"><div class="pthumb">${SD.printableSvg(p.id, { cls: 'thumb' })}</div><div class="pmain"><h3>Printable target</h3><p><b>${esc(p.name)}</b> · ${esc(p.desc)}</p>
           <button class="btn pri" id="dvTarget">⎙ Print target</button></div></div>` : ''}
         <h2>Results <small class="mono">${res.length}</small></h2>
-        ${best ? `<div class="best"><span class="l">Best</span> ${esc(SD.resultText(d, best))} <small>· ${esc(SD.fmtDate(best.date))}${best.shooterId ? ' · ' + esc(SD.nameOf('shooters', best.shooterId)) : ''}</small></div>` : ''}
+        ${best ? `<div class="best"><span class="l">Best</span> ${esc(SD.resultText(d, best))} <small>· ${esc(SD.fmtDate(best.date))}</small></div>` : ''}
         <div class="list">${res.slice(0, 8).map(r => resultItem(d, r)).join('') || '<div class="empty">No results yet. Run the drill and log how it went.</div>'}</div>
         <div class="stack"><a class="btn pri big" href="#/result/new?drill=${d.id}">Log a result</a>
           <button class="btn" id="dvPrint2">⎙ Print this drill as one page</button></div>
@@ -98,7 +98,7 @@ function resultItem(d, r) {
   return `<div class="item" data-href="#/result/${encodeURIComponent(r.id)}"><div class="main">
     <div class="date">${esc(SD.fmtDate(r.date))} <span class="tag ${r.mode === 'dry' ? 'dry' : 'live'}">${r.mode === 'dry' ? 'Dry' : 'Live'}</span>${r.pass === true ? '<span class="tag ok">Passed</span>' : r.pass === false ? '<span class="tag no">Not passed</span>' : ''}</div>
     <div class="t">${esc(SD.resultText(d, r) || 'Result')}</div>
-    <div class="kvs">${[SD.nameOf('shooters', r.shooterId), SD.nameOf('weapons', r.weaponId), r.distanceM != null && r.distanceM !== '' && r.distanceM + ' m'].filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('')}${r.training ? `<span class="pill linked">Training ${esc(r.training.id)}</span>` : ''}</div>
+    <div class="kvs">${[SD.nameOf('weapons', r.weaponId), r.distanceM != null && r.distanceM !== '' && r.distanceM + ' m'].filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('')}${r.training ? `<span class="pill linked">Training ${esc(r.training.id)}</span>` : ''}</div>
     ${r.notes ? `<div class="desc">${esc(r.notes)}</div>` : ''}</div></div>`;
 }
 SD.resultItem = resultItem;
@@ -110,7 +110,7 @@ SD.views.result = {
     const isNew = id === 'new', r = isNew ? null : SD.byId(SD.db.results, id);
     if (!isNew && !r) { SD.header('Result', { back: true }); el.innerHTML = '<div class="empty">This result no longer exists.</div>'; return; }
     const s = SD.db.settings;
-    const v = r ? Object.assign({}, r) : { drillId: q.drill || '', date: SD.today(), shooterId: s.lastShooter || '', weaponId: s.lastWeapon || '', mode: '' };
+    const v = r ? Object.assign({}, r) : { drillId: q.drill || '', date: SD.today(), weaponId: s.lastWeapon || '', mode: '' };
     let d = SD.drill(v.drillId);
     if (isNew && d && !v.mode) v.mode = d.live ? 'live' : 'dry';
     SD.header(isNew ? 'Log result' : 'Result', { back: true, actions: '<button class="ib" id="rsTop" aria-label="Save">✓</button>' });
@@ -123,8 +123,7 @@ SD.views.result = {
         <label class="s3"><span>Date *</span><input type="date" id="rDate" value="${esc(v.date || '')}"></label>
         <label class="s3"><span>Live / dry</span><select id="rMode"><option value="live"${v.mode !== 'dry' ? ' selected' : ''}>Live fire</option><option value="dry"${v.mode === 'dry' ? ' selected' : ''}>Dry fire</option></select></label>
         <div class="s6" id="rTrWrap"${SD.linkOn() || v.training ? '' : ' hidden'}><label><span class="flabel">Training (SR_Training Log)</span><select id="rTraining"></select></label><small class="note" id="rTrNote"></small></div>
-        <label class="s3"><span>Shooter</span><div class="selrow"><select id="rShooter">${opts('shooters', v.shooterId)}</select><button class="btn sm" type="button" id="rAddS" aria-label="Add new shooter">＋</button></div></label>
-        <label class="s3"><span>Gun</span><div class="selrow"><select id="rGun">${opts('weapons', v.weaponId)}</select><button class="btn sm" type="button" id="rAddW" aria-label="Add new gun">＋</button></div></label>
+        <label class="s6"><span>Gun</span><div class="selrow"><select id="rGun">${opts('weapons', v.weaponId)}</select><button class="btn sm" type="button" id="rAddW" aria-label="Add new gun">＋</button></div></label>
         <label class="s2"><span>Time s</span><input type="number" step="0.01" inputmode="decimal" id="rTime" value="${esc(v.timeS ?? '')}"></label>
         <label class="s2"><span>Hits</span><input type="number" inputmode="numeric" id="rHits" value="${esc(v.hits ?? '')}"></label>
         <label class="s2"><span>Shots</span><input type="number" inputmode="numeric" id="rShots" value="${esc(v.shots ?? '')}"></label>
@@ -143,14 +142,12 @@ SD.views.result = {
       const date = $('#rDate', el).value, list = SD.linkTrainings(date), sel = $('#rTraining', el);
       if (training && training.date !== date) training = null;
       if (auto && !training && list.length === 1) training = { app: 'training-log', id: list[0].id, uid: list[0].uid, date, label: SD.trainingLabel(list[0]) };
-      const opts = list.map(t => ({ id: t.id, uid: t.uid, label: SD.trainingLabel(t), shooterId: t.shooterId }));
+      const opts = list.map(t => ({ id: t.id, uid: t.uid, label: SD.trainingLabel(t) }));
       if (training && !opts.some(o => o.id === training.id)) opts.unshift({ id: training.id, uid: training.uid, label: training.label + ' (saved)' });
       sel.innerHTML = '<option value="">– not linked to a training –</option>' + opts.map(o => `<option value="${esc(o.id)}"${training && training.id === o.id ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
       sel.onchange = () => {
         const o = opts.find(x => x.id === sel.value);
         training = o ? { app: 'training-log', id: o.id, uid: o.uid, date, label: o.label.replace(/ \(saved\)$/, '') } : null;
-        const sh = o && SD.fromLinked('shooters', o.shooterId);
-        if (sh && !$('#rShooter', el).value) $('#rShooter', el).value = sh.id;
       };
       if (training && auto) sel.onchange();
       $('#rTrNote', el).textContent = !SD.linkOn() ? 'Linking is off: the saved link is kept.' : list.length ? `${list.length} training${list.length === 1 ? '' : 's'} on this date in the Training Log.` : 'No training on this date in the Training Log.';
@@ -165,20 +162,19 @@ SD.views.result = {
     info();
     $('#rDrill', el).onchange = info;
     $$('#rPass a', el).forEach(a => a.onclick = () => { pass = a.dataset.p === 'y' ? true : a.dataset.p === 'n' ? false : null; $$('#rPass a', el).forEach(b => b.classList.toggle('on', b === a)); });
-    $('#rAddS', el).onclick = () => SD.quickAdd('shooters', rec => { $('#rShooter', el).insertAdjacentHTML('beforeend', `<option value="${esc(rec.id)}">${esc(rec.name)}</option>`); $('#rShooter', el).value = rec.id; });
     $('#rAddW', el).onclick = () => SD.quickAdd('weapons', rec => { $('#rGun', el).insertAdjacentHTML('beforeend', `<option value="${esc(rec.id)}">${esc(rec.name)}</option>`); $('#rGun', el).value = rec.id; });
     const save = () => {
       if (SD.readOnly) { SD.toast('Read-only: update the app first.', true); return; }
       const drillId = $('#rDrill', el).value, date = $('#rDate', el).value;
       if (!drillId || !date) { $('#rMsg', el).textContent = 'Please choose the drill and the date.'; return; }
-      const val = { drillId, date, mode: $('#rMode', el).value, shooterId: $('#rShooter', el).value, weaponId: $('#rGun', el).value,
+      const val = { drillId, date, mode: $('#rMode', el).value, weaponId: $('#rGun', el).value,
         timeS: SD.num($('#rTime', el).value), hits: SD.num($('#rHits', el).value), shots: SD.num($('#rShots', el).value),
         points: SD.num($('#rPts', el).value), distanceM: SD.num($('#rDist', el).value), pass: pass == null ? null : pass, notes: $('#rNotes', el).value.trim(),
         training: training || null };
       const now = new Date().toISOString();
-      if (r) Object.assign(r, val, { updated: now });
+      if (r) { Object.assign(r, val, { updated: now }); delete r.shooterId; }
       else SD.db.results.push(Object.assign({ id: SD.nextId(SD.db.results, 'R', 4), uid: SD.uuid(), created: now, updated: now }, val));
-      s.lastShooter = val.shooterId; s.lastWeapon = val.weaponId;
+      s.lastWeapon = val.weaponId;
       SD.save(true); SD.toast('Result saved.');
       if (isNew) SD.go('#/drill/' + drillId, true); else SD.back();
     };

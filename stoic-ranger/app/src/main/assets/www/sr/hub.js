@@ -31,11 +31,12 @@ const RAW = window.SRNative;
 const FORMAT = 1;
 const PARTS = {
   gundb: { prefix: 'RB', dir: 'gun', name: 'Gun Database', app: undefined,
-    tables: ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'targets'] },
-  tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['shooters', 'weapons', 'trainers', 'trainings'] },
-  sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['shooters', 'weapons', 'results', 'favs'] },
+    tables: ['weapons', 'barrels', 'munitions', 'trainers', 'roundsLog', 'sheets', 'targets'] },
+  tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['weapons', 'trainers', 'trainings'] },
+  sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['weapons', 'results', 'favs'] },
 };
-const SHARED = ['shooters', 'weapons', 'trainers'];
+// 1.4.0 (remark #20): no shooters table any more, one shooter only (the user); see dropShooters140()
+const SHARED = ['weapons', 'trainers'];
 const ALL_TABLES = [...new Set(Object.values(PARTS).filter(p => !p.file).flatMap(p => p.tables))];
 const PART = document.documentElement.dataset.part || 'home';
 
@@ -75,6 +76,7 @@ function normalize(u) {
   u.settings = u.settings || {};
   u.settings.common = Object.assign({ theme: 'auto' }, u.settings.common || {});
   if (!Array.isArray(u.history)) u.history = [];
+  if (!Array.isArray(u.deleted)) u.deleted = [];          // 1.4.0: tombstones (delete on all devices)
   SHARED.forEach(t => u[t].forEach(r => { if (r && typeof r === 'object' && !r.uid) r.uid = uuid(); }));
   return u;
 }
@@ -106,6 +108,7 @@ function load() {
   normalize(U);
   if (converted && !newer) writeRaw();
   if (!newer) cleanUp131();
+  if (!newer) dropShooters140();
   loadThoughts();
   linkInbox();
   if (PART === 'home') run(adoptLinked);
@@ -128,10 +131,29 @@ function cleanUp131() {
   U.settings.common.cleanup131 = now();
   writeRaw(true);
 }
+/* 1.4.0 (remark #20, Manuel 2026-11-07: "it is only ever the user of the app"): the shooter goes out of the data.
+   Entries of another shooter keep their rounds and get "Shot by <name>" in their note (SRX.dropShooters). Runs
+   whenever older data comes in (start, restored backup); a backup of the whole database first (rule 1). */
+const meName = () => String((U && U.settings && U.settings.common && U.settings.common.meName) || '');
+function dropShooters140(quiet) {
+  if (!window.SRX || !SRX.dropShooters) return null;
+  const has = 'shooters' in U || ['trainings', 'results', 'sheets', 'roundsLog'].some(t => arr(U[t]).some(r => r && typeof r === 'object' && ('shooterId' in r || ('shooter' in r && t !== 'sheets') || (t === 'sheets' && r.shooter))));
+  if (!has) { ['sheets'].forEach(t => arr(U[t]).forEach(r => { if (r && 'shooter' in r) delete r.shooter; })); return null; }
+  if (!quiet) { try { RAW.backupDb('db-before-1.4.0-shooter-' + Date.now() + '.json'); } catch (e) { } }
+  const r = SRX.dropShooters(U, meName());
+  if (r.me && !meName()) U.settings.common.meName = r.me;
+  ['gundb', 'tl', 'sd'].forEach(p => { const st = U.settings[p]; if (st && typeof st === 'object') { if (st.dashFilter) delete st.dashFilter.shooter; delete st.lastShooter; } });
+  if (r.dropped) {
+    U.history.push({ at: now(), part: 'stoic-ranger', note: '1.4.0: shooter taken out of the data (one shooter only); entries of others got "Shot by <name>"', moved: r.moved });
+    U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });
+  }
+  writeRaw(true);
+  return r;
+}
 /* After a sync: a table that now has real entries drops its example entries (as the Gun Database does at the first
    own entry), so the brought-in guns and ammunition are not hidden among the samples. */
 function dropExamples() {
-  ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'trainings', 'results'].forEach(t => {
+  ['weapons', 'barrels', 'munitions', 'trainers', 'roundsLog', 'sheets', 'trainings', 'results'].forEach(t => {
     const L = arr(U[t]);
     if (L.some(r => r && r.example) && L.some(r => r && !r.example)) U[t] = L.filter(r => !(r && r.example));
   });
@@ -281,11 +303,16 @@ const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic 
 function mergeIn(bytes, meta = {}) {
   if (newer) return { error: 'read-only' };
   let F;
-  try { F = SRX.read(bytes); } catch (e) { return { error: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
+  try { F = SRX.read(bytes, meName()); } catch (e) { return { error: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
   try { RAW.backupDb('db-before-xlsx-' + Date.now() + '.json'); } catch (e) { }
   const r = SRX.merge(meta.first ? null : loadBase(), U, F.db);
   U = normalize(r.db);
+  if (F.shot && F.shot.me && !meName()) U.settings.common.meName = F.shot.me;   // 1.4.0: the user, as the file knew it
   if (SRX.countOf(r.stats.added)) dropExamples();
+  U.deleted = SRX.mergeDeleted(U.deleted, F.db.deleted);    // 1.4.0: deletes from the other devices
+  const gone = SRX.applyDeleted(U);
+  if (gone) r.stats.deleted = gone;
+  pruneDeleted();
   const S = xlsxState();
   if (meta.info) { S.mtime = meta.info.mtime || 0; S.size = meta.info.size || 0; }
   if (meta.hash) S.hash = meta.hash;
@@ -401,9 +428,9 @@ const hasData = part => PARTS[part].tables.some(t => arr(U[t]).length && !(part 
 function usedElsewhere(table, rec, part) {
   const id = rec.id;
   if (!id) return false;
-  const k = table === 'weapons' ? 'weaponId' : table === 'shooters' ? 'shooterId' : 'trainerId';
+  const k = table === 'weapons' ? 'weaponId' : 'trainerId';
   const inT = (t, f) => !PARTS[part].tables.includes(t) && arr(U[t]).some(f);
-  return inT('barrels', r => r.weaponId === id) || inT('sheets', r => r[k] === id || r.weapon === id || r.shooter === id)
+  return inT('barrels', r => r.weaponId === id) || inT('sheets', r => r[k] === id || r.weapon === id)
     || inT('roundsLog', r => r[k] === id) || inT('trainings', t => t[k] === id || arr(t.weapons).some(w => w.weaponId === id))
     || inT('results', r => r[k] === id);
 }
@@ -419,7 +446,9 @@ function mergeShared(table, incoming, part) {
     if (!x.uid) x.uid = uuid();
     return x;
   });
-  old.forEach(r => { if (!seen.has(r) && (STALE || usedElsewhere(table, r, part))) out.push(r); });   // STALE: see xlsx
+  // 1.4.0: a gun deleted in any part is deleted (it used to stay when trainings used it, so it came back); trainers
+  // still stay while the Gun Database uses them. STALE: see xlsx
+  old.forEach(r => { if (!seen.has(r) && (STALE || (table !== 'weapons' && usedElsewhere(table, r, part)))) out.push(r); });
   return out;
 }
 /** Stale part (see STALE): its rows win, rows it does not know are kept. */
@@ -434,10 +463,13 @@ function saveView(part, json) {
   const v = parse(json);
   if (!v) return false;
   const P = PARTS[part];
+  if (window.SRX && SRX.dropShooters) { const r = SRX.dropShooters(v, meName()); if (r.me && !meName()) U.settings.common.meName = r.me; }   // 1.4.0: no shooter in the data
   P.tables.forEach(t => {
     if (!(t in v)) return;
     const k = t, before = k === 'results' ? JSON.stringify(arr(U[k])) : '';
+    const old = arr(U[k]);
     U[k] = SHARED.includes(k) ? mergeShared(k, v[t], part) : STALE ? addTo(U[k], v[t]) : arr(v[t]);
+    stampChanges(k, old, U[k], part);
     if (k === 'results' && JSON.stringify(U[k]) !== before) U.resultsChanged = now();
   });
   U.schemas[part] = +v.schema || U.schemas[part] || 1;
@@ -451,6 +483,63 @@ function saveView(part, json) {
   return writeRaw();
 }
 
+/* 1.4.0, delete on all devices (SHARED-DB-CONTRACT.md, section E): what a part saved is compared with what was there.
+   A changed or new entry gets `updated` (the newer of a change and a delete wins on every device); an entry the part
+   deleted becomes a tombstone that travels in database.xlsx, with a copy for Undo (30 days, Settings). */
+const keyR = r => r && (r.uid || r.id) || '';
+const strip = r => { const o = Object.assign({}, r); delete o.updated; return JSON.stringify(o); };
+const derived = (t, r) => t === 'roundsLog' && SRX.fromTraining(r);   // made from a training
+function labelOf(t, r) {
+  if (r.name) return String(r.name);
+  if (t === 'trainings') return [r.date, r.desc].filter(Boolean).join(' · ') || r.id || 'Training';
+  if (t === 'results') return [r.date, r.drillName || r.drillId].filter(Boolean).join(' · ') || r.id || 'Drill result';
+  if (t === 'sheets') return [r.date, r.no ? 'sheet ' + r.no : '', r.gun].filter(Boolean).join(' · ') || r.id || 'Datasheet';
+  if (t === 'roundsLog') return [r.date, r.rounds != null ? r.rounds + ' rounds' : '', r.note].filter(Boolean).join(' · ') || r.id || 'Rounds';
+  return r.id || t;
+}
+function stampChanges(t, old, cur, part) {
+  if (newer || STALE) return;
+  const t0 = now(), was = new Map(arr(old).filter(r => r && typeof r === 'object').map(r => [keyR(r), r]));
+  const kept = new Set();
+  arr(cur).forEach(r => {
+    if (!r || typeof r !== 'object' || r.example) return;
+    const k = keyR(r), o = was.get(k); kept.add(k);
+    if (!o || strip(o) !== strip(r)) r.updated = t0;
+  });
+  was.forEach((r, k) => {
+    if (!k || kept.has(k) || r.example || derived(t, r)) return;
+    U.deleted.push({ app: 'SR', t, id: r.id || '', uid: r.uid || '', label: labelOf(t, r), at: t0, by: deviceName(), part, row: clone(r) });
+    // a deleted gun: trainings that used it keep its name (shown as "(deleted)" in the Training Log, by name in database.xlsx)
+    if (t === 'weapons' && r.id) arr(U.trainings).forEach(x => arr(x && x.weapons).forEach(w => { if (w && w.weaponId === r.id && !w.name) w.name = String(r.name || ''); }));
+  });
+}
+const deviceName = () => { try { const i = JSON.parse(RAW.appInfo()); return i.windows ? 'Windows' : i.android === 'web app' ? 'web app' : i.device || 'Android'; } catch (e) { return ''; } };
+/** Recently deleted (30 days, this device's copy): newest first. */
+function recentlyDeleted() {
+  const from = new Date(Date.now() - SRX.UNDO_DAYS * 864e5).toISOString();
+  return arr(U.deleted).filter(d => d && d.row && !d.undone && d.at >= from && (!d.app || d.app === 'SR')).sort((a, b) => b.at.localeCompare(a.at))
+    .map(d => ({ key: [d.t, d.uid || d.id, d.at].join('|'), table: d.t, label: d.label, at: d.at, by: d.by }));
+}
+/** Undo: the entry is saved again with a new `updated`, which wins over the tombstone on every device. */
+function undoDelete(key) {
+  if (newer) return { ok: false };
+  const d = arr(U.deleted).find(x => x && x.row && [x.t, x.uid || x.id, x.at].join('|') === key);
+  if (!d || !Array.isArray(U[d.t])) return { ok: false };
+  const r = Object.assign(clone(d.row), { updated: now() });
+  if (r.id && U[d.t].some(x => x.id === r.id && keyR(x) !== keyR(r))) r.id = nextId(U[d.t], (SRX.REG[d.t] || [, 'X'])[1]);
+  U[d.t] = U[d.t].filter(x => keyR(x) !== keyR(r)).concat([r]);
+  d.undone = now(); delete d.row;
+  U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });
+  writeRaw(true);
+  return { ok: true, table: d.t, label: d.label };
+}
+/** Local copies for Undo go after 30 days (the tombstone itself stays a year, see SRX.mergeDeleted). */
+function pruneDeleted() {
+  const from = new Date(Date.now() - SRX.UNDO_DAYS * 864e5).toISOString();
+  U.deleted = SRX.mergeDeleted(U.deleted, []);
+  U.deleted.forEach(d => { if (d.row && d.at < from) delete d.row; });
+}
+
 /* ---------- what the separate apps used to send each other ---------- */
 const isDry = t => t && t.fire === 'dry';
 /** Gun Database rounds log: one entry per live-fire training and gun (ids are the shared ones now). */
@@ -459,20 +548,20 @@ function roundsInbox() {
     const n = Math.round(+String(w.rounds == null ? '' : w.rounds).replace(',', '.') || 0);
     if (!w || !w.weaponId || !(n > 0)) return null;
     const g = arr(U.weapons).find(x => x.id === w.weaponId);
-    return { uid: t.uid + ':' + (g && g.uid || w.weaponId), date: t.date || '', weaponId: w.weaponId, shooterId: t.shooterId || '', rounds: n, note: t.desc || '', trainingId: t.id || '' };
+    return { uid: t.uid + ':' + (g && g.uid || w.weaponId), date: t.date || '', weaponId: w.weaponId, rounds: n, note: t.desc || '', trainingId: t.id || '' };
   })).filter(Boolean);
   return JSON.stringify({ from: 'training-log', full: true, entries, received: hash(JSON.stringify(entries)) || 1 });
 }
 /** Training Log: drill results linked to a training. */
 function drillInbox() {
   const names = window.SR_DRILL_NAMES || {};
-  const name = id => arr(U.shooters).concat(arr(U.weapons)).find(x => x.id === id);
+  const name = id => arr(U.weapons).find(x => x.id === id);
   const results = arr(U.results).filter(r => r && r.training && (r.training.uid || r.training.id)).map(r => ({
     uid: r.uid, trainingUid: r.training.uid || '', trainingId: r.training.id || '', date: r.date || '',
     drill: names[r.drillId] || r.drillName || r.drillId || '', drillId: r.drillId || '',
     result: r.points != null && r.points !== '' ? r.points + ' pts' : r.hits != null && r.hits !== '' ? r.hits + (r.shots ? '/' + r.shots : '') + ' hits' : (r.pass === true ? 'pass' : r.pass === false ? 'fail' : ''),
     time: r.timeS != null && r.timeS !== '' ? r.timeS + ' s' : '', note: r.note || r.notes || '',
-    shooter: (name(r.shooterId) || {}).name || '', gun: (name(r.weaponId) || {}).name || '' }));
+    shooter: '', gun: (name(r.weaponId) || {}).name || '' }));
   return JSON.stringify({ results, received: Date.parse(U.resultsChanged || U.created) || 1, version: '1.0' });   // the Training Log takes a newer 'received' only
 }
 /** Shooting Drills asking the Training Log (LinkProvider.java of the Training Log, run on the one file). */
@@ -481,7 +570,7 @@ function trainingsOn(arg) {
   const from = String(a.date || a.from || ''), to = String(a.date || a.to || '');
   return arr(U.trainings).filter(t => t && !t.example && !(from && String(t.date || '') < from) && !(to && String(t.date || '') > to)).map(t => {
     const c = {};
-    ['id', 'uid', 'date', 'start', 'durationH', 'fire', 'shooterId', 'desc', 'trainerId'].forEach(x => { if (x in t) c[x] = t[x]; });
+    ['id', 'uid', 'date', 'start', 'durationH', 'fire', 'desc', 'trainerId'].forEach(x => { if (x in t) c[x] = t[x]; });
     if (!('fire' in c)) c.fire = 'live';
     c.weaponIds = arr(t.weapons).map(w => String(w.weaponId || ''));
     c.weapons = arr(t.weapons).map(w => { const x = { weaponId: String(w.weaponId || '') }; if ('rounds' in w) x.rounds = w.rounds; return x; });
@@ -525,7 +614,7 @@ function bridge(part) {
    carries, or the same name) and otherwise added; trainings and results are added unless already there (uid).
    Ids that are taken get the next free one, and every reference follows. The part's schema is set back to the
    backup's, so the part's own migrations run over the data at its next start (they only add and convert). */
-const PREFIX = { shooters: 'S', weapons: 'W', trainers: 'T', trainings: 'TR', results: 'R' };
+const PREFIX = { weapons: 'W', trainers: 'T', trainings: 'TR', results: 'R' };
 const PAD = { trainings: 4, results: 4 };
 function nextId(list, prefix, pad = 3) {
   let n = 0; arr(list).forEach(r => { const m = new RegExp('^(?:EX-)?' + prefix + '-(\\d+)$').exec(r && r.id || ''); if (m) n = Math.max(n, +m[1]); });
@@ -547,7 +636,8 @@ function importBackup(j) {
     return { kind, stats: { added: { favs: add.length }, matched: {}, skipped: { favs: arr(j.favs).length - add.length } } };
   }
   try { RAW.backupDb('db-before-import-' + kind + '-' + Date.now() + '.json'); } catch (e) { }
-  const map = { shooters: {}, weapons: {}, trainers: {} }, stats = { added: {}, matched: {}, skipped: {} };
+  j = clone(j); SRX.dropShooters(j, meName());          // 1.4.0: no shooters; others' entries get "Shot by <name>"
+  const map = { weapons: {}, trainers: {} }, stats = { added: {}, matched: {}, skipped: {} };
   const inc = (k, t) => { stats[k][t] = (stats[k][t] || 0) + 1; };
   SHARED.forEach(t => arr(j[t]).forEach(r => {
     if (!r || typeof r !== 'object' || r.example) return;
@@ -574,12 +664,11 @@ function importBackup(j) {
     const x = clone(r);
     if (!x.uid) x.uid = uuid();
     if (!x.id || U[t].some(y => y.id === x.id)) x.id = nextId(U[t], PREFIX[t], PAD[t]);
-    if ('shooterId' in x) x.shooterId = ref('shooters', x.shooterId);
     if ('weaponId' in x) x.weaponId = ref('weapons', x.weaponId);
     if ('trainerId' in x) x.trainerId = ref('trainers', x.trainerId);
     if (Array.isArray(x.weapons)) x.weapons.forEach(w => { if (w) w.weaponId = ref('weapons', w.weaponId); });
-    // older entries without a uid: the same day, shooter and content is the same entry (no double import)
-    const sig = y => [y.date, y.shooterId, y.desc, y.durationH, y.fire, y.drillId, y.time, y.hits, y.weaponId].map(v => v == null ? '' : String(v)).join('|');
+    // older entries without a uid: the same day and content is the same entry (no double import)
+    const sig = y => [y.date, y.desc, y.durationH, y.fire, y.drillId, y.time, y.hits, y.weaponId].map(v => v == null ? '' : String(v)).join('|');
     if (!r.uid && U[t].some(y => sig(y) === sig(x))) { inc('skipped', t); return; }
     if (x.training && x.training.uid) {                  // a drill result linked to a training: point at its id here
       const tr = U.trainings.find(y => y.uid === x.training.uid);
@@ -608,6 +697,7 @@ function restoreAll(j) {
   try { RAW.backupData('thoughts', 'thoughts-before-restore-' + stamp + '.json'); } catch (e) { }
   const th = isThoughtsFile(j.thoughts) ? normalizeThoughts(clone(j.thoughts)) : thoughtsFrom(j);
   U = normalize(clone(j)); delete U.backup; delete U.thoughts;
+  dropShooters140(true);                                // an older backup still has shooters (1.4.0)
   TH = th;
   const a = writeRaw(), b = writeThoughts();
   return a && b;
@@ -669,6 +759,36 @@ function ncConnect(setting, password) {
   const pushed = pushLinked();
   return out && out.error ? { ok: false, msg: out.error, saved: true } : { ok: true, merged: SR_LAST.xlsx || null, pushed };
 }
+/** 1.4.0, for a device that is hopelessly out of step: its data (guns, trainings, drills … and the deletes) is replaced
+    by what the linked database.xlsx (Nextcloud or a file here) holds. A backup of everything comes first; settings,
+    the storage setting, Daily Thoughts and the history stay. */
+function replaceFromFile() {
+  if (newer) return { ok: false, msg: 'This data is read-only until you update the app.' };
+  LINKED = null;
+  if (!xlsxLinked()) return { ok: false, msg: 'No database.xlsx is linked.' };
+  const info = xlsxInfo();
+  if (info.error) return { ok: false, msg: info.error };
+  if (!info.size) return { ok: false, msg: 'There is no database.xlsx there yet.' };
+  const b = readFile(); if (!b) return { ok: false, msg: 'database.xlsx could not be read.' };
+  const bytes = b64Bytes(b);
+  let F; try { F = SRX.read(bytes, meName()); } catch (e) { return { ok: false, msg: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
+  let saved = false; try { saved = !!RAW.backupDb('db-before-replace-' + Date.now() + '.json'); } catch (e) { saved = false; }
+  if (!saved && RAW.backupDb) return { ok: false, msg: 'No backup of this device\'s data could be made, so nothing was replaced.' };
+  const d = F.db;
+  SRX.TABLES.forEach(t => { U[t] = clone(arr(d[t])); });
+  U.favs = clone(arr(d.favs));
+  if (arr(d.purposes).length) { U.settings.gundb = U.settings.gundb || {}; U.settings.gundb.purposes = clone(d.purposes); }
+  U.deleted = SRX.mergeDeleted([], d.deleted);
+  SRX.applyDeleted(U);
+  normalize(U);
+  const S = xlsxState(); Object.assign(S, { mtime: info.mtime || 0, size: info.size, hash: hashBytes(bytes), etag: info.etag || S.etag || '', dirty: '', lastIn: now() });
+  KEEP = bytes;
+  saveBase(SRX.dbPart(U));
+  U.history.push({ at: now(), part: 'stoic-ranger', note: 'Data on this device replaced by database.xlsx' + (NC() ? ' on Nextcloud' : '') });
+  writeRaw(true);
+  const n = t => arr(U[t]).filter(r => !r.example).length;
+  return { ok: true, counts: { weapons: n('weapons'), munitions: n('munitions'), trainings: n('trainings'), results: n('results'), sheets: n('sheets') } };
+}
 /** Back to this device only: everything stays here, nothing is deleted on Nextcloud. */
 function ncLocal() {
   const st = ncState(); if (!st) return { ok: false };
@@ -706,7 +826,9 @@ const SR = window.SR = {
   xlsx: { canLink, info: xlsxInfo, linked: () => xlsxLinked(), state: () => xlsxState(), link: xlsxLink, unlink: xlsxUnlink,
     syncIn: () => { LINKED = null; return xlsxIn(true); }, syncOut: () => xlsxOut(true), sync: () => { LINKED = null; const a = xlsxIn(); if (a && a.error) return a; return xlsxOut(true) || a; },
     save: saveXlsx, open: openXlsx },
-  storage: { available: () => !!ncState(), state: ncState, connect: ncConnect, local: ncLocal, adopted: () => SR_LAST.adopted || null },
+  storage: { available: () => !!ncState(), state: ncState, connect: ncConnect, local: ncLocal, adopted: () => SR_LAST.adopted || null, replace: replaceFromFile },
+  /** 1.4.0: delete on all devices: Recently deleted (30 days) and Undo */
+  deleted: { recent: recentlyDeleted, undo: undoDelete },
   saveThoughtsFile, hasThoughtFavs: () => arr(TH && TH.favs).length > 0,
   uuid, clone, now, arr,
 };

@@ -69,14 +69,14 @@ function demoBanner() {
 }
 
 /* ---------- quick "Add new …" buttons (dashboard front, New chooser) ---------- */
-RB.QUICK_ADD = [['shooters', 'shooter'], ['weapons', 'gun'], ['barrels', 'barrel'], ['munitions', 'ammunition'], ['trainers', 'trainer']];
+RB.QUICK_ADD = [['weapons', 'gun'], ['barrels', 'barrel'], ['munitions', 'ammunition'], ['trainers', 'trainer']];
 RB.quickAddHTML = (withSheet = true) => `<div class="qa">${withSheet ? '<button class="btn pri" data-qsheet>Create new training dataset</button>' : ''}${RB.QUICK_ADD.map(([t, n]) => `<a class="btn" href="#/db/${t}/new">Add new ${n}</a>`).join('')}</div>`;
 RB.wireQuickAdd = el => { const b = $('[data-qsheet]', el); if (b) b.onclick = () => { const s = RB.newSheet(); RB.db.sheets.push(s); RB.save(true); RB.go(`#/sheet/${encodeURIComponent(s.id)}`); }; };
 
 /* ---------- "New" button in the bottom bar: every way to add a set of results ---------- */
 RB.addChooser = () => {
   const opts = [
-    ['newsheet', '✎', 'Create new training dataset', 'Type in the results of a session (carries over gun, ammo and shooter from your last sheet).'],
+    ['newsheet', '✎', 'Create new training dataset', 'Type in the results of a session (carries over gun and ammo from your last sheet).'],
     ['target', '◎', 'Score a target photo', 'Photograph the shot target: hits, group size and correction are calculated.'],
     ['scan', '▤', 'Read a filled sheet photo', 'A hand-filled printed sheet, read in by Claude for you to check.'],
     ['vel', '⚡', 'Velocities from Xero C1 Pro', 'New datasheet, starting with pasting or importing the shot speeds.'],
@@ -139,7 +139,7 @@ RB.views.welcome = {
         <div class="wlogo">${RB.logo('hlogo')}</div>
         <div class="kicker">Stoic Ranger // Gun Database</div>
         <h1>Welcome</h1>
-        <p>Keep your guns, barrels, ammunition and shooters in one place, fill in training datasheets, score targets from a photo and follow barrel wear and ammo performance on the dashboard. Everything stays on this phone.</p>
+        <p>Keep your guns, barrels and ammunition in one place, fill in training datasheets, score targets from a photo and follow barrel wear and ammo performance on the dashboard. Everything stays on this phone.</p>
       </div>
       <div class="stack">
         <button class="btn pri big" id="wStart">Start with an empty database</button>
