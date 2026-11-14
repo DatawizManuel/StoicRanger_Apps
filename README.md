@@ -8,7 +8,10 @@ any browser.
 | Gun Database | SR_Database (`at.rangebook.app`) | Guns, barrels, ammunition, datasheets, analyse, dope cards |
 | Training Log | SR_Training Log (`at.stoicranger.traininglog`) | Trainings (live and dry fire), trainers, record sheet |
 | Shooting Drills | SR_Shooting Drills (`at.stoicranger.shootingdrills`) | Drill library, results, printable targets |
-| Daily Thoughts | SR_Daily Thoughts (`at.stoicranger.dailythoughts`, repo `daily_thoughts`) | A quote for each day, authors, favourites |
+
+Daily Thoughts (SR_Daily Thoughts, `at.stoicranger.dailythoughts`) was a part of 1.0.x and is its own app again
+from Stoic Ranger 1.1.0: source in `daily-thoughts/` (0.2.0 on). All platforms (Android, iPhone web app,
+Windows) work from and into one shared **database.xlsx** (see `stoic-ranger/MIGRATIONS.md`).
 
 The Android app keeps the package id `at.rangebook.app`, so 1.0.0 installs over SR_Database 0.6.0 and converts
 its data in place. Web address: https://datawizmanuel.github.io/StoicRanger_Apps/
@@ -18,11 +21,14 @@ its data in place. Web address: https://datawizmanuel.github.io/StoicRanger_Apps
 - `stoic-ranger/` – the Android project (Java WebView shell + the app as offline web code in
   `app/src/main/assets/www`). Its README and MIGRATIONS.md describe the one database, the build and the migrations.
   - `www/index.html` + `www/sr/` – home page and the hub (`sr/hub.js`) that gives every part its view of the one database.
-  - `www/gun/`, `www/training/`, `www/drills/`, `www/thoughts/` – the four parts, their code nearly unchanged.
+  - `www/gun/`, `www/training/`, `www/drills/` – the three parts, their code nearly unchanged.
+  - `www/sr/xlsxdb.js` – the shared database.xlsx (write, read, three-way merge).
   - `web/native-web.js` – stands in for the Android shell in a browser (IndexedDB, share sheet, file picker, printing, password).
 - `web/shell/sw.js` – offline cache. `web/icons/stoic-ranger/` – home screen icons.
 - `tools/build-web.mjs` – builds `dist/` from the Android sources. `tools/test-web.mjs` – web data-safety tests.
 - `stoic-ranger/tools/test-one-app.mjs` – Android-path tests (SR_Database conversion, imports, links between the parts).
+- `windows/` – Stoic Ranger for Windows (Electron shell for the same `www`, installer, desktop test).
+- `daily-thoughts/` – SR_Daily Thoughts, its own app again (Android + web), with its own README and tests.
 - `android/` – the separate apps up to 0.x, frozen (kept for reference and for their data formats).
 - `.github/workflows/pages.yml` – on every push to `main`: build, test, publish on GitHub Pages.
 
@@ -33,6 +39,8 @@ node tools/build-web.mjs                    # → dist/
 node tools/test-web.mjs                     # needs playwright (npm i playwright && npx playwright install chromium)
 node stoic-ranger/tools/test-one-app.mjs    # Android path
 stoic-ranger/tools/build-debug.sh           # APK without Gradle (see stoic-ranger/README.md)
+xvfb-run -a node windows/tools/test-desktop.mjs   # Windows shell (Linux Electron)
+windows/tools/build-win.sh                  # Windows package → windows/dist/vX.Y.Z
 ```
 
 ## Data in the web version

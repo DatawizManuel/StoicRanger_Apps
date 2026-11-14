@@ -1,18 +1,20 @@
 # Stoic Ranger (Android)
 
-One app with four parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
-phone; **Daily Thoughts** keeps its own file (from 1.0.1). Launcher name "Stoic Ranger", package id
+One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
+phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Launcher name "Stoic Ranger", package id
 `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0 and keeps its data).
-Version 1.0.1, versionCode 9.
+Version 1.1.0, versionCode 10.
 
 ## How it fits together
 
 - `MainActivity.java` is a WebView shell serving `app/src/main/assets/www` from
   `https://appassets.androidplatform.net/www/`. Its JS bridge `SRNative` stores `files/db.json` (atomic, with
   `db.bak.json` and `files/backups/`) and `files/thoughts.json` for Daily Thoughts (same rules, `thoughts.bak.json`,
-  `files/backups-thoughts/`), saves, opens and shares files, shares text and prints.
-- `www/index.html` is the home page: today's thought, quick "+" buttons, the four parts with their key figures,
-  the year at a glance, and Data (backup of everything, restore, bring in old backups, theme, about).
+  `files/backups-thoughts/`), saves, opens and shares files, shares text and prints, and keeps the linked
+  database.xlsx (`xlsxInfo`, `xlsxRead`, `xlsxWrite`, `xlsxLink`, `xlsxUnlink`; merge base in `xlsxbase.json`).
+- `www/index.html` is the home page: quick "+" buttons, the three parts with their key figures, the year at a
+  glance, and Data (database.xlsx, backup of everything, restore, bring in old backups, Daily Thoughts favourites,
+  theme, about). Back at home: the first press warns, a second within 2 s closes the app.
 - Each part is its own page with its code taken over from the separate app (`www/gun/`, `training/`, `drills/`,
   `thoughts/`). `www/sr/hub.js` runs first on every page and gives the part the bridge it expects
   (`RBNative`, `TLNative`, `SDNative`, `DTNative`): `loadDb` returns the part's view of the one database in its
@@ -40,7 +42,7 @@ from a newer version is never written. Must pass before a release.
 
 ## Install
 
-1. Copy `stoic-ranger-1.0.1-debug.apk` to the phone and open it. Android shows it as an **update** of
+1. Copy `stoic-ranger-1.1.0-debug.apk` to the phone and open it. Android shows it as an **update** of
    SR_Database: install. Your Gun Database data moves into Stoic Ranger on the first start (a copy of the old
    file is kept in the app's backups).
 2. Training Log, Shooting Drills, Daily Thoughts: in the old app, More › Save a backup file. Then in Stoic Ranger,
@@ -49,6 +51,11 @@ from a newer version is never written. Must pass before a release.
 3. When everything is in, the three old apps can be uninstalled.
 
 ## Versions
+
+- **1.1.0** (versionCode 10): the shared database.xlsx (link one on the phone under home › Data; changes come in
+  at start and when the app comes back, go out when you leave a part or the app); Back button fixed (it closed the
+  app) and a second Back at home closes it; Daily Thoughts taken out (its data stays, favourites can be saved for
+  the Daily Thoughts app). Installs over 1.0.x.
 
 - **1.0.1** (versionCode 9): Daily Thoughts gets its own file `thoughts.json` (its favourites are copied over from
   `db.json` on the first start, `db.json` is backed up and left as it was); the old Daily Thoughts password screen

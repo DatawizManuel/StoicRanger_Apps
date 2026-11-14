@@ -1,0 +1,153 @@
+# Nicomachean Ethics 1.7, 1098a
+q: One swallow does not make a spring, nor does one fine day.
+q: In the same way, one day or a short time does not make a person blessed and happy.
+c: Aristotle defines happiness as the activity of the soul in accordance with virtue, and then adds: "in a complete life". A single good deed or a lucky week is not enough. Flourishing is something that shows itself over the whole course of a life.
+p: Do something good today, knowing it doesn't make a summer, but that every summer is made of such days.
+
+# Nicomachean Ethics 2.1, 1103b
+q: We become just by doing just acts,
+q: self-controlled by doing self-controlled acts, and brave by doing brave acts.
+c: Virtue, for Aristotle, is not something we are born with or learn from books. It is like a skill. Builders become builders by building, and harpists by playing the harp. In the same way, character is built by repeated action, until doing the right thing becomes natural.
+p: Choose one virtue you want to grow. Perform one act of it today, however small.
+
+# Nicomachean Ethics 2.6, 1106b
+q: Virtue is a mean between two vices,
+q: one of excess and one of deficiency.
+c: Courage lies between cowardice and recklessness; generosity between stinginess and extravagance; proper pride between self-deprecation and vanity. The mean is not a mathematical midpoint but what is right for this person, in this situation. Hitting it is hard, Aristotle admits: there are many ways to miss a target, only one way to hit it.
+p: In one situation today, ask: what would too much look like here, what would too little look like, and where is the right point?
+
+# Nicomachean Ethics 2.9, 1109a
+q: Anyone can get angry, that is easy.
+q: But to be angry with the right person, to the right degree, at the right time, for the right reason and in the right way, that is not easy.
+c: Aristotle did not think anger was always wrong. Someone who is never angry, even at injustice, has a fault too. The difficult skill is to feel the right emotions in the right measure. That is why, he says, goodness is rare, praiseworthy and fine.
+p: If you get angry today, check it against the five tests: the right person, degree, time, reason and way.
+
+# Nicomachean Ethics 1.6, 1096a
+q: It would seem better, indeed necessary, to give up even what is dear to us for the sake of the truth.
+q: Both are dear, but piety requires us to honour the truth above our friends.
+c: Aristotle writes this as he begins to criticise Plato's theory of the Forms. Plato was his teacher for twenty years and remained dear to him. But friendship cannot outrank truth. Later this became the saying "Plato is dear, but truth is dearer".
+e: 347 BC · Athens | Plato's death | When Plato died, leadership of the Academy passed to his nephew Speusippus rather than to Aristotle, then thirty-seven. Aristotle left Athens soon after, for the court of Hermias of Atarneus at Assos, where he began twelve years of travel, research and teaching before returning to found his own school.
+p: Disagree respectfully today with someone you admire, if the truth requires it.
+
+# Nicomachean Ethics 8.1, 1155a
+q: No one would choose to live without friends,
+q: even if they had all other good things.
+c: Aristotle devotes two of the ten books of his Ethics to friendship, more than to any other single topic. The rich and powerful need friends most of all, he says, for what is the use of prosperity without the chance to do good, and to whom can they do good if not to friends?
+e: 341 BC · Atarneus, Asia Minor | The death of Hermias | Hermias, ruler of Atarneus and Assos, had welcomed Aristotle and given him his niece Pythias in marriage. The Persians captured Hermias by treachery, and put him to death. Aristotle wrote a hymn in his memory and set up a statue to him at Delphi, honouring a friendship that cost Hermias his life.
+p: Do something today that a real friend would do, without waiting to be asked.
+
+# Nicomachean Ethics 8.3, 1156b
+q: The wish for friendship comes quickly,
+q: but friendship does not. As the saying goes, people cannot know each other until they have eaten salt together.
+c: Aristotle distinguishes between friendships based on usefulness, on pleasure and on character. Only the last kind lasts, and it takes time. You need to have shared many meals, the proverbial "measure of salt", to really know and trust another person.
+p: Spend unhurried time today with someone you want to know better.
+
+# Nicomachean Ethics 10.7, 1177b
+q: We must not follow those who advise us, being human, to think only of human things, and being mortal, of mortal things.
+q: We must, as far as we can, make ourselves immortal, and strain every nerve to live by the best thing in us.
+c: At the end of the Ethics, Aristotle argues that the highest happiness lies in contemplation, the activity of the mind seeking truth. It is the most divine part of us. Even if small in bulk, he says, it surpasses everything else in power and worth.
+p: Spend some time today thinking about something larger than your daily concerns.
+
+# Nicomachean Ethics 1.3, 1094b
+q: It is the mark of an educated mind to look for precision in each kind of thing
+q: only so far as the nature of the subject allows.
+c: Aristotle warns at the start of his Ethics that questions about how to live cannot be answered with mathematical precision. To demand exact proofs from an orator, or to accept merely probable arguments from a mathematician, would be equally foolish. Good judgment knows what kind of certainty each question can give.
+p: When facing a question today, ask what kind of answer it can actually have: exact, probable or a matter of judgment.
+
+# Politics 1.2, 1253a
+q: The human being is by nature a political animal.
+q: Whoever cannot live in a community, or has no need to because they are self-sufficient, is either a beast or a god.
+c: For Aristotle, people are not isolated individuals who decide to form societies. We are made for community. We have speech, which allows us to discuss what is just and unjust, good and bad. The city exists not just so we can live, but so we can live well.
+e: 343 BC · Mieza, Macedonia | The tutor of Alexander | King Philip II invited Aristotle to teach his thirteen-year-old son, Alexander. Lessons took place at the sanctuary of the Nymphs at Mieza, away from the court. Aristotle taught him politics, ethics, medicine and poetry; Alexander is said to have later carried an Iliad annotated by his teacher on his campaigns.
+p: Take part in your community today in some small way: a conversation, a vote, a helping hand.
+
+# Metaphysics 1.1, 980a
+q: All human beings by nature desire to know.
+c: These are the opening words of the Metaphysics. Aristotle notes that we enjoy our senses even when they are not useful, and above all sight, because it shows us the differences between things. Curiosity is not a luxury but part of what we are.
+e: 335 BC · Athens | The founding of the Lyceum | Back in Athens, Aristotle began teaching in the Lyceum, a gymnasium dedicated to Apollo. He taught while walking in its covered walkways, so his students were called Peripatetics, the walkers. The school collected books, specimens and records of 158 Greek constitutions, an early model of organised research.
+p: Follow one question you are curious about today just for the pleasure of knowing.
+
+# Rhetoric 1.2, 1356a
+q: Character may almost be called
+q: the most effective means of persuasion.
+c: Aristotle describes three means of persuasion: logical argument, appealing to the listener's emotions, and the character of the speaker. Of these, he says, the most powerful is often character. We believe good people more readily, and on doubtful matters completely.
+p: Before trying to convince anyone today, ask whether your actions have earned their trust.
+
+# Poetics 9, 1451b
+q: Poetry is more philosophical and more serious than history,
+q: for poetry speaks of the universal, history of the particular.
+c: History tells us what Alcibiades did and suffered. Poetry shows what kind of person would do or say what kind of thing, by probability or necessity. By telling us about types and patterns, stories teach us about human life in general.
+p: Read or listen to one story today and ask what it teaches about people in general.
+
+# Nicomachean Ethics 3.7, 1115b
+q: The brave person fears and endures the right things, for the right reason,
+q: in the right way and at the right time.
+c: For Aristotle, courage is not the absence of fear. Someone who fears nothing is not brave but reckless, or insane. The brave person feels fear, but in proportion, and acts well in spite of it, for the sake of what is noble.
+p: Notice one fear today. Ask whether it is the right fear, and then act well in spite of it.
+
+# Diogenes Laertius, Lives 5.18
+q: The roots of education are bitter,
+q: but the fruit is sweet.
+c: Diogenes Laertius records this among Aristotle's sayings. Learning anything worthwhile involves effort, frustration and discipline at first. But the result, understanding and skill, is a lasting reward.
+p: Stick with one difficult learning task today a little longer than you want to.
+
+# Diogenes Laertius, Lives 5.20
+q: What is a friend?
+q: A single soul living in two bodies.
+c: Asked to define a friend, Aristotle is said to have given this answer. It echoes his view in the Ethics that a true friend is "another self", someone whose good we want for their own sake, as we want our own.
+p: Tell a close friend today what they mean to you.
+
+# Diogenes Laertius, Lives 5.20
+q: To do without being commanded
+q: what others do only from fear of the law.
+c: Asked what he had gained from philosophy, Aristotle answered in this way. Laws compel people to behave from the outside. Philosophy aims to produce people who behave well from within, because they understand why.
+p: Do something right today that no rule requires.
+
+# Diogenes Laertius, Lives 5.18
+q: Hope is a waking dream.
+c: Asked what hope is, Aristotle is said to have answered with this short phrase. Hope can carry us through hardship, but it can also replace action with imagination. A good life needs both dreams and wakefulness.
+p: Turn one hope into one concrete step today.
+
+# Diogenes Laertius, Lives 5.19
+q: The educated differ from the uneducated
+q: as much as the living from the dead.
+c: Diogenes Laertius records this sharp saying. For Aristotle, education is not a decoration but what brings the human capacities to life. A mind that is never trained remains, in a sense, asleep.
+p: Feed your mind today with something more substantial than news or entertainment.
+
+# Aelian, Varia Historia 3.36
+q: I will not allow the Athenians
+q: to sin twice against philosophy.
+c: Aristotle reportedly said this when he left Athens, charged with impiety after Alexander's death. He was thinking of Socrates, executed on a similar charge in 399 BC. Unlike Socrates, he chose to leave rather than face the trial.
+e: 323 BC · Athens and Chalcis | Flight from Athens | When news came that Alexander had died in Babylon, anti-Macedonian anger exploded in Athens. Aristotle, long associated with the Macedonian court, was charged with impiety for a hymn he had written to his friend Hermias. He moved to his mother's estate at Chalcis on Euboea and died there the following year.
+p: Know when to stand your ground and when to step aside. Ask which this situation needs.
+s: Saying reported by Aelian, Varia Historia 3.36, and in the ancient lives of Aristotle.
+
+# Politics 8.3, 1337b
+q: Nature itself requires that we be able not only to work well,
+q: but also to use leisure well.
+c: Aristotle argues that education should prepare people for leisure as well as for work. We work in order to have leisure, just as we make war in order to have peace. How we use our free time says a great deal about who we are.
+p: Use some free time today on something that genuinely enriches you.
+
+# Nicomachean Ethics 2.1, 1103b
+q: It makes no small difference whether we form habits of one kind or another from our very youth.
+q: It makes a very great difference, or rather all the difference.
+c: Since character is built through habit, the habits we form early shape us for life. This is why Aristotle thought education and upbringing matter so much, and why it is never too late to start forming better habits.
+p: Notice one small habit you repeat every day. Is it shaping you in the direction you want?
+
+# Nicomachean Ethics 1.10, 1100b
+q: Even in misfortune, nobility shines through
+q: when a person bears many great misfortunes calmly, not from insensitivity but from greatness of soul.
+c: Aristotle discusses the case of King Priam of Troy, who was prosperous and then lost everything. Can such a person be called happy? Not blessed, perhaps. But someone of good character will never become wretched, because they will never do hateful things, and they will bear misfortune with dignity.
+p: If something goes badly today, bear it in a way you would be proud of later.
+
+# On the Parts of Animals 1.5, 645a
+q: In all natural things there is something marvellous.
+c: Aristotle defends the study of animals, even humble and unattractive ones. He recalls Heraclitus, who invited visitors into his kitchen saying "there are gods here too". Every living thing, studied closely, reveals the order and beauty of nature.
+e: c. 345 BC · Lesbos | The lagoon at Pyrrha | On Lesbos, with his student Theophrastus, Aristotle made detailed observations of marine life in the island's great lagoon. He described the reproduction of the octopus, the embryo of the dogfish shark and much more, some of it not confirmed again until the nineteenth century. It is often called the birth of biology.
+p: Look closely at something living today, a plant, an insect, a bird, and find what is marvellous in it.
+
+# Nicomachean Ethics 9.8, 1169a
+q: The good person will give up wealth, honours and every contested good to gain nobility for themselves.
+q: They would rather have a short period of intense pleasure than a long one of mild enjoyment, and one great and noble action than many trivial ones.
+c: Aristotle argues that true self-love is not selfish. The person who loves themselves rightly wants the best for their own character, and will therefore act generously and bravely, even at personal cost. Selfishness grabs money and pleasure; true self-love grabs nobility.
+p: Give up something small today for the sake of doing something fine.

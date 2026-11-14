@@ -13,7 +13,7 @@ const CFG = window.SR_WEB;                       // written by tools/build-web.m
 const APP = 'sr';
 const IDB_NAME = 'stoic-ranger', STORE = 'files';
 const LS_MIRROR = 'sr.db', LS_MIRROR_MAX = 2000000;
-const DATA = ['thoughts'];                        // files of their own next to db.json (1.0.1), see loadData()
+const DATA = ['thoughts', 'xlsxbase'];            // files of their own next to db.json (1.0.1; xlsxbase 1.1.0), see loadData()
 const mem = new Map();                           // key -> string, the synchronous view of the stored files
 
 /* ---------- IndexedDB ---------- */

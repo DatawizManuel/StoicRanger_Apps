@@ -18,7 +18,13 @@
    - Daily Thoughts is not part of the shooting database (Manuel 2026-10-28): since 1.0.1 its favourites, settings
      and history live in a file of their own, thoughts.json (window.SRNative.loadData('thoughts') …). 1.0.0 kept
      them in db.json (thoughtFavs, settings.dt, schemas.dt); on the first start of 1.0.1 they are copied over, with
-     a backup of db.json first, and the old fields stay in db.json untouched (add-only). */
+     a backup of db.json first, and the old fields stay in db.json untouched (add-only).
+   - 1.1.0 (Manuel 2026-10-29): Daily Thoughts is its own app again and Stoic Ranger shows no quotes. thoughts.json
+     stays on the device untouched; Data offers it as an SR_Daily Thoughts backup file for the standalone app, and
+     every backup of everything still carries it.
+   - 1.1.0: the shared database.xlsx (sr/xlsxdb.js). Where the device can keep a file linked (Android, Windows),
+     the one file is synced with it: changes in the file come in when the app starts or comes back, the app's
+     changes go out when you leave a part or the app. The state of the last sync is kept in xlsxbase.json. */
 'use strict';
 (() => {
 const RAW = window.SRNative;
@@ -28,8 +34,6 @@ const PARTS = {
     tables: ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'targets'] },
   tl: { prefix: 'TL', dir: 'training', name: 'Training Log', app: 'sr-training-log', tables: ['shooters', 'weapons', 'trainers', 'trainings'] },
   sd: { prefix: 'SD', dir: 'drills', name: 'Shooting Drills', app: 'sr-shooting-drills', tables: ['shooters', 'weapons', 'results', 'favs'] },
-  // Daily Thoughts (until 0.1.2 the app SR_Daily Thoughts): its own file thoughts.json, not the one database
-  dt: { prefix: 'DT', dir: 'thoughts', name: 'Daily Thoughts', app: 'sr-daily-thoughts', tables: ['favs'], file: 'thoughts' },
 };
 const SHARED = ['shooters', 'weapons', 'trainers'];
 const ALL_TABLES = [...new Set(Object.values(PARTS).filter(p => !p.file).flatMap(p => p.tables))];
@@ -101,10 +105,12 @@ function load() {
   normalize(U);
   if (converted && !newer) writeRaw();
   loadThoughts();
+  xlsxIn();
 }
-function writeRaw() {
+function writeRaw(quiet) {
   if (newer) return false;
   U.updated = now();
+  if (!quiet && xlsxLinked()) { const S = xlsxState(); if (!S.dirty) S.dirty = U.updated; }
   let ok = false;
   try { ok = RAW.saveDb(JSON.stringify(U)); } catch (e) { ok = false; }
   return ok;
@@ -159,6 +165,113 @@ function writeThoughts() {
   try { return !!RAW.saveData('thoughts', JSON.stringify(TH)); } catch (e) { return false; }
 }
 
+/* ---------- the shared database.xlsx (1.1.0) ----------
+   RAW.xlsxInfo() → {linked, name, size, mtime}; RAW.xlsxRead() → base64; RAW.xlsxWrite(base64) → {ok, size, mtime, msg};
+   RAW.xlsxLink(mode 'open'|'create', cb); RAW.xlsxUnlink(). Android keeps the file the user picked (with a lasting
+   permission), Windows a path. The web app has none of these: there the file is opened and saved by hand (Data).
+   settings.common.xlsx = {dirty, mtime, size, hash, lastIn, lastOut}; xlsxbase.json = the tables at the last
+   sync (the merge base, see sr/xlsxdb.js). */
+const canLink = () => !!(RAW.xlsxInfo && window.SRX);
+let LINKED = null;
+/* The file can bring news while a part is open (the app goes to the background, the window loses focus). The part
+   still holds the tables it loaded, so until the page is opened again (SR.onResume reloads it) a save of that
+   part adds to the tables instead of replacing them: nothing that came from the file is lost. */
+let LOADED = false, STALE = false;
+const xlsxInfo = () => { if (!canLink()) return { available: false }; try { return Object.assign({ available: true }, parse(RAW.xlsxInfo()) || {}); } catch (e) { return { available: true }; } };
+const xlsxLinked = () => LINKED != null ? LINKED : (LINKED = canLink() && !!xlsxInfo().linked);
+function xlsxState() { const c = U.settings.common; return (c.xlsx = c.xlsx && typeof c.xlsx === 'object' ? c.xlsx : {}); }
+const bytesB64 = u => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const b64Bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+const hashBytes = u => { let h = 2166136261; for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + u.length; };
+const loadBase = () => { try { const j = parse(RAW.loadData('xlsxbase') || ''); return j && j.db ? j.db : null; } catch (e) { return null; } };
+const saveBase = db => { try { RAW.saveData('xlsxbase', db ? JSON.stringify({ at: now(), db }) : '{}'); } catch (e) { } };
+const xlsxBy = () => { try { const i = JSON.parse(RAW.appInfo()); return 'Stoic Ranger ' + (i.version || '') + (i.android === 'web app' ? ' (web)' : i.windows ? ' (Windows)' : i.android ? ' (Android)' : ''); } catch (e) { return 'Stoic Ranger'; } };
+/** Merge database.xlsx bytes into the one file (three-way against the last sync). The file is written out later. */
+function mergeIn(bytes, meta = {}) {
+  if (newer) return { error: 'read-only' };
+  let F;
+  try { F = SRX.read(bytes); } catch (e) { return { error: 'This file could not be read as a Stoic Ranger database.xlsx (' + e.message + ').' }; }
+  try { RAW.backupDb('db-before-xlsx-' + Date.now() + '.json'); } catch (e) { }
+  const r = SRX.merge(meta.first ? null : loadBase(), U, F.db);
+  U = normalize(r.db);
+  const S = xlsxState();
+  if (meta.info) { S.mtime = meta.info.mtime || 0; S.size = meta.info.size || 0; }
+  if (meta.hash) S.hash = meta.hash;
+  S.lastIn = now(); S.dirty = S.dirty || now();          // the app's own entries go out to the file next
+  const n = SRX.countOf(r.stats.added) + SRX.countOf(r.stats.changed);
+  if (n) U.history.push({ at: now(), part: 'stoic-ranger', note: 'database.xlsx brought in', added: r.stats.added, changed: r.stats.changed });
+  if (LOADED && PARTS[PART]) STALE = true;
+  writeRaw(true);
+  return { ok: true, stats: r.stats, hasCopy: F.hasCopy, sheets: F.sheets };
+}
+/** Changes made in the linked file (Excel, another device, the PC) come in. Runs at every start of a page. */
+function xlsxIn(force) {
+  if (newer || !xlsxLinked()) return null;
+  const info = xlsxInfo(), S = xlsxState();
+  if (!info.linked || !info.size) return null;
+  if (!force && info.mtime && S.mtime === info.mtime && S.size === info.size) return null;
+  let b = '';
+  try { b = RAW.xlsxRead() || ''; } catch (e) { b = ''; }
+  if (!b) return { error: 'The linked database.xlsx could not be read.' };
+  const bytes = b64Bytes(b), h = hashBytes(bytes);
+  if (!force && S.hash === h) { S.mtime = info.mtime || 0; S.size = info.size; writeRaw(true); return null; }
+  const r = mergeIn(bytes, { info, hash: h, first: !S.hash });
+  SR_LAST.xlsx = r;
+  return r;
+}
+/** The app's changes go out to the linked file (after a look whether it was changed meanwhile). */
+function xlsxOut(force) {
+  if (newer || !xlsxLinked()) return null;
+  let S = xlsxState();
+  if (!S.dirty && !force) return null;
+  const info = xlsxInfo(); if (!info.linked) return null;
+  if (info.size && S.hash && (info.mtime !== S.mtime || info.size !== S.size)) { const r = xlsxIn(); if (r && r.error) return r; }
+  else if (info.size && !S.hash) { const r = xlsxIn(true); if (r && r.error) return r; }   // first sync with a file that has data
+  S = xlsxState();                                       // a merge above made a new U
+  let bytes;
+  try { bytes = SRX.write(U, { by: xlsxBy() }); } catch (e) { return { error: 'database.xlsx could not be made: ' + e.message }; }
+  let res = null;
+  try { res = parse(RAW.xlsxWrite(bytesB64(bytes))); } catch (e) { res = null; }
+  if (!res || !res.ok) return { error: (res && res.msg) || 'database.xlsx could not be saved.' };
+  S.mtime = res.mtime || 0; S.size = res.size || bytes.length; S.hash = hashBytes(bytes); S.dirty = ''; S.lastOut = now();
+  saveBase(SRX.dbPart(U));
+  writeRaw(true);
+  return { ok: true };
+}
+const SR_LAST = {};
+/** Link a database.xlsx on this device: 'create' a new one (never over an existing file) or 'open' one. */
+const xlsxLink = mode => new Promise(res => {
+  if (!canLink()) return res({ ok: false, msg: 'not available' });
+  RAW.xlsxLink(mode, cb(r => {
+    LINKED = null;
+    if (!r || !r.ok) return res({ ok: false, msg: r ? r.msg : 'cancelled' });
+    const c = U.settings.common; c.xlsx = { dirty: now() };      // a new file: the first sync merges, then writes
+    saveBase(null);
+    const out = xlsxOut(true);
+    res(out && out.error ? { ok: false, msg: out.error } : { ok: true, msg: r.msg, merged: SR_LAST.xlsx || null });
+  }));
+});
+function xlsxUnlink() { try { RAW.xlsxUnlink(); } catch (e) { } LINKED = false; U.settings.common.xlsx = {}; saveBase(null); writeRaw(true); }
+/** By hand (all devices, the only way on iPhone): save the whole database as database.xlsx … */
+const saveXlsx = () => new Promise(res => {
+  SR.flush();
+  let bytes; try { bytes = SRX.write(U, { by: xlsxBy() }); } catch (e) { return res({ ok: false, msg: e.message }); }
+  RAW.saveFile('database.xlsx', SRX.MIME, bytesB64(bytes), cb(r => {
+    if (r && r.ok && !xlsxLinked()) { saveBase(SRX.dbPart(U)); xlsxState().lastOut = now(); writeRaw(true); }
+    res(r || { ok: false, msg: 'cancelled' });
+  }));
+});
+/** … and open one: merged into this device's data (three-way against the last time a file was saved or opened). */
+const openXlsx = () => new Promise(res => RAW.openFile(SRX.MIME + ',application/octet-stream', cb(r => {
+  if (!r || !r.ok) return res({ ok: false, msg: r ? r.msg : 'cancelled' });
+  const bytes = b64Bytes(r.data);
+  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) return res({ ok: false, msg: 'This is not an .xlsx file.' });
+  const m = mergeIn(bytes, {});
+  if (m.error) return res({ ok: false, msg: m.error });
+  if (!xlsxLinked()) { saveBase(SRX.dbPart(U)); xlsxState().dirty = ''; writeRaw(true); }
+  res(Object.assign({ name: r.msg }, m));
+})));
+
 /* ---------- a part's view ---------- */
 function partSettings(part) {
   const s = U.settings[part] = U.settings[part] || {};
@@ -169,13 +282,7 @@ function partSettings(part) {
   if (part === 'sd') s.link = Object.assign({}, s.link, { enabled: true });
   return s;
 }
-function viewThoughts() {
-  if (TH.schema == null && !TH.favs.length) return null;          // first start: its welcome screen
-  const s = TH.settings; s.theme = U.settings.common.theme || 'auto';
-  return { app: PARTS.dt.app, schema: TH.schema || 1, created: TH.created, updated: TH.updated, favs: TH.favs, settings: s, history: TH.history };
-}
 function view(part) {
-  if (part === 'dt') return viewThoughts();
   const P = PARTS[part];
   if (U.schemas[part] == null && !hasData(part)) return null;   // first start of this part: its welcome screen
   const v = { schema: U.schemas[part] || 1, created: U.created, updated: U.updated };
@@ -209,29 +316,25 @@ function mergeShared(table, incoming, part) {
     if (!x.uid) x.uid = uuid();
     return x;
   });
-  old.forEach(r => { if (!seen.has(r) && usedElsewhere(table, r, part)) out.push(r); });
+  old.forEach(r => { if (!seen.has(r) && (STALE || usedElsewhere(table, r, part))) out.push(r); });   // STALE: see xlsx
   return out;
 }
-function saveThoughts(v) {
-  if ('favs' in v) TH.favs = arr(v.favs);
-  TH.schema = +v.schema || TH.schema || 1;
-  if (v.settings) {
-    TH.settings = v.settings;
-    if (v.settings.theme && v.settings.theme !== U.settings.common.theme) { U.settings.common.theme = v.settings.theme; writeRaw(); }
-  }
-  if (Array.isArray(v.history)) TH.history = v.history;
-  return writeThoughts();
+/** Stale part (see STALE): its rows win, rows it does not know are kept. */
+function addTo(old, incoming) {
+  const out = arr(incoming).filter(r => r && typeof r === 'object');
+  const has = new Set(out.map(r => r.uid || r.id).filter(Boolean));
+  arr(old).forEach(r => { if (r && !has.has(r.uid || r.id)) out.push(r); });
+  return out;
 }
 function saveView(part, json) {
   if (newer) return false;
   const v = parse(json);
   if (!v) return false;
-  if (part === 'dt') return saveThoughts(v);
   const P = PARTS[part];
   P.tables.forEach(t => {
     if (!(t in v)) return;
     const k = t, before = k === 'results' ? JSON.stringify(arr(U[k])) : '';
-    U[k] = SHARED.includes(k) ? mergeShared(k, v[t], part) : arr(v[t]);
+    U[k] = SHARED.includes(k) ? mergeShared(k, v[t], part) : STALE ? addTo(U[k], v[t]) : arr(v[t]);
     if (k === 'results' && JSON.stringify(U[k]) !== before) U.resultsChanged = now();
   });
   U.schemas[part] = +v.schema || U.schemas[part] || 1;
@@ -290,17 +393,10 @@ const pass = ['isNight', 'getSecret', 'setSecret', 'appInfo', 'saveFile', 'openF
 function bridge(part) {
   const N = {};
   pass.forEach(m => { if (RAW[m]) N[m] = (...a) => RAW[m](...a); });
-  if (part === 'dt') N.backupDb = name => { try { return RAW.backupData('thoughts', String(name).replace(/^db-/, 'thoughts-')); } catch (e) { return false; } };
   N.loadDb = () => { const v = view(part); return v ? JSON.stringify(v) : ''; };
   N.saveDb = json => saveView(part, json);
-  if (part !== 'dt') N.backupDb = name => { try { return RAW.backupDb(String(name).replace(/^db-/, 'db-' + part + '-')); } catch (e) { return false; } };
+  N.backupDb = name => { try { return RAW.backupDb(String(name).replace(/^db-/, 'db-' + part + '-')); } catch (e) { return false; } };
   N.loadDbBackup = () => {                               // the previous copy, seen through this part
-    if (part === 'dt') {
-      const j = parse((() => { try { return RAW.loadDataBackup('thoughts') || ''; } catch (e) { return ''; } })());
-      if (!isThoughtsFile(j)) return '';
-      const keep = TH; TH = normalizeThoughts(j);
-      try { const v = viewThoughts(); return v ? JSON.stringify(v) : ''; } finally { TH = keep; }
-    }
     const j = parse(RAW.loadDbBackup() || '');
     if (!j) return '';
     if (!isUnified(j)) return part === 'gundb' && isGunDb(j) ? JSON.stringify(j) : '';
@@ -413,6 +509,14 @@ function restoreAll(j) {
   const a = writeRaw(), b = writeThoughts();
   return a && b;
 }
+/** Daily Thoughts is its own app again (1.1.0): its favourites leave as an SR_Daily Thoughts backup file, which the
+    Daily Thoughts app brings in (merge, nothing deleted). thoughts.json itself stays on this device as it is. */
+const saveThoughtsFile = () => new Promise(res => {
+  const t = now();
+  const j = { app: 'sr-daily-thoughts', schema: TH.schema || 1, created: TH.created || t, updated: t, favs: clone(arr(TH.favs)), settings: clone(TH.settings || {}),
+    history: [{ at: t, note: 'Favourites saved by Stoic Ranger for the Daily Thoughts app' }], from: 'stoic-ranger' };
+  RAW.saveFile(`daily-thoughts-favourites_${t.slice(0, 10)}.json`, 'application/json', b64(JSON.stringify(j, null, 1)), cb(r => res(r || { ok: false, msg: 'cancelled' })));
+});
 /** The whole backup: the one database plus Daily Thoughts. thoughtFavs is filled too, so Stoic Ranger 1.0.0 can
     still restore a 1.0.1 backup with the current favourites. */
 const backupText = () => JSON.stringify(Object.assign({}, U, { thoughtFavs: TH.favs, thoughts: TH, backup: now() }), null, 1);
@@ -436,16 +540,22 @@ const openJson = () => new Promise(res => RAW.openFile('application/json,text/pl
 })));
 
 /* ---------- public ---------- */
-load();
+load(); LOADED = true;
 const SR = window.SR = {
   PARTS, part: PARTS[PART] ? PART : 'home', isUnified, isGunDb, isTrainingLog, isDrills, isThoughts,
   get db() { return U; }, get thoughts() { return TH; }, get thoughtsMoved() { return thSplit; },
   get readOnly() { return newer; }, get damaged() { return damaged; }, get converted() { return converted; },
-  reload() { load(); },
+  get xlsxResult() { return SR_LAST.xlsx || null; },
+  reload() { LINKED = null; load(); },
   save: writeRaw,
   /** The whole database as one backup file (all parts, Daily Thoughts included). */
   backupText,
   saveBackup, shareBackup, openJson, importBackup, restoreAll,
+  /** database.xlsx: link state, sync, by hand */
+  xlsx: { canLink, info: xlsxInfo, linked: () => xlsxLinked(), state: () => xlsxState(), link: xlsxLink, unlink: xlsxUnlink,
+    syncIn: () => { LINKED = null; return xlsxIn(true); }, syncOut: () => xlsxOut(true), sync: () => { LINKED = null; const a = xlsxIn(); if (a && a.error) return a; return xlsxOut(true) || a; },
+    save: saveXlsx, open: openXlsx },
+  saveThoughtsFile, hasThoughtFavs: () => arr(TH && TH.favs).length > 0,
   uuid, clone, now, arr,
 };
 if (PARTS[PART]) window[PARTS[PART].prefix + 'Native'] = bridge(PART);
@@ -464,19 +574,36 @@ SR.wireData = (el, toast) => {
 /* ---------- Android hooks (MainActivity calls these) and the way home ---------- */
 const T = () => (PARTS[PART] ? window[PARTS[PART].prefix] : null) || {};
 const run = f => { try { return f(); } catch (e) { console.error(e); } };
-SR.flush = () => run(() => T().flush && T().flush());
+SR.flush = () => {
+  run(() => T().flush && T().flush());
+  const r = run(() => xlsxOut());
+  if (r && r.error) SR_LAST.xlsxOut = r;
+  return r;
+};
 SR.onResume = () => {
+  const r = run(() => { LINKED = null; return xlsxIn(); });        // the file may have changed meanwhile (Excel, Drive, the PC)
+  if (STALE || (r && r.ok && SR.part === 'home')) { STALE = false; location.reload(); return; }
   const t = T(), dark = run(() => RAW.isNight && RAW.isNight());
   run(() => t.setSysDark && t.setSysDark(!!dark));
   if (SR.part === 'home') { run(() => window.SRHome && SRHome.setSysDark && SRHome.setSysDark(!!dark)); return; }
 };
 SR.home = () => { SR.flush(); location.href = PART === 'home' ? '#/' : '../index.html'; };
 SR.open = (part, hash = '') => { SR.flush(); location.href = (PART === 'home' ? '' : '../') + PARTS[part].dir + '/index.html' + hash; };
-/** Android back button: the part walks back first; at its start screen it goes home; home closes the app. */
+/** Android back button (Windows: Alt+Left, the mouse's back button). Inside a part it walks back in the part, at
+    the part's start screen it goes home. At home the first Back only shows "Press back again to close"; a second
+    Back within 2 s closes the app (Manuel 2026-10-29). Returns true while the app stays open. Leaving a page is
+    done a moment later, so the answer reaches Android before the page goes (otherwise the app closed). */
+let backAt = 0;
 SR.back = () => {
-  if (PART === 'home') return !!run(() => window.SRHome && SRHome.back && SRHome.back());
+  if (PART === 'home') {
+    if (run(() => window.SRHome && SRHome.back && SRHome.back())) { backAt = 0; return true; }
+    if (Date.now() - backAt < 2000) { backAt = 0; SR.flush(); return false; }
+    backAt = Date.now();
+    run(() => window.SRHome && SRHome.toast && SRHome.toast('Press back again to close'));
+    return true;
+  }
   if (run(() => T().back && T().back())) return true;
-  SR.home(); return true;
+  setTimeout(SR.home, 0); return true;
 };
 
 // "+ Datasheet" on the home page opens the Gun Database's own "Add new" chooser

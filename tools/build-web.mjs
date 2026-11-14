@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Builds the Stoic Ranger web app (iPhone/iPad "Add to Home Screen", or any browser) into dist/.
    The app code is taken unchanged from the Android project (stoic-ranger/app/src/main/assets/www): one app,
-   one database, five pages (home, gun/, training/, drills/, thoughts/). Each page gets the web start-up
+   one database, four pages (home, gun/, training/, drills/; Daily Thoughts is its own app again since 1.1.0). Each page gets the web start-up
    (stoic-ranger/web/native-web.js stands in for the Android shell); one manifest and one service worker cover all.
    Usage: node tools/build-web.mjs   → dist/ (published by .github/workflows/pages.yml) */
 import fs from 'node:fs';
@@ -12,7 +12,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const DIST = path.join(ROOT, 'dist');
 const APP = path.join(ROOT, 'stoic-ranger');
 const WWW = path.join(APP, 'app/src/main/assets/www');
-const PAGES = ['index.html', 'gun/index.html', 'training/index.html', 'drills/index.html', 'thoughts/index.html'];
+const PAGES = ['index.html', 'gun/index.html', 'training/index.html', 'drills/index.html'];
 const NAME = 'Stoic Ranger', COLOR = '#111111';
 
 /* One-time password asked on the first start on a device (Manuel 2026-10-28). Only the PBKDF2-SHA-256 hash is
@@ -68,7 +68,7 @@ export function build() {
   fs.writeFileSync(path.join(DIST, 'manifest.webmanifest'), JSON.stringify({
     name: NAME, short_name: NAME, id: './', start_url: './', scope: './', display: 'standalone',
     background_color: COLOR, theme_color: COLOR,
-    description: 'Gun Database, Training Log, Shooting Drills and Daily Thoughts in one app.',
+    description: 'Gun Database, Training Log and Shooting Drills in one app, with a shared database.xlsx.',
     icons: [192, 512].map(s => ({ src: `icon-${s}.png`, sizes: `${s}x${s}`, type: 'image/png', purpose: 'any' })),
   }, null, 1));
   fs.writeFileSync(path.join(DIST, '.nojekyll'), '');

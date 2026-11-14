@@ -1,0 +1,38 @@
+# Plutarch, Life of Cato the Younger 4
+q: I begin to speak only when I am sure
+q: that what I have to say is not better left unsaid.
+c: As a young man Cato was criticised for being silent. His answer shows his discipline. He did not lack opinions; he was careful about when to share them. Later in life his speeches in the Senate became famous for their force, because people knew he did not speak lightly.
+p: Before speaking today, ask whether what you're about to say is better than silence.
+
+# Plutarch, Life of Cato the Younger 3
+q: Why does no one kill this man?
+c: As a boy of fourteen, Cato was taken to the house of the dictator Sulla, where he saw the heads of executed men being brought in. He asked his tutor why no one killed Sulla. "Because they fear him more than they hate him," the tutor replied. "Then give me a sword," said the boy, "so that I can free my country from slavery." His tutor kept a close eye on him after that.
+e: 82–81 BC · Rome | The proscriptions of Sulla | After winning a civil war, Lucius Cornelius Sulla made himself dictator and published lists of enemies whose lives and property were forfeit. Thousands were killed, many for their wealth alone. The young Cato grew up in this terror; it shaped his lifelong hatred of one-man rule.
+p: Notice one wrong around you that people tolerate because they fear to speak. Decide what small thing you can do.
+
+# Sallust, The War with Catiline 52
+q: It was not by arms that our ancestors made this republic great,
+q: but by hard work at home, just rule abroad, and a mind free in counsel, not enslaved to crime or passion.
+c: Sallust gives this speech to Cato in the Senate debate on the Catilinarian conspirators. The words are Sallust's reconstruction, but they reflect what Cato stood for: a republic founded on effort, honesty and self-control, now threatened by luxury and greed.
+e: 5 December 63 BC · Temple of Concord, Rome | The Catiline debate | The Senate debated the fate of the arrested conspirators of Catiline, who had planned to seize power. Julius Caesar argued for life imprisonment. Cato, then only a tribune-elect, answered with a speech so forceful that the Senate voted for execution. The conspirators were strangled that night.
+p: In one decision today, ask whether you are acting out of effort and integrity or out of comfort.
+s: Speech as written by Sallust, The War with Catiline 52.
+
+# Seneca, On Anger 2.32
+q: I do not remember being struck.
+c: Seneca tells that Cato was once struck in the public baths by a man who did not recognise him. When the man later came to apologise, Cato replied with these words. It was better, Seneca comments, not to acknowledge an injury than to forgive it.
+p: Let go of one small offence today so completely that you do not even need to forgive it.
+s: Anecdote reported by Seneca, On Anger 2.32.
+
+# Plutarch, Life of Cato the Younger 66
+q: I do not want to be indebted to a tyrant for his lawless acts.
+q: He has no right to save, as master, those over whom he has no right to rule.
+c: After Caesar's victory at Thapsus, Cato's friends urged him to ask Caesar for mercy. Cato refused. Accepting Caesar's pardon would mean accepting that Caesar had the right to give it. He would not recognise the power of a man who had seized the state.
+e: April 46 BC · Utica, North Africa | Cato's last night | With Caesar's army approaching, Cato arranged ships for everyone in Utica who wished to escape, debated with friends that only the good are free, and read Plato's Phaedo twice. Then he stabbed himself. Caesar, on hearing it, said: "Cato, I begrudge you your death, as you begrudged me the saving of your life."
+p: Is there an advantage you are offered today at the cost of your principles? Weigh it honestly.
+
+# Plutarch, Life of Cato the Younger 70
+q: Now I am my own master.
+c: Plutarch says Cato spoke these words on his last night, after he had seen his friends off to the ships. Whatever we think of his decision, the line expresses the Stoic idea that, whatever else is taken away, no one can take away one's control over one's own will.
+p: In the middle of pressure today, remember the part that is still fully yours: your choice of response.
+

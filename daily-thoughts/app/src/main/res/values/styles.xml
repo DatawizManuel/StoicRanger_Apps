@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Stoic Ranger Web V1.0 colours (same as the web app in assets/www/css/app.css). -->
+    <color name="ranger">#3F4630</color>
+    <color name="stone">#F4F3EE</color>
+    <color name="charcoal">#1D1E1A</color>
+    <color name="tan">#D8CBA6</color>
+    <color name="night_bar">#23241F</color>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/stone</item>
+        <item name="android:statusBarColor">@color/ranger</item>
+        <item name="android:navigationBarColor">@color/charcoal</item>
+        <item name="android:colorAccent">@color/ranger</item>
+        <item name="android:colorPrimary">@color/ranger</item>
+    </style>
+</resources>
