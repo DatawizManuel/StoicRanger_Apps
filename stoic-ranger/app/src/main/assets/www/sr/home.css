@@ -53,3 +53,9 @@ body{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
 .chk{display:flex;gap:10px;align-items:flex-start;margin:10px 0 2px;font-size:14px;line-height:1.4}
 .chk input{margin-top:3px;flex:none;width:auto;min-height:0}
 @media (min-width:640px){.srnew{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* 1.3.1: a labelled Settings button and the storage line on the home page */
+.srset{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:18px;border:1px solid currentColor;background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.srset span{font-size:16px}
+.srstore{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 12px;padding:10px 14px;border-radius:10px;border:1px solid var(--line,#8884);text-decoration:none;color:inherit;font-size:14px}
+.srstore b{white-space:nowrap}

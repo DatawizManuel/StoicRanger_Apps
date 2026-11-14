@@ -73,6 +73,7 @@ function home(el) {
   const f = figures();
   el.innerHTML = `
     ${SR.readOnly ? '<div class="banner warn">This data was saved by a newer version of Stoic Ranger Shooting. Nothing is changed or saved until you update the app.</div>' : ''}
+    ${storageLine()}
     <div class="srnew">
       <a class="btn pri" href="training/index.html#/training/new">+ Training</a>
       <a class="btn pri" href="gun/index.html#/dash?srAdd=1">+ Datasheet</a>
@@ -194,6 +195,17 @@ const statsText = s => {
 };
 /* ---------- where the data lives (1.3.0, remarks #13 and #15) ---------- */
 const ncOn = () => { const st = SR.storage.available() && SR.storage.state(); return !!(st && st.mode === 'nextcloud'); };
+/** 1.3.1 (Manuel 2026-11-14: the cloud setting was not to be found): where the data is, on the home page, one tap to Settings. */
+function storageLine() {
+  let t = '';
+  try {
+    if (SR.storage.available() && SR.storage.state().mode === 'nextcloud') {
+      const s = SR.xlsx.state(), last = s.lastOut || s.lastIn ? when(s.lastOut > (s.lastIn || '') ? s.lastOut : s.lastIn) : '';
+      t = `Synced to Nextcloud${last ? ' · last sync ' + esc(last) : ''}`;
+    } else t = SR.xlsx.linked() ? 'On this device, kept in step with database.xlsx' : (SR.storage.available() ? 'On this device only (Nextcloud sync: Settings)' : 'On this device only');
+  } catch (e) { t = 'On this device only'; }
+  return `<a class="srstore" href="#/data"><span>Your data: ${t}</span><b>Settings ›</b></a>`;
+}
 function storageCard() {
   if (!SR.storage.available()) return `<div class="card"><h3>Where your data is stored</h3>
     <p class="note">On this device. Syncing with Nextcloud is in the Android and Windows apps: the iPhone web app cannot reach Nextcloud itself (Nextcloud does not let other websites in). On iPhone, use <b>Save database.xlsx</b> below and choose the Nextcloud app as the place, and <b>Open database.xlsx</b> to bring a newer file back (merged, nothing here is deleted).</p></div>`;
@@ -266,7 +278,8 @@ function wireXlsx(el) {
 function route() {
   const el = $('#view'), page = (location.hash.replace(/^#\/?/, '') || '').split('?')[0];
   window.scrollTo(0, 0);
-  $('#hTitle').textContent = page === 'data' ? 'Data' : 'Stoic Ranger Shooting';
+  $('#hTitle').textContent = page === 'data' ? 'Settings' : 'Stoic Ranger Shooting';
+  $('#hData').innerHTML = page === 'data' ? 'Done' : '<span aria-hidden="true">⚙</span> Settings';
   if (page === 'data') data(el); else home(el);
 }
 document.addEventListener('DOMContentLoaded', () => {

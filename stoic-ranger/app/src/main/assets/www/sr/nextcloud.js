@@ -1,4 +1,4 @@
-/* Stoic Ranger Shooting 1.3.0 — database.xlsx on the user's Nextcloud (remarks #13 and #15, Manuel 2026-11-07;
+/* Stoic Ranger Shooting 1.3.1 — database.xlsx on the user's Nextcloud (remarks #13 and #15, Manuel 2026-11-07;
    shared contract 00_docs/SHARED-DB-CONTRACT.md, section B).
    The device always keeps its own copy and works offline; this file only moves database.xlsx to and from the
    Nextcloud folder over WebDAV. The native side (Android Nextcloud.java, Windows main.js) holds the address and the
@@ -38,7 +38,14 @@ function info() {
   if (r.status === 404) return { linked: true, nextcloud: true, name: fileName(), size: 0, mtime: 0, etag: '' };
   if (!ok(r)) return { linked: true, nextcloud: true, name: fileName(), size: 0, mtime: 0, error: why(r) };
   const lm = Date.parse(H(r, 'last-modified')) || 0;
-  return { linked: true, nextcloud: true, name: fileName(), size: +H(r, 'content-length') || 0, mtime: lm, etag: etagOf(r) };
+  let size = +H(r, 'content-length') || 0, etag = etagOf(r);
+  if (!size) {                                                // some servers leave the size out of HEAD: ask WebDAV (1.3.1)
+    const p = req('PROPFIND', fileName(), { Depth: '0', 'Content-Type': 'application/xml' }, btoa('<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getcontentlength/><d:getetag/></d:prop></d:propfind>'));
+    const x = p.status === 207 ? xmlText(p.body) : '';
+    size = +((/<(?:\w+:)?getcontentlength>(\d+)</.exec(x) || [])[1] || 0);
+    etag = etag || ((/<(?:\w+:)?getetag>([^<]+)</.exec(x) || [])[1] || '').replace(/&quot;/g, '"');
+  }
+  return { linked: true, nextcloud: true, name: fileName(), size, mtime: lm, etag };
 }
 /** The file's bytes as base64 ('' if it could not be read) and its ETag. */
 function read() {
@@ -69,20 +76,35 @@ function prune() {
   const names = [...xmlText(r.body).matchAll(/<(?:\w+:)?href>([^<]+)<\/(?:\w+:)?href>/g)].map(m => decodeURIComponent(m[1].replace(/\/$/, '').split('/').pop())).filter(n => re.test(n)).sort();
   names.slice(0, Math.max(0, names.length - KEEP)).forEach(n => req('DELETE', 'backups/' + n));
 }
+const same64 = (a, b) => String(a || '').replace(/\s+/g, '') === String(b || '').replace(/\s+/g, '');
+const isXlsx = b => { try { return atob(String(b || '').slice(0, 8)).slice(0, 2) === 'PK'; } catch (e) { return false; } };
 /** Uploads database.xlsx (base64). etag = the version this upload is based on ('' = the file must not exist yet).
+    1.3.1: the file is read back after the upload; if Nextcloud does not give back exactly what was sent, it is sent
+    once more, and if it is still wrong the copy made just before goes back in place, so a broken file never stays.
     {ok, etag, size, mtime} or {ok:false, conflict:true} (412) or {ok:false, msg}. */
 function write(b64, etag) {
+  if (!isXlsx(b64)) return { ok: false, msg: 'Nothing was uploaded: the file to send was not an Excel file.' };
   const e = ensureDirs(); if (e) return { ok: false, msg: e };
+  let backup = '';
   if (etag) {                                                 // a copy of what is there now, before it is replaced
-    const c = req('COPY', fileName(), { 'X-Dest-Name': 'backups/' + fileName().replace(/\.xlsx$/i, '') + '-' + stamp() + '.xlsx', Overwrite: 'F' });
-    if (!ok(c) && c.status !== 404) return { ok: false, msg: 'No backup copy could be made on Nextcloud, so nothing was uploaded (' + why(c) + ')' };
+    backup = 'backups/' + fileName().replace(/\.xlsx$/i, '') + '-' + stamp() + '.xlsx';
+    const c = req('COPY', fileName(), { 'X-Dest-Name': backup, Overwrite: 'F' });
+    if (c.status === 404) backup = '';
+    else if (!ok(c)) return { ok: false, msg: 'No backup copy could be made on Nextcloud, so nothing was uploaded (' + why(c) + ')' };
     prune();
   }
-  const r = req('PUT', fileName(), Object.assign({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }, etag ? { 'If-Match': etag } : { 'If-None-Match': '*' }), b64);
+  const put = h => req('PUT', fileName(), Object.assign({ 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }, h), b64);
+  let r = put(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' });
   if (r.status === 412) return { ok: false, conflict: true };
   if (!ok(r)) return { ok: false, msg: why(r) };
-  const i = info();
-  return { ok: true, etag: etagOf(r) || i.etag || '', size: i.size, mtime: i.mtime };
+  let tag = etagOf(r);
+  for (let n = 0; n < 2; n++) {
+    const back = read();
+    if (back.b64 && same64(back.b64, b64)) { const i = info(); return { ok: true, etag: back.etag || tag || i.etag || '', size: i.size, mtime: i.mtime, verified: true }; }
+    if (n === 0 && back.etag) { r = put({ 'If-Match': back.etag }); if (!ok(r)) break; tag = etagOf(r); }
+  }
+  if (backup) req('COPY', backup, { 'X-Dest-Name': fileName(), Overwrite: 'T' });   // the last good file goes back
+  return { ok: false, msg: 'database.xlsx did not arrive on Nextcloud intact' + (backup ? ', so the previous version was put back' : '') + '. Nothing is lost on this device; try Sync now again.' };
 }
 /** Checks a setting before it is stored: can we log in and reach (or make) the folder? */
 function check(setting, password) {

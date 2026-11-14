@@ -172,6 +172,7 @@ function read(bytes) {
     F.favs = arr(d.favs); F.purposes = arr(d.purposes); F.schemas = d.schemas || {};
   }
   const found = [], created = [];
+  const noUid = m => { Object.defineProperty(m, 'noUid', { value: true, enumerable: false, writable: true }); return m; };
   const findIn = (t, uid, id) => (uid && F[t].find(r => r.uid === uid)) || (id && F[t].find(r => r.id === id)) || null;
   // value of a cell by column type; undefined = column not in this sheet (the field is not touched)
   const val = (row, h, ty) => {
@@ -196,6 +197,7 @@ function read(bytes) {
       let m = findIn(t, uid, rec.id);
       if (!m) {
         m = { uid: uid || uuid() }; F[t].push(m);                    // a new row (an entry the apps never saw)
+        if (!uid) noUid(m);                                            // made in Excel / the PC: merge() matches it by ID or name
         if (!rec.id && opts.prefix) rec.id = nextId(F[t], opts.prefix, opts.pad);
         created.push([t, m]);
       }
@@ -216,7 +218,7 @@ function read(bytes) {
     const L = F[t], was = OLD[t] && OLD[t].get(low(s));
     let r = L.find(x => x.id === s) || L.find(x => low(x.name) === low(s)) || L.find(x => txt(x.aliases).split(';').some(a => low(a) && low(a) === low(s)))
       || (was && L.find(x => x.id === was));
-    if (!r) { r = { id: nextId(L, REG[t][1]), uid: uuid(), name: s, notes: 'Created from database.xlsx' }; L.push(r); created.push([t, r]); }
+    if (!r) { r = noUid({ id: nextId(L, REG[t][1]), uid: uuid(), name: s, notes: 'Created from database.xlsx' }); L.push(r); created.push([t, r]); }
     return r.id;
   };
   const P = rowsOf(SHEETS.purposes);
@@ -239,7 +241,7 @@ function read(bytes) {
       if (!row.Date && !row.Description && !row['Source uid']) return;
       const uid = txt(row['Source uid']), id = txt(row.ID);
       let m = findIn('trainings', uid, id);
-      if (!m) { m = { uid: uid || uuid(), id: id && !F.trainings.some(x => x.id === id) ? id : nextId(F.trainings, 'TR', 4) }; F.trainings.push(m); created.push(['trainings', m]); }
+      if (!m) { m = { uid: uid || uuid(), id: id && !F.trainings.some(x => x.id === id) ? id : nextId(F.trainings, 'TR', 4) }; if (!uid) noUid(m); F.trainings.push(m); created.push(['trainings', m]); }
       if ('Date' in row) m.date = cellDate(row.Date);
       if ('Start' in row) m.start = cellTime(row.Start);
       if ('Duration h' in row) m.durationH = num(row['Duration h']);
@@ -335,8 +337,28 @@ function merge(base, app, file) {
   const stats = { added: {}, changed: {} };
   // ids that are taken by a different entry in the app: the new entry from the file gets the next free id
   const remap = {};
-  Object.keys(REFS).forEach(t => {
+  // 1.3.1: rows without a Source uid (made in Excel or by the PC dashboard) are the app's entries with the same ID
+  // (or, failing that, the same name), not new ones: they take that entry's uid and ID. Before this, every sync with
+  // such a file added each of them again under the next free ID (Manuel 2026-11-14, shooters three times).
+  TABLES.forEach(t => {
+    const A = arr(U[t]).filter(a => a && !a.example), used = new Set();
     remap[t] = {};
+    arr(file[t]).forEach(f => {
+      if (!f || !f.noUid) return;
+      const free = a => !used.has(keyOf(a)) && !arr(file[t]).some(x => x !== f && x.uid && x.uid === a.uid);
+      const sameName = a => !!(f.name && a.name && low(f.name) === low(a.name));
+      let a = (f.id && A.find(x => x.id === f.id && free(x) && (!f.name || !x.name || sameName(x)))) || null;
+      if (!a && f.name) a = A.find(x => free(x) && sameName(x)) || null;
+      if (!a && t === 'roundsLog') a = A.find(x => free(x) && txt(x.date) === txt(f.date) && x.weaponId === f.weaponId && +x.rounds === +f.rounds) || null;
+      if (!a) return;
+      used.add(keyOf(a));
+      f.uid = a.uid || f.uid;
+      if (!a.uid) { delete f.uid; }                       // the app's entry goes by its ID only
+      if (f.id && a.id && f.id !== a.id) { remap[t][f.id] = a.id; }
+      f.id = a.id || f.id;
+    });
+  });
+  Object.keys(REFS).forEach(t => {
     const A = arr(U[t]);
     arr(file[t]).forEach(f => {
       if (!f.id || A.some(a => keyOf(a) === keyOf(f))) return;
@@ -364,6 +386,45 @@ function merge(base, app, file) {
   return { db: U, stats };
 }
 const countOf = s => Object.values(s).reduce((a, n) => a + n, 0);
+/** 1.3.1 one-time clean-up of the entries 1.3.0 added twice or more from files made in Excel (see merge()).
+    Only exact copies go: guns, ammunition, barrels, shooters, trainers with the same name and the same data;
+    trainings, drill results, datasheets, rounds log rows with the same ID and the same data. References to a copy
+    (trainings, sheets, rounds, barrels …) move to the entry that is kept, the first one. Returns {db, removed}. */
+function dedupe(db) {
+  const U = clone(db), removed = {}, remap = {};
+  const SKIP = new Set(['id', 'uid', 'updated', 'added', 'created', 'source', 'example']);
+  const refKeys = { weaponId: 'weapons', barrelId: 'barrels', munitionId: 'munitions', shooterId: 'shooters', trainerId: 'trainers' };
+  const sig = r => JSON.stringify(Object.keys(r).filter(k => !SKIP.has(k)).sort().map(k => {
+    let v = r[k];
+    if (refKeys[k] && remap[refKeys[k]] && remap[refKeys[k]][v]) v = remap[refKeys[k]][v];
+    if (k === 'weapons' && Array.isArray(v)) v = v.map(w => w && remap.weapons && remap.weapons[w.weaponId] ? Object.assign({}, w, { weaponId: remap.weapons[w.weaponId] }) : w);
+    return [k, blank(v) ? '' : v];
+  }));
+  const pass = (t, byName) => {
+    const keep = new Map(); remap[t] = remap[t] || {};
+    U[t] = arr(U[t]).filter(r => {
+      if (!r || typeof r !== 'object' || r.example) return true;
+      if (byName ? !r.name : !r.id) return true;
+      const k = (byName ? low(r.name) : r.id) + '|' + sig(r);
+      const first = keep.get(k);
+      if (!first) { keep.set(k, r); return true; }
+      if (r.id && first.id && r.id !== first.id) remap[t][r.id] = first.id;
+      removed[t] = (removed[t] || 0) + 1;
+      return false;
+    });
+  };
+  ['shooters', 'trainers', 'munitions', 'weapons'].forEach(t => pass(t, true));
+  const fix = r => {
+    if (!r || typeof r !== 'object') return;
+    Object.entries(refKeys).forEach(([k, t]) => { if (r[k] && remap[t] && remap[t][r[k]]) r[k] = remap[t][r[k]]; });
+    if (Array.isArray(r.weapons)) r.weapons.forEach(w => { if (w && remap.weapons[w.weaponId]) w.weaponId = remap.weapons[w.weaponId]; });
+  };
+  TABLES.forEach(t => arr(U[t]).forEach(fix));
+  pass('barrels', true);
+  TABLES.forEach(t => arr(U[t]).forEach(fix));
+  ['trainings', 'results', 'sheets', 'roundsLog', 'targets'].forEach(t => pass(t, false));
+  return { db: U, removed, total: countOf(removed) };
+}
 
-window.SRX = { FORMAT, write, read, merge, dbPart, nextId, countOf, SHEETS, REG, TABLES, MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+window.SRX = { FORMAT, write, read, merge, dedupe, dbPart, nextId, countOf, SHEETS, REG, TABLES, MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 })();

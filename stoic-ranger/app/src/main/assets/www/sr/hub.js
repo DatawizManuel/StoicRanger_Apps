@@ -105,10 +105,36 @@ function load() {
   } else U = emptyUnified();
   normalize(U);
   if (converted && !newer) writeRaw();
+  if (!newer) cleanUp131();
   loadThoughts();
   linkInbox();
   if (PART === 'home') run(adoptLinked);
   if (!ncRecent()) xlsxIn();
+}
+/* 1.3.1, once: entries that 1.3.0 added two or three times from a database.xlsx made in Excel (rows without a Source uid)
+   become one again; references move to the one kept. Exact copies only, a backup of the whole database first (rule 1). */
+function cleanUp131() {
+  const c = U.settings.common;
+  if (c.cleanup131 || !window.SRX || !SRX.dedupe) return;
+  let r = null;
+  try { r = SRX.dedupe(U); } catch (e) { r = null; }
+  if (r && r.total) {
+    try { RAW.backupDb('db-before-1.3.1-cleanup-' + Date.now() + '.json'); } catch (e) { }
+    U = normalize(r.db);
+    U.history.push({ at: now(), part: 'stoic-ranger', note: '1.3.1: entries added more than once by the 1.3.0 sync merged into one', removed: r.removed });
+    U.settings.common.xlsx = Object.assign({}, U.settings.common.xlsx, { dirty: now() });   // the cleaned list goes out to database.xlsx
+    SR_LAST.cleanup = r.removed;
+  }
+  U.settings.common.cleanup131 = now();
+  writeRaw(true);
+}
+/* After a sync: a table that now has real entries drops its example entries (as the Gun Database does at the first
+   own entry), so the brought-in guns and ammunition are not hidden among the samples. */
+function dropExamples() {
+  ['weapons', 'barrels', 'munitions', 'shooters', 'trainers', 'roundsLog', 'sheets', 'trainings', 'results'].forEach(t => {
+    const L = arr(U[t]);
+    if (L.some(r => r && r.example) && L.some(r => r && !r.example)) U[t] = L.filter(r => !(r && r.example));
+  });
 }
 /* On Nextcloud every page start would ask the server: once in 20 s is enough (Sync now and leaving a page still do). */
 function ncRecent() {
@@ -259,6 +285,7 @@ function mergeIn(bytes, meta = {}) {
   try { RAW.backupDb('db-before-xlsx-' + Date.now() + '.json'); } catch (e) { }
   const r = SRX.merge(meta.first ? null : loadBase(), U, F.db);
   U = normalize(r.db);
+  if (SRX.countOf(r.stats.added)) dropExamples();
   const S = xlsxState();
   if (meta.info) { S.mtime = meta.info.mtime || 0; S.size = meta.info.size || 0; }
   if (meta.hash) S.hash = meta.hash;
@@ -743,11 +770,11 @@ if (PARTS[PART]) document.addEventListener('DOMContentLoaded', () => {
   if (!bar || !h1 || document.getElementById('srHome')) return;
   const b = document.createElement('button');
   b.id = 'srHome'; b.className = 'ib srhome'; b.type = 'button'; b.setAttribute('aria-label', 'Stoic Ranger Shooting home');
-  b.innerHTML = T().LOGO_SVG || '⌂';
+  b.innerHTML = (T().LOGO_SVG || '⌂') + '<span class="srhl">Home</span>';      // 1.3.1: labelled (Manuel: no way back home)
   b.onclick = SR.home;
   bar.insertBefore(b, h1);
   const st = document.createElement('style');
-  st.textContent = '.srhome{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:4px;background:none;border:0;color:inherit;flex:none}.srhome svg{width:32px;height:32px}';
+  st.textContent = '.srhome{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:44px;height:48px;padding:2px 4px;background:none;border:0;color:inherit;flex:none;cursor:pointer}.srhome svg{width:28px;height:28px}.srhome .srhl{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:1;margin-top:2px}';
   document.head.appendChild(st);
 });
 })();

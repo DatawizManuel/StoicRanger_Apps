@@ -3,7 +3,7 @@
 One app with three parts: **Gun Database**, **Training Log** and **Shooting Drills** share one database on the
 phone, kept in step with the shared **database.xlsx** (from 1.1.0). Daily Thoughts is its own app again (1.1.0). Name "Stoic Ranger Shooting" (from 1.2.0), launcher
 label "SR_Shooting", package id `at.rangebook.app` (the SR_Database id, so 1.0.0 is an update of SR_Database 0.6.0
-and keeps its data). Version 1.3.0, versionCode 13.
+and keeps its data). Version 1.3.1, versionCode 14.
 
 ## How it fits together
 
@@ -40,6 +40,9 @@ SR_Database file (the built-in demo data if none is given), opens every part, br
 Drills and Daily Thoughts backups (twice, nothing doubles), checks the parts see each other's data and that data
 from a newer version is never written. Must pass before a release.
 
+`bash tools/test-nextcloud.sh <database.xlsx made in Excel>` (1.3.1) starts a real Nextcloud 30 in Docker and runs
+the Android WebDAV code (`DavHttp.java`, on the desktop JVM) and the app's sync against it. Must pass before a release.
+
 ## Install
 
 1. Copy `stoic-ranger-1.1.0-debug.apk` to the phone and open it. Android shows it as an **update** of
@@ -52,6 +55,14 @@ from a newer version is never written. Must pass before a release.
 
 ## Versions
 
+- **1.3.1** (versionCode 14; Android, web, Windows 1.3.1; 2026-11-14): the sync fixed after the first test with a
+  real Nextcloud (backlog #21–#24). A database.xlsx made in Excel or by the PC dashboard (no Source uid) no longer adds
+  its rows again at every sync: they are matched to the app's entries by ID or name; the copies 1.3.0 made are merged
+  back into one, once, with a backup first. Brought-in entries replace the example data. After every upload the file
+  is read back from Nextcloud and must be identical, else it is sent again and, if still wrong, the previous version
+  is put back. Size from PROPFIND when a server leaves it out of HEAD. The WebDAV code is now `DavHttp.java` (plain
+  Java), tested against a real Nextcloud 30 in Docker (`tools/test-nextcloud.sh`). Home page: a labelled
+  **Settings** button and a line saying where the data is (tap it for Settings); each part's emblem now says **Home**.
 - **1.3.0** (versionCode 13; Android, web, Windows 1.3.0; 2026-11-07): remarks 12 to 15.
   - **Where the data is stored** (Data): this device only, or synced to the user's **Nextcloud** (address, user, app
     password, folder). The device keeps its own copy and works offline; database.xlsx is synced over WebDAV when the

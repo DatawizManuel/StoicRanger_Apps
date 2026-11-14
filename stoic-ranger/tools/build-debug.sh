@@ -13,7 +13,7 @@ M="$ROOT/app/src/main"
 sed 's#<manifest xmlns:android="http://schemas.android.com/apk/res/android">#<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="at.rangebook.app">#; s#\${applicationId}#at.rangebook.app#g' "$M/AndroidManifest.xml" > "$OUT/AndroidManifest.xml"
 "$TOOLS/aapt2" link -o "$OUT/base.apk" -I "$TOOLS/android.jar" --manifest "$OUT/AndroidManifest.xml" \
    -A "$M/assets" --java "$OUT/gen" --min-sdk-version 26 --target-sdk-version 34 \
-   --version-code "${VERSION_CODE:-13}" --version-name "${VERSION_NAME:-1.3.0}" --debug-mode \
+   --version-code "${VERSION_CODE:-14}" --version-name "${VERSION_NAME:-1.3.1}" --debug-mode \
    -0 woff2 -0 png -0 jpg "$OUT/res/res.zip"
 # Eclipse compiler: this D8 build trips over some javac 21 class files
 java -jar "$TOOLS/ecj-3.45.0.jar" -nowarn -8 -cp "$TOOLS/android.jar" -d "$OUT/classes" \
@@ -37,7 +37,7 @@ KS="${KEYSTORE:-$ROOT/debug.keystore}"
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \
    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 mkdir -p "$ROOT/build/outputs"
-APK="$ROOT/build/outputs/stoic-ranger-shooting-${VERSION_NAME:-1.3.0}-debug.apk"
+APK="$ROOT/build/outputs/stoic-ranger-shooting-${VERSION_NAME:-1.3.1}-debug.apk"
 java -jar "$TOOLS/apksigner.jar" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android \
    --ks-key-alias androiddebugkey --min-sdk-version 26 --out "$APK" "$OUT/aligned.apk"
 java -jar "$TOOLS/apksigner.jar" verify --min-sdk-version 26 "$APK"
