@@ -109,19 +109,98 @@ S.applyLocal = out => {
   return true;
 };
 
-/* ---------- writing the workbook: own sheets replaced, every other sheet kept ---------- */
-S.build = (X, wb, st) => {
-  wb = wb || X.utils.book_new();
-  const rows = [S.HEAD].concat(st.favs.map(f => {
-    const q = DT.quote(f.id), a = q && DT.author(q.a);
-    return [f.id, a ? a.name : '', q ? DT.quoteText(q) : '', f.at || '', f.note || ''];
-  }));
-  const ws = X.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 80 }, { wch: 25 }, { wch: 40 }];
+/* ---------- writing the workbook: own sheets replaced, every other sheet kept ----------
+   0.3.1: an existing file is changed inside its zip: only the parts of DT_Favourites and _DT_Data are replaced (or
+   added at the end, with their entries in workbook.xml, its rels and [Content_Types].xml). Every other part stays byte
+   for byte as it was, so the other apps' sheets, Excel's drop-down lists, formats and formulas are untouched. Only
+   when the file cannot be read that way (or there is no file yet) the workbook is written new with the Excel library. */
+S.rows = st => [S.HEAD].concat(st.favs.map(f => {
+  const q = DT.quote(f.id), a = q && DT.author(q.a);
+  return [f.id, a ? a.name : '', q ? DT.quoteText(q) : '', f.at || '', f.note || ''];
+}));
+S.dataRows = st => {
   const json = JSON.stringify({ app: DT.APP_ID, schema: DT.SCHEMA, updated: new Date().toISOString(), version: DT.VERSION, settings: st.settings, tomb: st.tomb });
   const data = [['Daily Thoughts data (JSON, written by the app; do not edit)']];
   for (let i = 0; i < json.length; i += CHUNK) data.push([json.slice(i, i + CHUNK)]);
-  const wd = X.utils.aoa_to_sheet(data);
+  return data;
+};
+const xesc = v => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** A plain worksheet part: text cells as inline strings, so it needs nothing from the rest of the workbook. */
+S.sheetXml = (rows, widths) => {
+  const col = i => String.fromCharCode(65 + i);
+  const cols = widths ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+  const body = rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => v === '' || v == null ? '' : `<c r="${col(ci)}${ri + 1}" t="inlineStr"><is><t xml:space="preserve">${xesc(v)}</t></is></c>`).join('')}</row>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${body}</sheetData></worksheet>`;
+};
+const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const WS_TYPE = REL_NS + '/worksheet', WS_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
+const attr = (tag, name) => { const m = new RegExp('\\s' + name.replace(':', '\\:') + '="([^"]*)"').exec(tag); return m ? m[1] : null; };
+const unx = v => String(v).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+/** Replaces only our two sheets inside the original xlsx zip. Returns the new bytes; throws if the file is unusual. */
+S.patch = (X, orig, st) => {
+  const C = X.CFB, dec = new TextDecoder(), enc = new TextEncoder();
+  const zip = C.read(orig, { type: 'array' });
+  const get = n => { const e = C.find(zip, '/' + n); return e && e.content ? dec.decode(e.content) : null; };
+  const put = (n, txt) => { const e = C.find(zip, '/' + n), b = enc.encode(txt); if (e) { e.content = b; e.size = b.length; } else C.utils.cfb_add(zip, '/' + n, b); };
+  const rootRels = get('_rels/.rels');
+  const off = rootRels && (rootRels.match(/<Relationship\b[^>]*>/g) || []).find(t => /\/officeDocument$/.test(attr(t, 'Type') || ''));
+  let wbPath = off ? attr(off, 'Target') : 'xl/workbook.xml';
+  wbPath = wbPath.replace(/^\//, '');
+  const dir = wbPath.includes('/') ? wbPath.slice(0, wbPath.lastIndexOf('/') + 1) : '';
+  const relsPath = dir + '_rels/' + wbPath.slice(dir.length) + '.rels';
+  let wbx = get(wbPath), rels = get(relsPath), ct = get('[Content_Types].xml');
+  if (!wbx || !rels || !ct || !/<sheets\b[^>]*>[\s\S]*<\/sheets>/.test(wbx)) throw new Error('unusual workbook');
+  const relTags = rels.match(/<Relationship\b[^>]*\/?>/g) || [];
+  const target = id => { const t = relTags.find(r => attr(r, 'Id') === id); if (!t) return null; const g = attr(t, 'Target'); return g.startsWith('/') ? g.slice(1) : dir + g; };
+  const sheetTags = (/<sheets\b[^>]*>([\s\S]*)<\/sheets>/.exec(wbx)[1].match(/<sheet\b[^>]*\/>/g)) || [];
+  const rAttr = t => { const m = /\s([\w-]+):id="([^"]*)"/.exec(t); return m ? m[2] : null; };
+  let maxId = Math.max(0, ...sheetTags.map(t => +attr(t, 'sheetId') || 0));
+  const usedR = new Set(relTags.map(r => attr(r, 'Id')));
+  const parts = new Set(zip.FullPaths.map(f => f.replace(/^[^/]*\//, '')));
+  const write = (name, xml, hidden) => {
+    const tag = sheetTags.find(t => unx(attr(t, 'name') || '') === name);
+    if (tag) {
+      const path = target(rAttr(tag));
+      if (!path) throw new Error('sheet without part: ' + name);
+      put(path, xml);
+      const nt = tag.replace(/\sstate="[^"]*"/, '').replace(/\s*\/>$/, (hidden ? ' state="hidden"' : '') + '/>');
+      wbx = wbx.replace(tag, nt);
+      return;
+    }
+    let k = 1; while (parts.has(dir + 'worksheets/sheet' + k + '.xml')) k++;
+    const path = dir + 'worksheets/sheet' + k + '.xml'; parts.add(path);
+    let n = 1; while (usedR.has('rId' + n)) n++;
+    const rid = 'rId' + n; usedR.add(rid);
+    put(path, xml);
+    rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rid}" Type="${WS_TYPE}" Target="/${path}"/></Relationships>`);
+    if (!ct.includes(`PartName="/${path}"`)) ct = ct.replace(/<\/Types>\s*$/, `<Override PartName="/${path}" ContentType="${WS_CT}"/></Types>`);
+    wbx = wbx.replace(/<\/sheets>/, `<sheet xmlns:r="${REL_NS}" name="${xesc(name)}" sheetId="${++maxId}"${hidden ? ' state="hidden"' : ''} r:id="${rid}"/></sheets>`);
+  };
+  write(S.FAV, S.sheetXml(S.rows(st), [26, 22, 80, 25, 40]), false);
+  write(S.DATA, S.sheetXml(S.dataRows(st)), true);
+  put(wbPath, wbx); put(relsPath, rels); put('[Content_Types].xml', ct);
+  // the library's own marker entry must not go into the file
+  const mark = zip.FullPaths.findIndex(f => /\u0001Sh33tJ5$/.test(f));
+  if (mark >= 0) { zip.FullPaths.splice(mark, 1); zip.FileIndex.splice(mark, 1); }
+  return new Uint8Array(C.write(zip, { fileType: 'zip', type: 'array', compression: true }));
+};
+/** New workbook bytes. orig = the file's bytes as downloaded / opened (null: no file yet). */
+S.build = (X, orig, st) => {
+  if (orig && orig.length) {
+    try {
+      const out = S.patch(X, orig, st);
+      const check = S.parse(X, X.read(out, { type: 'array' }));        // must read back as what we meant to write
+      if (check.hasFav && check.hasData && check.favs.length === st.favs.length) return out;
+      console.warn('zip patch did not read back, writing the workbook new');
+    } catch (e) { console.warn('zip patch failed, writing the workbook new: ' + e.message); }
+  }
+  let wb = null;
+  if (orig && orig.length) { try { wb = X.read(orig, { type: 'array', cellFormula: true, cellNF: true, cellStyles: true }); } catch (e) { wb = null; } }
+  wb = wb || X.utils.book_new();
+  const ws = X.utils.aoa_to_sheet(S.rows(st));
+  ws['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 80 }, { wch: 25 }, { wch: 40 }];
+  const wd = X.utils.aoa_to_sheet(S.dataRows(st));
   const put = (name, sheet) => { if (wb.SheetNames.includes(name)) wb.Sheets[name] = sheet; else X.utils.book_append_sheet(wb, sheet, name); };
   put(S.FAV, ws); put(S.DATA, wd);
   wb.Workbook = wb.Workbook || {};
@@ -130,7 +209,7 @@ S.build = (X, wb, st) => {
   wb.Workbook.Sheets.forEach(s => { if (s.name === S.DATA) s.Hidden = 1; else if (s.name === S.FAV) s.Hidden = 0; });
   return new Uint8Array(X.write(wb, { type: 'array', bookType: 'xlsx', compression: true }));
 };
-S.read = (X, bytes) => X.read(bytes, { type: 'array', cellFormula: true, cellNF: true, cellStyles: true });
+S.read = (X, bytes) => X.read(bytes, { type: 'array' });
 
 /* ---------- storage setting (Android: native, never in db.json or the xlsx) ---------- */
 S.storage = () => { try { return N && N.storageGet ? JSON.parse(N.storageGet()) : { mode: 'local' }; } catch (e) { return { mode: 'local' }; } };
@@ -180,14 +259,15 @@ S.run = async (why = '') => {
       DT.flush();
       const d = await nc('ncDownload');
       if (d.status !== 200 && d.status !== 404) { setMsg(S.why(d)); res = { ok: false, status: d.status }; done = true; break; }
-      const wb = d.status === 200 ? S.read(X, DT.b64.toBytes(d.b64)) : null;
+      const orig = d.status === 200 ? DT.b64.toBytes(d.b64) : null;
+      const wb = orig ? S.read(X, orig) : null;
       const rem = S.parse(X, wb);
       if (rem.schema > DT.SCHEMA) { setMsg(`The file on Nextcloud comes from a newer Daily Thoughts (data format ${rem.schema}): update the app. Nothing was changed.`); done = true; break; }
       const out = S.merge(m.base, S.local(), rem);
       S.quiet = true; const changedHere = S.applyLocal(out); DT.save(true); S.quiet = false;
       if (changedHere) S.refresh();
       if (!rem.exists || !rem.hasFav || !rem.hasData || !S.same(out, rem)) {
-        const bytes = S.build(X, wb, out);
+        const bytes = S.build(X, orig, out);
         const u = await nc('ncUpload', DT.b64.fromBytes(bytes), d.status === 200 ? d.etag : '');
         if (u.status === 412) continue;                         // written elsewhere meanwhile: again from the top
         if (!(u.status >= 200 && u.status < 300)) { setMsg(S.why(u)); res = { ok: false, status: u.status }; done = true; break; }
@@ -243,7 +323,7 @@ S.updateFile = async () => {
   const before = DT.db.favs.length, m = meta();
   const out = S.merge(m.fileBase && m.fileBase.name === f.name ? m.fileBase.st : null, S.local(), rem);
   S.applyLocal(out); m.fileBase = { name: f.name, st: out }; DT.save(true);
-  const bytes = S.build(X, wb, out);
+  const bytes = S.build(X, f.bytes, out);
   const r = await DT.saveFile(f.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
   const added = DT.db.favs.length - before;
   DT.toast(`${added > 0 ? added + ' favourites from the file added. ' : ''}${r.ok ? 'Saved: ' + r.msg : (r.msg === 'cancelled' ? 'File not saved.' : 'Not saved: ' + r.msg)}`, !r.ok && r.msg !== 'cancelled');

@@ -54,7 +54,7 @@ DT.print = (html, job) => {
   f.srcdoc = html; f.onload = () => { setTimeout(() => { f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300); };
 };
 /** App version: Android reads it from the APK, the web app (iPhone / iPad) from DT.VERSION. Bump both together. */
-DT.VERSION = '0.3.0';
+DT.VERSION = '0.3.1';
 DT.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: DT.VERSION, android: '-', device: navigator.userAgent.slice(0, 60) }; } catch (e) { return {}; } };
 /** Web app started from the home screen (iPhone "Add to Home Screen", or an installed app on Android / desktop). */
 DT.standalone = () => !N && (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches);

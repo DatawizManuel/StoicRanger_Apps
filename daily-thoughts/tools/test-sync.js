@@ -55,11 +55,13 @@ srv.listen(0, async () => {
   await ctx.addInitScript(fakeNative);
   const errs = [];
   const p = await ctx.newPage(); p.on('pageerror', e => errs.push(e.message));
+  p.on('console', m => { if (/zip patch/.test(m.text())) errs.push(m.text()); });   // the in-zip write must not fall back
   await p.goto(url.replace('index.html', 'css/app.css'));
   // a database.xlsx from SR Shooting: its own sheets, a hidden _StoicRanger sheet, and favourites saved on another phone
   const db = { app: 'sr-daily-thoughts', schema: 1, favs: [{ id: 'q-marcus-aurelius-01', at: '2026-11-01T08:00:00.000Z' }, { id: 'q-seneca-03', at: '2026-11-02T08:00:00.000Z', note: 'phone note' }], settings: { theme: 'dark' } };
   await p.evaluate(d => { localStorage.clear(); localStorage.setItem('dt.db', JSON.stringify(d)); }, db);
-  await p.goto(url); await p.waitForTimeout(300);
+  await p.goto(url); await p.waitForTimeout(900);
+  await p.evaluate(() => { DT.sync._soon = DT.sync.soon; DT.sync.soon = () => { }; });   // steps below sync by hand; the automatic sync after a change is checked at the end
   await p.evaluate(async () => {
     const X = await DT.sync.lib();
     const wb = X.utils.book_new();
@@ -163,6 +165,10 @@ srv.listen(0, async () => {
   r = await p.evaluate(() => DT.sync.run('now'));
   ok(r.ok && (await remote()).favs.some(f => f.id === 'q-plato-04'), 'back online: Sync now brings it to the file');
 
+  // after a change the app syncs by itself a moment later
+  await p.evaluate(() => { DT.sync.soon = DT.sync._soon; DT.toggleFav('q-plato-05'); });
+  await p.waitForTimeout(4500);
+  ok((await remote()).favs.some(f => f.id === 'q-plato-05'), 'a change syncs by itself a few seconds later');
   // the More page shows the setting, never the password
   await p.evaluate(() => DT.go('#/more')); await p.waitForTimeout(200);
   const ui = await p.evaluate(() => ({ on: !!document.querySelector('[data-mode="nextcloud"].on'), url: document.querySelector('#stUrl').value, pw: document.querySelector('#stPw').value, status: document.querySelector('#syncStatus').textContent, link: !!document.querySelector('[data-link="at.rangebook.app"]:checked') }));
@@ -178,6 +184,35 @@ srv.listen(0, async () => {
   ok(await p.evaluate(() => DT.db.favs.find(f => f.id === 'q-plato-01').note === 'my note'), 'note typed under the quote is kept with the favourite');
   ok(errs.length === 0, 'no script errors ' + errs.join(' | '));
   await ctx.close();
+
+  // 10 (0.3.1): a real database.xlsx from the PC dashboard (drop-down lists, styles): only our parts change
+  const REAL = process.env.DT_REAL_XLSX || '/mnt/project-files/stoic-ranger-apps/02_shared/pc-dashboard/03_registry/database.xlsx';
+  if (fs.existsSync(REAL)) {
+    const rp = await b.newPage(); const rerr = []; rp.on('pageerror', e => rerr.push(e.message)); rp.on('console', m => { if (/zip patch/.test(m.text())) rerr.push(m.text()); });
+    await rp.goto(url.replace('index.html', 'css/app.css'));
+    await rp.evaluate(() => { localStorage.clear(); localStorage.setItem('dt.unlocked', '2026-11-14'); });
+    await rp.goto(url); await rp.waitForTimeout(300);
+    const st = { favs: [{ id: 'q-seneca-03', at: '2026-11-02T08:00:00.000Z', note: 'A & B <ok> "quoted"' }, { id: 'q-epictetus-01', at: '', note: '' }], settings: { theme: 'dark' }, tomb: { 'q-plato-01': '2026-11-03T08:00:00.000Z' } };
+    const outs = await rp.evaluate(async ([b64, st]) => {
+      const X = await DT.sync.lib();
+      const one = DT.sync.build(X, DT.b64.toBytes(b64), st);
+      st.favs.push({ id: 'q-plato-02', at: '2026-11-04T08:00:00.000Z', note: 'second write' });
+      const two = DT.sync.build(X, one, st);                       // our sheets already there: replaced in place
+      return [DT.b64.fromBytes(one), DT.b64.fromBytes(two), DT.sync.parse(X, X.read(two, { type: 'array' })).favs.map(f => f.id + '|' + f.note)];
+    }, [fs.readFileSync(REAL).toString('base64'), st]);
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dt-xlsx-'));
+    fs.writeFileSync(path.join(tmp, 'one.xlsx'), Buffer.from(outs[0], 'base64'));
+    fs.writeFileSync(path.join(tmp, 'two.xlsx'), Buffer.from(outs[1], 'base64'));
+    const { spawnSync } = require('child_process');
+    for (const [f, label] of [['one.xlsx', 'first write'], ['two.xlsx', 'second write']]) {
+      const r = spawnSync('python3', [path.join(__dirname, 'check-xlsx-parts.py'), REAL, path.join(tmp, f)], { encoding: 'utf8' });
+      for (const l of (r.stdout + r.stderr).trim().split('\n')) if (l) console.log(l.replace(/^(PASS|FAIL) /, `$1 real database.xlsx, ${label}: `));
+      if (r.status !== 0) process.exitCode = 1;
+    }
+    ok(outs[2].join() === 'q-seneca-03|A & B <ok> "quoted",q-epictetus-01|,q-plato-02|second write', 'real database.xlsx: favourites and notes read back exactly ' + outs[2]);
+    ok(rerr.length === 0, 'real database.xlsx: written inside the zip, no fallback ' + rerr.join(' | '));
+    await rp.close();
+  } else console.log('SKIP real database.xlsx not found (set DT_REAL_XLSX)');
 
   // 9: web app (no DTNative): Update an Excel file keeps the other sheets
   const w = await b.newPage(); const werr = []; w.on('pageerror', e => werr.push(e.message));

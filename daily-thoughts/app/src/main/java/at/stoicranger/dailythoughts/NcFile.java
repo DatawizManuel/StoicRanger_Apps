@@ -2,6 +2,7 @@ package at.stoicranger.dailythoughts;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -46,19 +47,39 @@ public class NcFile {
     /**
      * etag = the ETag of the download the merge was based on ("" = the file did not exist). 412 means someone else
      * wrote it meanwhile: the caller downloads, merges and tries again. stamp = YYYYMMDD-HHMMSS for the backup name.
+     * 0.3.1 (as SR Shooting 1.3.1): only an xlsx (zip, "PK") is sent; after the PUT the file is read back and must be
+     * byte-identical, else it is sent once more, and if it is still wrong the backup made just before goes back in place.
      */
     public WebDav.Res upload(byte[] data, String etag, String stamp) {
-        if (!dav.mkdirs(folder)) { WebDav.Res r = new WebDav.Res(); r.status = 0; r.error = "cannot reach the folder " + folder; return r; }
+        if (data == null || data.length < 4 || data[0] != 'P' || data[1] != 'K') return fail(0, "not an Excel file: nothing sent");
+        if (!dav.mkdirs(folder)) return fail(0, "cannot reach the folder " + folder);
+        String backup = null;
         if (etag != null && !etag.isEmpty()) {
             dav.mkdirs(backups());
-            WebDav.Res c = dav.copy(path(), backups() + stem() + "-" + stamp + ".xlsx");
-            if (!c.ok() && c.status != 412) {   // 412: a backup of this second exists already
-                WebDav.Res r = new WebDav.Res(); r.status = c.status; r.error = "backup copy failed (" + c.status + ")"; return r;
-            }
+            backup = backups() + stem() + "-" + stamp + ".xlsx";
+            WebDav.Res c = dav.copy(path(), backup);
+            if (c.status == 412) backup = null;          // a backup of this second exists already (a retry)
+            else if (!c.ok()) return fail(c.status, "backup copy failed (" + c.status + ")");
             prune();
         }
-        return dav.put(path(), data, etag);
+        WebDav.Res put = dav.put(path(), data, etag);
+        if (!put.ok()) return put;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            WebDav.Res back = dav.get(path());
+            if (back.status == 200 && Arrays.equals(back.body, data)) { back.body = new byte[0]; return back; }   // arrived intact
+            if (attempt == 0) {
+                if (back.status != 200) continue;        // could not read it back: one more look
+                WebDav.Res again = dav.put(path(), data, back.etag);
+                if (again.status == 412) return again;    // someone else wrote meanwhile: merge again
+            }
+        }
+        // still not the bytes we sent: put the version from before back (or remove the broken new file we made)
+        if (backup != null) dav.copyOver(backup, path());
+        else if (etag == null || etag.isEmpty()) dav.delete(path());
+        return fail(0, "the upload did not arrive intact; the file on Nextcloud was put back as it was");
     }
+
+    private static WebDav.Res fail(int status, String msg) { WebDav.Res r = new WebDav.Res(); r.status = status; r.error = msg; return r; }
 
     /** Deletes only our own backups beyond the newest 30 (names <stem>-YYYYMMDD-HHMMSS.xlsx sort by time). */
     public int prune() {

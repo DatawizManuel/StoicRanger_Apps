@@ -27,8 +27,10 @@ Stoic Ranger Web V1.0 colours (stone and ranger green in light, charcoal and tan
   except to a linked Stoic Ranger app (same signing key, after consent).
   - Workbook: Daily Thoughts writes only `DT_Favourites` (Quote ID, Author, Quote, Saved at, Note) and the hidden
     `_DT_Data` (settings and app deletions as JSON) and keeps every other sheet. Linked apps share `database.xlsx`,
-    alone it is `dailythoughts.xlsx`. (The Excel library rewrites the other sheets' cells and keeps hidden sheets
-    hidden, but not cell formatting or charts.)
+    alone it is `dailythoughts.xlsx`. 0.3.1: an existing file is changed inside its zip, only the parts of these two
+    sheets are replaced or added; every other part stays byte for byte (other apps' sheets, drop-down lists, formats).
+  - Uploads (0.3.1, as SR Shooting 1.3.1): only an xlsx is sent; after each upload the file is read back and must be
+    byte-identical, else it is sent once more, and if still wrong the backup made just before is put back.
   - Merge: three-way against the last sync. A favourite on either side is kept; a row missing in the file (deleted in
     Excel) is not a deletion. Only a removal in the app (a tombstone, synced so every phone learns of it) removes a
     favourite saved before that time. Notes and settings: the side that changed wins.
@@ -41,7 +43,7 @@ Stoic Ranger Web V1.0 colours (stone and ranger green in light, charcoal and tan
 
 ## Install the test build
 
-1. Copy `sr-daily-thoughts-0.3.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
+1. Copy `sr-daily-thoughts-0.3.1-debug.apk` to the phone and open it in the Files app; allow installs from that app.
 2. Play Protect may warn about an unknown app: *Install anyway* (debug build signed with the test key).
 3. Open **SR_Daily Thoughts** and tap *Read today's thought*.
 
@@ -93,10 +95,18 @@ Stoic Ranger test builds.
 
 Before each release, all must print only PASS: `DT_PASS=… node tools/test-data-safety.js`, `node tools/test-sync.js`
 (sync and Excel file against an in-page Nextcloud stand-in) and `tools/test-nc.sh` (WebDav.java + NcFile.java on the
-JVM against `tools/webdav-mock.js`). The build stops if `classes.dex` references `LambdaMetafactory` (the cloud dx
+JVM against `tools/webdav-mock.js`). Against a real Nextcloud 30 in Docker: `tools/test-nextcloud.sh [database.xlsx]`
+(the Android WebDAV code on the JVM behind `tools/nc-test/NcBridge.java`, the page's sync through it, two phones,
+the PC's database.xlsx checked part by part with `tools/check-xlsx-parts.py`). The build stops if `classes.dex` references `LambdaMetafactory` (the cloud dx
 build has no lambda support: use anonymous classes).
 
 ## Changes
+
+- **0.3.1** (2026-11-14): sync fixes after the first real Nextcloud test of SR Shooting
+  (00_docs/SYNC-FIXES-2026-11-14.md). The WebDAV calls now go as plain HTTPS requests (no reflection trick that may
+  fail on a phone); every upload is read back and checked, a broken one is sent again or the backup is put back; only
+  Daily Thoughts' own two sheets are changed inside database.xlsx, everything else stays byte for byte (Excel's
+  drop-down lists included). Tested against a real Nextcloud 30. No data change.
 
 - **0.3.0** (2026-11-07): optional Nextcloud sync of favourites, notes and settings (shared contract v1), link
   consent and the shared storage setting with the other Stoic Ranger apps, Excel file update / save (web too), notes
