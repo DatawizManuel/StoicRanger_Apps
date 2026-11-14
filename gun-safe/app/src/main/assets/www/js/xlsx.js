@@ -108,8 +108,82 @@ window.GSX = (() => {
     wb.Workbook = wb.Workbook || {};
     const prev = {}; arr(wb.Workbook.Sheets).forEach(s => { if (s && s.name) prev[s.name] = s.Hidden; });
     wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: n === HIDDEN || n === DELETED ? 1 : (prev[n] || 0) }));
-    return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
+    const out = new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
+    // contract F: drop-down lists, column widths, frozen rows and named ranges of the existing file stay
+    if (existing && existing.length) { try { return keepLayout(X, out, existing); } catch (e) { return out; } }
+    return out;
   }
+
+  /* Taken over unchanged from SR Shooting 1.4.0 (sr/xlsxdb.js keepLayout), so both apps keep the layout of
+     database.xlsx the same way: for every sheet that was already in the file, its data validations (a list follows
+     its column by header name), column widths and frozen header rows, plus the named ranges those lists use. */
+  function keepLayout(X, fresh, old) {
+    const C = X.CFB, A = C.read(fresh, { type: 'array' }), B = C.read(old, { type: 'array' });
+    const txtOf = (z, p) => { const i = z.FullPaths.findIndex(f => f.replace(/^Root Entry\//, '') === p); return i < 0 ? null : { i, s: new TextDecoder().decode(z.FileIndex[i].content) }; };
+    const put = (z, i, str) => { z.FileIndex[i].content = new TextEncoder().encode(str); };
+    const sheetPaths = z => {
+      const wb = txtOf(z, 'xl/workbook.xml'), rel = txtOf(z, 'xl/_rels/workbook.xml.rels'); if (!wb || !rel) return {};
+      const targets = {}; rel.s.replace(/<Relationship\b[^>]*>/g, t => { const id = (/Id="([^"]+)"/.exec(t) || [])[1], tg = (/Target="([^"]+)"/.exec(t) || [])[1]; if (id && tg) targets[id] = tg.replace(/^\/?(xl\/)?/, 'xl/'); return t; });
+      const out = {}; wb.s.replace(/<sheet\b[^>]*>/g, t => { const n = (/name="([^"]+)"/.exec(t) || [])[1], id = (/r:id="([^"]+)"/.exec(t) || [])[1]; if (n && targets[id]) out[n] = targets[id]; return t; });
+      return out;
+    };
+    const pa = sheetPaths(A), pb = sheetPaths(B);
+    let changed = false;
+    // header rows of both files: a column that moved (1.4.0: the Shooter column went) takes its drop-down along
+    let hA = {}, hB = {};
+    try {
+      const head = wb => { const o = {}; wb.SheetNames.forEach(n => { const a = X.utils.sheet_to_json(wb.Sheets[n], { header: 1, range: 0, defval: '' })[0]; o[n] = arr(a).map(v => String(v)); }); return o; };
+      hA = head(X.read(fresh, { type: 'array', sheetRows: 1 })); hB = head(X.read(old, { type: 'array', sheetRows: 1 }));
+    } catch (e) { hA = {}; hB = {}; }
+    const colN = l => l.split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1, colL = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+    const remapDv = (dv, name) => {
+      const ha = hA[name], hb = hB[name];
+      if (!ha || !hb || ha.join('\u0001') === hb.join('\u0001')) return dv;
+      const map = c => { const h = hb[c]; if (h == null || h === '') return c < hb.length ? -1 : c; const i = ha.indexOf(h); return i; };
+      let n = 0;
+      const out = dv.replace(/<dataValidation\b[^>]*?(\/>|>[\s\S]*?<\/dataValidation>)/g, el => {
+        const sq = (/sqref="([^"]*)"/.exec(el) || [])[1]; if (sq == null) return el;
+        if (/<formula1>[^<]*Shooters!/.test(el)) return '';
+        const parts = [];
+        sq.split(/\s+/).filter(Boolean).forEach(rg => {
+          const m = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/.exec(rg); if (!m) { parts.push(rg); return; }
+          const c1 = colN(m[1]), c2 = m[3] ? colN(m[3]) : c1, r1 = m[2], r2 = m[4] || m[2];
+          for (let c = c1; c <= c2; c++) { const to = map(c); if (to >= 0) parts.push(colL(to) + r1 + (r2 !== r1 || m[3] ? ':' + colL(to) + r2 : '')); }
+        });
+        if (!parts.length) return '';
+        n++;
+        return el.replace(/sqref="[^"]*"/, 'sqref="' + parts.join(' ') + '"');
+      });
+      if (!n) return '';
+      return out.replace(/count="\d+"/, 'count="' + n + '"');
+    };
+    const sameHead = name => !hA[name] || !hB[name] || hA[name].join('\u0001') === hB[name].join('\u0001');
+    const grab = (x, tag) => { const m = new RegExp('<' + tag + '\\b[\\s\\S]*?</' + tag + '>|<' + tag + '\\b[^>]*/>').exec(x); return m ? m[0] : ''; };
+    Object.keys(pa).forEach(name => {
+      if (!pb[name]) return;
+      const a = txtOf(A, pa[name]), b = txtOf(B, pb[name]); if (!a || !b) return;
+      let x = a.s;
+      const dv = remapDv(grab(b.s, 'dataValidations'), name), cols = sameHead(name) ? grab(b.s, 'cols') : '', views = grab(b.s, 'sheetViews');
+      if (views) x = grab(x, 'sheetViews') ? x.replace(grab(x, 'sheetViews'), views) : x.replace(/(<sheetFormatPr\b|<cols\b|<sheetData\b)/, views + '$1');
+      if (cols) x = grab(x, 'cols') ? x.replace(grab(x, 'cols'), cols) : x.replace(/<sheetData\b/, cols + '<sheetData');
+      if (dv && !grab(x, 'dataValidations')) x = x.replace(/(<hyperlinks\b|<printOptions\b|<pageMargins\b|<pageSetup\b|<headerFooter\b|<drawing\b|<legacyDrawing\b|<tableParts\b|<extLst\b|<\/worksheet>)/, dv + '$1');
+      if (x !== a.s) { put(A, a.i, x); changed = true; }
+    });
+    // named ranges (not the built-in _xlnm ones) that the drop-down lists may point at
+    const wa = txtOf(A, 'xl/workbook.xml'), wbOld = txtOf(B, 'xl/workbook.xml');
+    if (wa && wbOld) {
+      const names = (grab(wbOld.s, 'definedNames').match(/<definedName\b[\s\S]*?<\/definedName>/g) || []).filter(d => !/name="_xlnm\./.test(d) && /!/.test(d));
+      const sheetsNow = Object.keys(pa);
+      const ok = names.filter(d => sheetsNow.some(n => d.includes(n + '!') || d.includes("'" + n + "'!")));
+      if (ok.length && !/<definedName\b/.test(wa.s)) {
+        put(A, wa.i, wa.s.replace(/<\/sheets>/, '</sheets><definedNames>' + ok.map(d => d.replace(/\s*localSheetId="\d+"/, '')).join('') + '</definedNames>')); changed = true;
+      }
+    }
+    if (!changed) return fresh;
+    const junk = A.FullPaths.findIndex(f => /Sh33tJ5/.test(f)); if (junk >= 0) { A.FullPaths.splice(junk, 1); A.FileIndex.splice(junk, 1); }
+    return new Uint8Array(C.write(A, { fileType: 'zip', type: 'array', compression: true }));
+  }
+
 
   /** xlsx bytes → { data: tables, hasCopy, found: [sheets] } (null data when the file has no GunSafe sheets yet). */
   function read(bytes) {

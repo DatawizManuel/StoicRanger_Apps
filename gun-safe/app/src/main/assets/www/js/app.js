@@ -368,7 +368,7 @@
     h += `<h2 class="sec">Database file</h2><p class="sub" style="margin:0 0 8px">${esc(st.file)}: the GS_ sheets can be opened and edited in Excel. Opening a file merges it into the app; nothing is deleted.</p>
       <div class="actions"><button type="button" class="button ghost" id="xSave">Save database file</button><button type="button" class="button ghost" id="xOpen"${ro() ? ' disabled' : ''}>Open a file</button></div>`;
     const info = (() => { try { return window.GSNative ? JSON.parse(GSNative.appInfo()) : {}; } catch (e) { return {}; } })();
-    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.2')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
+    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.3')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
     h += '<details><summary class="sub">Back button log and errors</summary><pre class="log" id="backLog"></pre></details>';
     return h;
   }

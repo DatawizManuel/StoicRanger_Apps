@@ -1,4 +1,11 @@
-# SR GunSafe 0.1.2 (Stoic Ranger Gun Safe)
+# SR GunSafe 0.1.3 (Stoic Ranger Gun Safe)
+
+## 0.1.3 (2026-11-14): Excel layout kept (shared contract section F)
+- When GunSafe writes database.xlsx, the drop-down lists, column widths, frozen header rows and named ranges of the
+  sheets already in the file stay (same code as SR Shooting 1.4.0). Tested with the PC database.xlsx on a real
+  Nextcloud: all 10 drop-down lists of SR Shooting's sheets are still there.
+- Checked with SR Shooting 1.4.0: it reads the same data from a file GunSafe wrote, and keeps GunSafe's sheets and
+  GunSafe's rows in `_Deleted` when it writes. GunSafe does not use the Shooters sheet or Rounds_Log.
 
 ## 0.1.2 (2026-11-14): delete on all devices (shared contract section E)
 - A delete now reaches every device and the PC: it is written to the shared hidden `_Deleted` sheet of the database

@@ -38,6 +38,13 @@ for ws in wb.worksheets:
 print(json.dumps({'ok':bad is None,'sheets':out}))`, f]).toString());
   } catch (e) { return { ok: false, error: String(e.stderr || e) }; }
 }
+/** Layout of each sheet as Excel keeps it: drop-down lists, frozen panes, column widths (contract F). */
+function layout(buf) {
+  const f = path.join(TMP, 'lay' + (++n) + '.xlsx'); fs.writeFileSync(f, buf);
+  return JSON.parse(execFileSync('python3', ['-I', '-c', `import openpyxl,json,sys
+wb=openpyxl.load_workbook(sys.argv[1])
+print(json.dumps({ws.title:{'dv':sorted([(str(d.sqref),d.formula1) for d in ws.data_validations.dataValidation]),'freeze':ws.freeze_panes,'cols':{k:round(v.width or 0,1) for k,v in ws.column_dimensions.items() if v.width}} for ws in wb.worksheets}))`, f]).toString());
+}
 const trim = rows => rows.map(r => { const a = r.slice(); while (a.length && a[a.length - 1] === '') a.pop(); return a; }).filter(r => r.length);
 
 // ---- 1. the WebDAV code itself ----
@@ -97,6 +104,10 @@ ok(after.ok, 'the file on Nextcloud opens after the upload (zip test + openpyxl)
 const srSheets = Object.keys(before.sheets).filter(n => !/^(GS_|_GS_)/.test(n));
 const diff = srSheets.filter(n => !after.sheets[n] || JSON.stringify(trim(after.sheets[n].rows)) !== JSON.stringify(trim(before.sheets[n].rows)) || after.sheets[n].state !== before.sheets[n].state);
 ok(!diff.length, 'every SR Shooting sheet kept with the same cells and visibility (' + srSheets.length + ' sheets)' + (diff.length ? ' changed: ' + diff.join(', ') : ''));
+const layB = layout(orig), layA = layout(Buffer.from(g.data, 'base64'));
+const layDiff = srSheets.filter(n => JSON.stringify(layA[n]) !== JSON.stringify(layB[n]));
+const dvs = srSheets.reduce((a, n) => a + layB[n].dv.length, 0);
+ok(dvs > 0 && !layDiff.length, 'drop-down lists (' + dvs + '), frozen rows and column widths of SR Shooting\'s sheets kept' + (layDiff.length ? ' changed: ' + layDiff.map(n => n + ' ' + JSON.stringify(layA[n]) + ' vs ' + JSON.stringify(layB[n])).join(' | ') : ''));
 ok(after.sheets.GS_Owners && after.sheets.GS_Service_Log.rows.some(r => r.includes('ä ö ü ß €')) && after.sheets._GS_Data.state === 'hidden', 'GS_ sheets written (umlauts kept), _GS_Data hidden');
 const bk = (nc('list', FOLDER + 'backups/').names || []).filter(x => /^database-\d{8}-\d{6}\.xlsx$/.test(x));
 ok(bk.length >= 1, 'backup made before the upload: ' + bk.join(', '));
