@@ -114,11 +114,11 @@ window.GSX = (() => {
           rec[k] = ty === 'n' ? num(v) : ty === 'i' ? (num(v) == null ? null : Math.round(num(v))) : ty === 'd' ? day(v) : ty === 'b' ? yes(v) : ty === 'l' ? list(v) : txt(v);
         });
         if (Object.keys(rec).every(k => rec[k] == null || rec[k] === '' || (Array.isArray(rec[k]) && !rec[k].length))) return;
+        // a new row typed in Excel has no ID: it gets one in merge(), which also sees the app's rows, so it is
+        // matched to an entry that is already there instead of being added again at every sync
+        if (!rec.id && !prefix) return;
         let m = rec.id ? F[t].find(r => r.id === rec.id) : null;
-        if (!m) {
-          if (!rec.id) { if (!prefix) return; rec.id = nextId(F[t], prefix); }
-          m = {}; F[t].push(m);
-        }
+        if (!m) { m = {}; F[t].push(m); }
         Object.keys(rec).forEach(k => { m[k] = rec[k]; });
       });
     });
@@ -129,19 +129,52 @@ window.GSX = (() => {
     return p + (n + 1);
   }
 
+  /* What makes two rows the same entry when IDs can't tell (a row typed in Excel without ID, or the same new ID
+     made on two phones before they synced). */
+  const KEY = {
+    owners: r => [r.name], guns: r => [r.name], munitions: r => [r.name], gunInfo: r => [r.id],
+    barrels: r => [r.weaponId, r.name], components: r => [r.weaponId, r.type, r.name],
+    service: r => [r.date, r.weaponId, r.kind], moves: r => [r.date, r.munitionId, r.kind, r.qty], rounds: r => [r.date, r.weaponId, r.rounds],
+  };
+  const keyOf = (t, r) => JSON.stringify(KEY[t](r).map(v => String(v == null ? '' : v).trim().toLowerCase()));
+  /* Where an entry's ID is used by other tables (moved along when an entry gets a new ID). */
+  const REFS = { guns: [['barrels', 'weaponId'], ['components', 'weaponId'], ['service', 'weaponId'], ['rounds', 'weaponId'], ['gunInfo', 'id']],
+    munitions: [['moves', 'munitionId'], ['rounds', 'munitionId']], owners: [['gunInfo', 'owners']] };
+
   /** Three-way merge per table (key: id) against the base of the last sync (null = first sync).
    *  A field changed in the file since the base is taken from the file; everything else stays as in the app.
    *  Nothing is deleted: rows only in the app stay; rows only in the file come in unless they were deleted in the app
-   *  (tombstones). Returns { data, added, changed }. */
+   *  (tombstones). Rows without ID (typed in Excel) are matched to an existing entry by name (or date, gun, rounds …),
+   *  else get the next free ID. When the file and the app use the same ID for two different new entries (made on
+   *  two phones before a sync), the app's entry gets a new ID and both are kept. Returns { data, added, changed }. */
   function merge(base, app, file, deleted) {
     const out = clone(app), gone = new Set(arr(deleted));
     let added = 0, changed = 0;
     const same = (a, b) => JSON.stringify(a == null ? '' : a) === JSON.stringify(b == null ? '' : b);
+    const freeId = (t, p) => { const all = arr(out[t]).concat(arr(file && file[t])).concat([...gone].map(id => ({ id }))); return nextId(all, p); };
+    const reId = (t, from, to) => {
+      (REFS[t] || []).forEach(([rt, k]) => arr(out[rt]).forEach(r => {
+        if (Array.isArray(r[k])) r[k] = r[k].map(x => x === from ? to : x); else if (r[k] === from) r[k] = to;
+      }));
+    };
     TABLES.forEach(t => {
       const A = arr(out[t]), B = new Map(arr(base && base[t]).map(r => [r.id, r])), fileRows = arr(file && file[t]);
+      const prefix = SHEETS[t][1];
       fileRows.forEach(f => {
-        if (!f || !f.id || gone.has(f.id)) return;
-        const a = A.find(r => r.id === f.id), b = B.get(f.id);
+        if (!f) return;
+        if (!f.id) {
+          if (!prefix) return;
+          const k = keyOf(t, f);
+          if (A.some(r => keyOf(t, r) === k)) return;          // already there (an earlier sync wrote it back with its ID)
+          const n = clone(f); n.id = freeId(t, prefix); A.push(n); added++; return;
+        }
+        if (gone.has(f.id)) return;
+        let a = A.find(r => r.id === f.id), b = B.get(f.id);
+        if (a && !b && prefix && keyOf(t, a) !== keyOf(t, f)) {
+          // same ID, different entries, neither synced before: keep both, the app's one moves to a new ID
+          const p = (String(a.id).match(/^[A-Za-z]+/) || [prefix])[0], to = freeId(t, p);
+          reId(t, a.id, to); a.id = to; a = null;
+        }
         if (!a) {
           if (base && b) return;              // in the base, not in the app any more: deleted here, stays deleted
           A.push(clone(f)); added++; return;
@@ -159,5 +192,10 @@ window.GSX = (() => {
     return { data: out, added, changed };
   }
   const tablesOf = d => { const o = {}; TABLES.forEach(t => { o[t] = clone(arr(d[t])); }); return o; };
-  return { FORMAT, MIME, SHEETS, TABLES, write, read, merge, tablesOf, ours };
+  /** Same content? Empty fields (missing, null, '', []) and the order of fields don't count, so a sync with no
+   *  real change uploads nothing. */
+  const empty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
+  const normRow = r => { const o = {}; Object.keys(r || {}).sort().forEach(k => { if (!empty(r[k])) o[k] = r[k]; }); return o; };
+  const sameData = (a, b) => TABLES.every(t => JSON.stringify(arr(a && a[t]).map(normRow)) === JSON.stringify(arr(b && b[t]).map(normRow)));
+  return { FORMAT, MIME, SHEETS, TABLES, write, read, merge, tablesOf, sameData, ours };
 })();

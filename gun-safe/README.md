@@ -1,4 +1,17 @@
-# SR GunSafe 0.1.0 (Stoic Ranger Gun Safe)
+# SR GunSafe 0.1.1 (Stoic Ranger Gun Safe)
+
+## 0.1.1 (2026-11-14): sync fixes, tested against a real Nextcloud 30
+- Rows typed in Excel without an ID come in once (matched by name, or date, gun and rounds …), never again at the
+  next syncs. The same new ID made on two phones before a sync: both entries are kept, one gets a new ID.
+- Every upload is read back and compared; if different it is sent once more, and if still wrong the previous file
+  is put back. Only a valid xlsx (zip) is uploaded.
+- A sync with no real change uploads nothing (empty fields no longer count as a change).
+- Works with SR Shooting 1.3.x: barrel changes on its guns show at once (applied at SR Shooting's next start); when
+  Nextcloud was chosen in SR Shooting, GunSafe asks for the app password once (apps never pass it on).
+- Labelled "Settings" button, and the emblem says "Home" in every part.
+- Checked: SR Shooting 1.3.1 reads the same data from a file GunSafe wrote, and keeps GunSafe's sheets when it writes.
+
+## 0.1.0
 
 Android app (package `at.stoicranger.gunsafe`, versionCode 1) for the guns in your safe:
 
@@ -30,7 +43,8 @@ rounds log, keeping other apps' sheets in database.xlsx, and the storage calls o
 works on its own and says "SR Shooting needs an update". Contract: `00_docs/SHARED-DB-CONTRACT.md`.
 
 ## Build and test
-    node gun-safe/tools/test-app.mjs          # 59 browser tests (Playwright/Chromium)
+    node gun-safe/tools/test-app.mjs          # 64 browser tests (Playwright/Chromium)
+    bash gun-safe/tools/test-nextcloud.sh <database.xlsx>   # real Nextcloud 30 in Docker, the app's own WebDAV code
     KEYSTORE=/path/debug.keystore bash gun-safe/tools/build-debug.sh
     unzip -p gun-safe/build/outputs/*.apk classes.dex | strings | grep -c LambdaMetafactory   # must be 0
 The build script needs `aapt aapt2 apksigner dalvik-exchange ecj android-sdk-platform-23` (Ubuntu) and fails if the

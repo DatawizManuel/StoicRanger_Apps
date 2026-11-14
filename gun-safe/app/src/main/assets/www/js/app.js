@@ -338,7 +338,7 @@
     h += `<h2 class="sec">Database file</h2><p class="sub" style="margin:0 0 8px">${esc(st.file)}: the GS_ sheets can be opened and edited in Excel. Opening a file merges it into the app; nothing is deleted.</p>
       <div class="actions"><button type="button" class="button ghost" id="xSave">Save database file</button><button type="button" class="button ghost" id="xOpen"${ro() ? ' disabled' : ''}>Open a file</button></div>`;
     const info = (() => { try { return window.GSNative ? JSON.parse(GSNative.appInfo()) : {}; } catch (e) { return {}; } })();
-    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.0')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
+    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.1')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
     h += '<details><summary class="sub">Back button log and errors</summary><pre class="log" id="backLog"></pre></details>';
     return h;
   }
@@ -352,6 +352,10 @@
     const g = (r.v === 'gun' || r.v === 'gunedit') && r.id !== 'new' ? M.gun(r.id) : null;
     $('hTitle').textContent = g ? g.name : r.v === 'gunedit' ? 'Add a gun' : TITLES[r.v];
     $('appbar').dataset.sec = SEC[r.v] || '';
+    const hb = $('hHome'); hb.dataset.home = r.v === 'home' ? '' : '1'; hb.setAttribute('aria-label', r.v === 'home' ? 'SR GunSafe' : 'Home');
+    if (!hb.querySelector('.hl')) { const l = document.createElement('span'); l.className = 'hl'; l.textContent = 'Home'; hb.appendChild(l); }
+    hb.querySelector('.hl').hidden = r.v === 'home';
+    $('menuBtn').hidden = r.v === 'settings';
     const fn = { home: vHome, gun: vGun, gunedit: vGunEdit, svclog: vSvcLog, clean: vClean, service: vService, fire: vFire, ammo: vAmmo, mun: vMun, munedit: vMunEdit, buy: vBuy, out: vOut, settings: vSettings }[r.v];
     try { sc.innerHTML = fn(r); } catch (e) { GS.errors.push('render ' + r.v + ': ' + e); sc.innerHTML = '<p class="banner">This page could not be shown: ' + esc(e.message) + '</p>'; }
     sc.scrollTop = keepScroll ? y : 0;

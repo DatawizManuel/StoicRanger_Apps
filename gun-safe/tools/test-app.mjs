@@ -129,6 +129,36 @@ const browser = await chromium.launch();
   });
   ok(ex.o1 === 'Manuel F.' && ex.n === 3 && ex.added === 1 && ex.changed === 1, 'Excel edits merge in ' + JSON.stringify(ex));
 
+  // rows typed in Excel without ID: added once, never again at the next syncs (SR Shooting 1.3.0 bug)
+  const noid = await page.evaluate(() => {
+    const X = XLSX, wb = X.read(GSX.write(GSStore.data, null, 't'), { type: 'array' });
+    X.utils.sheet_add_aoa(wb.Sheets.GS_Owners, [['', 'Paul', '']], { origin: -1 });
+    X.utils.sheet_add_aoa(wb.Sheets.GS_Ammo_Moves, [['', '2026-08-01', 'GM1', 'Purchase', 100, 240, 'Ortner', '']], { origin: -1 });
+    let app = GSX.tablesOf(GSStore.data), base = GSX.tablesOf(GSStore.data);
+    let bytes = new Uint8Array(X.write(wb, { type: 'array', bookType: 'xlsx' }));
+    const counts = [];
+    for (let i = 0; i < 3; i++) {                       // three syncs: read file, merge, write it back
+      const m = GSX.merge(base, app, GSX.read(bytes).data, []);
+      app = m.data; base = GSX.tablesOf(app); bytes = GSX.write(app, bytes, 't');
+      counts.push(app.owners.filter(o => o.name === 'Paul').length + '/' + app.moves.filter(x => x.qty === 100 && x.price === 240).length);
+    }
+    // the Excel row again, now also present in the app under its new ID: still once
+    const m2 = GSX.merge(null, app, (() => { const w = X.read(bytes, { type: 'array' }); X.utils.sheet_add_aoa(w.Sheets.GS_Owners, [['', 'paul ', '']], { origin: -1 }); return GSX.read(new Uint8Array(X.write(w, { type: 'array', bookType: 'xlsx' }))).data; })(), []);
+    return { counts, again: m2.data.owners.filter(o => /paul/i.test(o.name)).length, id: app.owners.find(o => o.name === 'Paul').id, ids: new Set(app.owners.map(o => o.id)).size === app.owners.length };
+  });
+  ok(noid.counts.join() === '1/1,1/1,1/1' && noid.again === 1 && noid.ids, 'Excel rows without ID come in once ' + JSON.stringify(noid));
+  // the same new ID made on two phones before a sync: both entries kept, references moved along
+  const col = await page.evaluate(() => {
+    const app = GSX.tablesOf(GSStore.data), base = GSX.tablesOf(GSStore.data), file = GSX.tablesOf(GSStore.data);
+    app.guns.push({ id: 'G9', name: 'Phone A gun', caliber: '.308 Win' }); app.service.push({ id: 'E90', date: '2026-09-01', weaponId: 'G9', kind: 'Cleaning', cleaningDone: true, changes: [] });
+    app.gunInfo.push({ id: 'G9', owners: ['O1'], fits: [] });
+    file.guns.push({ id: 'G9', name: 'Phone B gun', caliber: '9x19' });
+    const m = GSX.merge(base, app, file, []).data;
+    const a = m.guns.find(g => g.name === 'Phone A gun'), b = m.guns.find(g => g.name === 'Phone B gun');
+    return { a: a && a.id, b: b && b.id, ev: m.service.find(e => e.id === 'E90').weaponId, info: (m.gunInfo.find(i => i.owners.includes('O1') && i.id === (a && a.id)) || {}).id };
+  });
+  ok(col.b === 'G9' && col.a && col.a !== 'G9' && col.ev === col.a && col.info === col.a, 'same ID from two phones: both kept ' + JSON.stringify(col));
+
   // delete with confirm; Back closes the confirm first
   await page.evaluate(() => GS.go('#svclog'));
   const n0 = await page.evaluate(() => GSStore.data.service.length);
@@ -202,7 +232,7 @@ const FAKE = () => {
         if (op === 'putNew' && f) return cb(id, { ok: false, status: 412 });
         if (op === 'put' && mem.force412 > 0) { mem.force412--; mem.dav[p] = { data: f.data, etag: 'e' + (++mem.etagN) }; return cb(id, { ok: false, status: 412 }); }
         if (op === 'put' && f && ifMatch && ifMatch !== f.etag) return cb(id, { ok: false, status: 412 });
-        mem.puts++; mem.dav[p] = { data: b64, etag: 'e' + (++mem.etagN) }; return cb(id, { ok: true, status: 201 });
+        mem.puts++; mem.dav[p] = { data: mem.corrupt > 0 && !p.includes('/backups/') ? (mem.corrupt--, b64.slice(0, b64.length >> 1)) : b64, etag: 'e' + (++mem.etagN) }; return cb(id, { ok: true, status: 201 });
       }
       if (op === 'mkdirs') return cb(id, { ok: true });
       if (op === 'list') { const pre = p; return cb(id, { ok: true, names: Object.keys(mem.dav).filter(k => k.startsWith(pre) && !k.slice(pre.length).includes('/')).map(k => k.slice(pre.length)) }); }
@@ -271,6 +301,21 @@ const FAKE = () => {
   ok(m.remoteOwners.includes('Manuel') && m.remoteOwners.includes('Ines (from PC)'), 'uploaded merged file');
   ok(m.names.includes('Weapons'), 'other apps\' sheets kept on Nextcloud');
   ok(m.backups.length >= 1 && /backups\/database-\d{8}-\d{6}\.xlsx$/.test(m.backups[0]), 'backup before upload ' + m.backups);
+
+  // upload check: a damaged upload is sent again; if it stays damaged the previous file goes back
+  const chk = await page.evaluate(async () => {
+    const p = 'Stoic Ranger/database.xlsx';
+    GSStore.data.owners.push({ id: 'O5', name: 'Check 1', notes: '' }); GSStore.changed('sync');
+    __mem.corrupt = 1; const r1 = await GSSync.sync('now');
+    const ok1 = XLSX.utils.sheet_to_json(XLSX.read(GSSync.unb64(__mem.dav[p].data), { type: 'array' }).Sheets.GS_Owners).some(o => o.Name === 'Check 1');
+    const before = __mem.dav[p].data;
+    GSStore.data.owners.push({ id: 'O6', name: 'Check 2', notes: '' }); GSStore.changed('sync');
+    __mem.corrupt = 2; const r2 = await GSSync.sync('now');
+    return { r1: r1.ok, ok1, r2: r2.ok, msg2: r2.msg, restored: __mem.dav[p].data === before };
+  });
+  ok(chk.r1 && chk.ok1, 'damaged upload sent again ' + JSON.stringify(chk));
+  ok(!chk.r2 && chk.restored && /previous version/.test(chk.msg2), 'still damaged: previous file put back ' + JSON.stringify(chk));
+  await page.evaluate(() => GSSync.sync('now'));
 
   // nothing changed → no upload
   const puts = await page.evaluate(() => __mem.puts);

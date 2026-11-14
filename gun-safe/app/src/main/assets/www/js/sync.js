@@ -68,6 +68,23 @@ window.GSSync = (() => {
     }
     return r.ok || r.status === 412;      // 412: the same backup name already exists (same second)
   }
+  const isZip = u8 => u8 && u8.length > 100 && u8[0] === 0x50 && u8[1] === 0x4b;     // an xlsx is a zip: "PK"
+  /** Reads the file back after an upload: true only when Nextcloud now holds exactly these bytes. */
+  async function sameOnServer(path, b64s) { const g = await native('nc', 'get', path, '', ''); return { same: g.ok && g.data === b64s, etag: g.etag || '' }; }
+  /** Upload with a check (SR Shooting 1.3.1 rule): read back and compare; if different send once more; if still
+   *  different put the version that was there before back. Returns {ok, status, msg}. */
+  async function putChecked(path, bytes, etag, before) {
+    if (!isZip(bytes)) return { ok: false, msg: 'The file to upload is not a valid xlsx, so nothing was uploaded.' };
+    const s64 = b64(bytes);
+    const p = await native('nc', etag === null ? 'putNew' : 'put', path, s64, etag || '');
+    if (!p.ok) return p;
+    let v = await sameOnServer(path, s64);
+    if (v.same) return { ok: true };
+    const p2 = await native('nc', 'put', path, s64, v.etag);
+    if (p2.ok) { v = await sameOnServer(path, s64); if (v.same) return { ok: true }; }
+    if (before) await native('nc', 'put', path, b64(before), '');
+    return { ok: false, msg: 'Nextcloud did not store the file correctly' + (before ? ', so the previous version was put back.' : '.') };
+  }
   /** One sync. Returns {ok, msg, added, changed}. */
   async function sync(why) {
     if (!N || !N.nc) return { ok: false, msg: 'Nextcloud sync works in the Android app.' };
@@ -84,7 +101,7 @@ window.GSSync = (() => {
           const mk = await native('nc', 'mkdirs', folderOf(s), '', '');
           if (!mk.ok) { res = { ok: false, msg: mk.msg || 'Could not make the folder on Nextcloud' }; break; }
           const bytes = GSX.write(GSStore.data, null, 'SR GunSafe');
-          const p = await native('nc', 'putNew', path, b64(bytes), '');
+          const p = await putChecked(path, bytes, null, null);
           if (p.status === 412) continue;                       // someone made it meanwhile: start again
           if (!p.ok) { res = { ok: false, msg: p.msg }; break; }
           GSStore.aux('sync-base', GSX.tablesOf(GSStore.data));
@@ -103,10 +120,10 @@ window.GSSync = (() => {
           if (added || changed) { const d = GSStore.data; GSX.TABLES.forEach(t => { d[t] = m.data[t]; }); GSStore.changed('sync'); GSStore.flush(); }
         }
         const bytes = GSX.write(GSStore.data, remote, 'SR GunSafe');
-        const sameAsRemote = file && JSON.stringify(GSX.tablesOf(file)) === JSON.stringify(GSX.tablesOf(GSStore.data));
+        const sameAsRemote = file && GSX.sameData(file, GSStore.data);
         if (!sameAsRemote) {
           if (!(await backupRemote(s, remote))) { res = { ok: false, msg: 'Could not save the backup copy on Nextcloud, so nothing was uploaded.' }; break; }
-          const p = await native('nc', 'put', path, b64(bytes), g.etag || '');
+          const p = await putChecked(path, bytes, g.etag || '', remote);
           if (p.status === 412) continue;                       // changed meanwhile: download and merge again
           if (!p.ok) { res = { ok: false, msg: p.msg }; break; }
         }
