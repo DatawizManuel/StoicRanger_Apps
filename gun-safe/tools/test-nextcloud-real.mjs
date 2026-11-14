@@ -4,7 +4,9 @@
    Checks: the WebDAV ops (bytes identical, If-Match/If-None-Match 412, wrong password 401); linked with SR Shooting,
    GunSafe syncs into SR Shooting's database.xlsx and keeps every SR Shooting sheet with the same cells (values and
    formulas); the file opens after each upload (zip test + openpyxl); backups are made; rows typed in Excel without ID
-   come in once over repeated syncs; a file changed by someone else meanwhile is merged, not overwritten. */
+   come in once over repeated syncs; a file changed by someone else meanwhile is merged, not overwritten;
+   0.1.2: delete on all devices with a second phone (_Deleted sheet, Recently deleted, Undo wins, other apps'
+   tombstones kept) and "Replace this phone's data with the Nextcloud copy". */
 import fs from 'fs'; import path from 'path'; import os from 'os'; import { createRequire } from 'module'; import { execFileSync } from 'child_process';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [BASE, USER, PW, XLSX] = process.argv.slice(2);
@@ -52,10 +54,8 @@ const before = cells(orig); ok(before.ok, 'the test file opens: ' + Object.keys(
 
 // ---- 2. the app page syncing through it ----
 const browser = await chromium.launch();
-const page = await browser.newPage();
-const errors = []; page.on('pageerror', e => errors.push(String(e)));
-await page.exposeFunction('__nc', (op, p, b64, ifm) => nc(op, p, b64, ifm));
-await page.addInitScript(cfg => {
+const errors = [];
+const INIT = cfg => {
   const mem = { db: JSON.stringify({ app: 'sr-gunsafe', format: 1, data: { link: { sr: 'allowed' }, srCache: { weapons: [{ id: 'W1', name: 'SR gun', caliber: '6.5 Creedmoor' }], barrels: [], munitions: [], rounds: [], at: '' } } }), aux: {} };
   window.__mem = mem;
   window.GSNative = {
@@ -67,9 +67,18 @@ await page.addInitScript(cfg => {
     storageSet: j => j, storagePush: () => '{}', storagePull: () => window.GSNative.storageGet(), setLinked() { },
     nc: (op, p, b64, ifm, id) => { window.__nc(op, p, b64, ifm).then(o => window.GSNativeCallback(id, o)); },
   };
-}, { base: BASE, user: USER, folder: FOLDER });
-await page.goto(PAGE);
-await page.waitForFunction(() => !GSSync.state().busy, null, { timeout: 60000 });
+};
+/** One phone: its own data, the same Nextcloud folder. */
+async function phone() {
+  const ctx = await browser.newContext(), p = await ctx.newPage();
+  p.on('pageerror', e => errors.push(String(e)));
+  await p.exposeFunction('__nc', (op, q, b64, ifm) => nc(op, q, b64, ifm));
+  await p.addInitScript(INIT, { base: BASE, user: USER, folder: FOLDER });
+  await p.goto(PAGE);
+  await p.waitForFunction(() => !GSSync.state().busy, null, { timeout: 60000 });
+  return p;
+}
+const page = await phone();
 const first = await page.evaluate(() => GSSync.state().last);
 ok(first.ok, 'first sync on open: ' + first.msg);
 await page.evaluate(() => {
@@ -114,7 +123,42 @@ ok(new Set(ids).size === ids.length && ids.length === 2, 'owners keep unique IDs
 // ---- 4. nothing changed → no upload ----
 const e1 = nc('get', FILE).etag; await page.evaluate(() => GSSync.sync('now'));
 const dbg = await page.evaluate(b64 => { const f = GSX.tablesOf(GSX.read(GSSync.unb64(b64)).data), a = GSX.tablesOf(GSStore.data); return GSX.TABLES.filter(t => JSON.stringify(f[t]) !== JSON.stringify(a[t])).map(t => t + ' file=' + JSON.stringify(f[t]).slice(0, 300) + ' app=' + JSON.stringify(a[t]).slice(0, 300)); }, nc('get', FILE).data);
-ok(nc('get', FILE).etag === e1, 'a sync without changes uploads nothing' + (dbg.length ? ' ' + dbg.join(' || ') : ''));
+const same = nc('get', FILE).etag === e1;
+ok(same, 'a sync without changes uploads nothing' + (same ? '' : ' ' + dbg.join(' || ')));
+// ---- 5. delete on all devices (contract E), with a second phone ----
+const phone2 = await phone();
+const p2s = await phone2.evaluate(() => GSStore.data.owners.map(o => o.name).sort().join());
+ok(p2s === 'Ines,Manuel', 'second phone gets the data on its first sync: ' + p2s);
+await page.evaluate(() => { GS.go('#settings'); });
+await page.waitForTimeout(100);
+await page.locator('[data-delown]').last().click(); await page.click('[data-x=ok]');      // delete "Ines" on phone 1
+const d1 = await page.evaluate(() => GSSync.sync('now'));
+const c5 = cells(Buffer.from(nc('get', FILE).data, 'base64'));
+ok(d1.ok && c5.ok && c5.sheets._Deleted && c5.sheets._Deleted.state === 'hidden' && c5.sheets._Deleted.rows.some(r => r[0] === 'GS' && r[1] === 'GS_Owners' && r[4] === 'Ines'), 'the delete is in the hidden _Deleted sheet on Nextcloud');
+ok(c5.ok && !c5.sheets.GS_Owners.rows.some(r => r[1] === 'Ines'), 'the deleted owner left the GS_Owners sheet');
+const d2 = await phone2.evaluate(() => GSSync.sync('now'));
+const p2d = await phone2.evaluate(() => ({ owners: GSStore.data.owners.map(o => o.name).join(), trash: GSStore.data.trash.map(x => x.row.name + ' by ' + x.by).join() }));
+ok(d2.ok && p2d.owners === 'Manuel' && /Ines by another device/.test(p2d.trash), 'phone 2: the owner is gone, listed in Recently deleted ' + JSON.stringify(p2d) + ' ' + d2.msg);
+// phone 2 still had the old row: it must not bring it back to phone 1
+await page.evaluate(() => GSSync.sync('now'));
+ok(!(await page.evaluate(() => GSStore.data.owners.some(o => o.name === 'Ines'))), 'phone 1 does not get the deleted owner back');
+// Undo on phone 2 wins everywhere
+await phone2.evaluate(() => GS.go('#settings')); await phone2.waitForTimeout(100);
+await phone2.click('[data-undo]');
+await phone2.evaluate(() => GSSync.sync('now')); await page.evaluate(() => GSSync.sync('now'));
+ok(await page.evaluate(() => GSStore.data.owners.some(o => o.name === 'Ines')), 'Undo on phone 2 brings the owner back on phone 1');
+// another app's tombstone in the file stays
+const g6 = nc('get', FILE);
+const withSr = await page.evaluate(b64 => { const wb = XLSX.read(GSSync.unb64(b64), { type: 'array' }); XLSX.utils.sheet_add_aoa(wb.Sheets._Deleted, [['SR', 'Weapons', 'W9', 'uid-9', 'Old Sako', '2026-11-14T09:00:00.000Z', 'SR Shooting']], { origin: -1 }); return GSSync.b64(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))); }, g6.data);
+nc('put', FILE, withSr, g6.etag);
+await page.evaluate(() => { GSStore.data.owners.push({ id: 'O7', name: 'Paul', notes: '' }); GSStore.changed('owner'); return GSSync.sync('now'); });
+const c6 = cells(Buffer.from(nc('get', FILE).data, 'base64'));
+ok(c6.ok && c6.sheets._Deleted.rows.some(r => r[0] === 'SR' && r[2] === 'W9'), 'SR Shooting\'s tombstone kept when GunSafe writes');
+// replace phone 2's data with the Nextcloud copy
+await phone2.evaluate(() => { GSStore.data.owners.push({ id: 'O50', name: 'Only on phone 2', notes: '' }); });
+const rp = await phone2.evaluate(() => GSSync.replaceFromRemote());
+const p2r = await phone2.evaluate(() => GSStore.data.owners.map(o => o.name).sort().join());
+ok(rp.ok && p2r === 'Ines,Manuel,Paul', 'replace with the Nextcloud copy: ' + p2r + ' · ' + rp.msg);
 ok(errors.length === 0, 'no page errors ' + errors.join(' | '));
 await browser.close();
 console.log(fails ? `${fails} FAILED` : 'all passed');

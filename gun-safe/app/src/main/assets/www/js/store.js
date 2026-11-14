@@ -12,15 +12,20 @@
      munitions   {id, name, caliber, manufacturer, notes}            ammunition entered here (ids GM…)
      moves       {id, date, munitionId, kind: Purchase|Withdrawal, qty (+/-), price, shop, purpose}
      rounds      {id, date, weaponId, munitionId, rounds, note, seq}  rounds fired logged here (not linked)
+   Every row also has "updated" (UTC ISO, set when it is made or changed here; contract section E).
    Plus: settings {theme}, link {sr: "ask"|"allowed"|"no", dismissed}, srCache {weapons, barrels, munitions, rounds, at}
-   (last copy read from SR Shooting), deleted [ids] (tombstones: a sync never brings them back).
+   (last copy read from SR Shooting), srPending (barrel changes SR Shooting has not applied yet),
+   tombs [{app, table, id, uid, label, at, by}] = the shared _Deleted list (all apps' rows kept, GunSafe acts on app GS;
+   an entry is gone when its "updated" is not newer than "at"; dropped after 365 days),
+   trash [{table, row, at, by}] = "Recently deleted" (30 days, Undo).
+   Format 2 (0.1.2): tombs/trash/updated added; format 1's local deleted [ids] became tombs.
    Unknown keys are kept as they are, so a newer app's data survives an older one.
 
    Standing rule (Manuel): device data is never lost. A file from a newer app version opens read-only and is never
    written; a damaged file falls back to the previous copy and is backed up first; migrations add/convert only. */
 'use strict';
 window.GSStore = (() => {
-  const FORMAT = 1, APP = 'sr-gunsafe', LS = 'sr-gunsafe-db';
+  const FORMAT = 2, APP = 'sr-gunsafe', LS = 'sr-gunsafe-db';
   const TABLES = ['owners', 'guns', 'gunInfo', 'barrels', 'components', 'service', 'munitions', 'moves', 'rounds'];
   const N = window.GSNative || null;
   const now = () => new Date().toISOString();
@@ -36,7 +41,8 @@ window.GSStore = (() => {
     TABLES.forEach(t => { if (!Array.isArray(d[t])) d[t] = []; });
     if (!d.settings || typeof d.settings !== 'object') d.settings = {};
     if (!d.link || typeof d.link !== 'object') d.link = { sr: 'ask' };
-    if (!Array.isArray(d.deleted)) d.deleted = [];
+    if (!Array.isArray(d.tombs)) d.tombs = [];
+    if (!Array.isArray(d.trash)) d.trash = [];
     return d;
   }
   function load() {
@@ -51,12 +57,33 @@ window.GSStore = (() => {
     }
     if ((j.format || 0) > FORMAT) { readOnly = true; notice = 'This data was saved by a newer version of SR GunSafe. Nothing is changed or saved until you update the app.'; }
     if (!j.data || typeof j.data !== 'object') j.data = {};
-    if ((j.format || 0) < FORMAT && !readOnly) {      // future migrations: add/convert only, after a backup
+    if ((j.format || 0) < FORMAT && !readOnly) {      // migrations: add/convert only, after a backup
       backup('before-format-' + FORMAT + '-' + stamp() + '.json');
+      if ((j.format || 1) < 2) {                      // 1 → 2: the local list of deleted IDs becomes tombstones
+        const t = now(), sheet = id => /^GB\d/.test(id) ? 'GS_Barrels' : /^GM\d/.test(id) ? 'GS_Munitions' : /^G\d/.test(id) ? 'GS_Guns'
+          : /^O\d/.test(id) ? 'GS_Owners' : /^C\d/.test(id) ? 'GS_Components' : /^E\d/.test(id) ? 'GS_Service_Log' : /^A\d/.test(id) ? 'GS_Ammo_Moves' : /^R\d/.test(id) ? 'GS_Rounds_Log' : '';
+        j.data.tombs = Array.isArray(j.data.tombs) ? j.data.tombs : [];
+        (Array.isArray(j.data.deleted) ? j.data.deleted : []).forEach(id => { const s = sheet(String(id)); if (s) j.data.tombs.push({ app: 'GS', table: s, id: String(id), uid: '', label: String(id), at: t, by: 'SR GunSafe' }); });
+        delete j.data.deleted;
+      }
       j.format = FORMAT;
     }
     fill(j.data);
     db = j;
+  }
+  /* "updated" for every row made or changed here: what changed is found by comparing each row with how it looked at
+     the last save, so no screen has to remember to set it. Rows changed by a sync or an import keep their own. */
+  const rowKey = r => { const o = Object.assign({}, r); delete o.updated; return JSON.stringify(o); };
+  let seen = new Map();
+  function snapshot(stampNew) {
+    const t = now(), next = new Map();
+    TABLES.forEach(tb => db.data[tb].forEach(r => {
+      if (!r || !r.id) return;
+      const k = tb + '|' + r.id, v = rowKey(r);
+      if (stampNew && seen.get(k) !== v) r.updated = t;
+      next.set(k, v);
+    }));
+    seen = next;
   }
   function backup(name) {
     if (N && N.backupDb) return N.backupDb(name);
@@ -80,20 +107,21 @@ window.GSStore = (() => {
     try { localStorage.setItem(LS + '.aux.' + name, s); return true; } catch (e) { return false; }
   }
   load();
+  snapshot(false);
   let seqN = Date.now();
   const nid = (rows, p) => p + (rows.reduce((m, x) => { const s = String(x.id || ''); return s.startsWith(p) && /^\d+$/.test(s.slice(p.length)) ? Math.max(m, +s.slice(p.length)) : m; }, 0) + 1);
   return {
     TABLES, FORMAT,
     get data() { return db.data; },
     /** Call after every change: saves (debounced) and tells the listeners (sync after changes). */
-    changed(why) { if (readOnly) return; if (!timer) timer = setTimeout(write, 250); listeners.forEach(f => { try { f(why); } catch (e) { } }); },
+    changed(why) { if (readOnly) return; snapshot(!['sync', 'replace', 'import', 'link'].includes(why)); if (!timer) timer = setTimeout(write, 250); listeners.forEach(f => { try { f(why); } catch (e) { } }); },
     onChange(f) { listeners.push(f); },
     flush() { if (timer) { clearTimeout(timer); write(); } },
-    backup, aux, stamp,
+    backup, aux, stamp, now,
     nid(table, prefix) { return nid(db.data[table], prefix); },
     seq() { return ++seqN; },
     /** Replace all tables (import / sync result); a backup copy is made first. */
-    replaceData(d, why) { if (readOnly) return false; backup((why || 'replace') + '-' + stamp() + '.json'); db.data = fill(d); write(); listeners.forEach(f => { try { f('replace'); } catch (e) { } }); return true; },
+    replaceData(d, why) { if (readOnly) return false; backup((why || 'replace') + '-' + stamp() + '.json'); db.data = fill(d); snapshot(false); write(); listeners.forEach(f => { try { f('replace'); } catch (e) { } }); return true; },
     get readOnly() { return readOnly; }, get firstRun() { return firstRun; }, get notice() { return notice; },
     _db: () => db,
   };

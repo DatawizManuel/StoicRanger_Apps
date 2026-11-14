@@ -38,7 +38,31 @@
     document.body.appendChild(o);
     GS.overlay = cancel;
   }
-  function tombstone(id) { if (id && !D().deleted.includes(id)) D().deleted.push(id); }
+  /* Delete on all devices (contract section E): each deleted row gets a tombstone in the shared _Deleted list (synced
+     through database.xlsx) and a copy in "Recently deleted" for 30 days. Undo saves it again, which wins. */
+  function labelOf(t, r) {
+    const g = id => { const x = M.gun(id); return x ? x.name : id; }, m = id => { const x = M.mun(id); return x ? x.name : id; };
+    return t === 'service' ? r.kind + ' ' + dShow(r.date) + ' · ' + g(r.weaponId) : t === 'moves' ? (r.kind === 'Purchase' ? 'Purchase ' : 'Take-out ') + Math.abs(r.qty || 0) + ' rds · ' + m(r.munitionId) + ' · ' + dShow(r.date)
+      : t === 'rounds' ? (r.rounds || 0) + ' rds · ' + g(r.weaponId) + ' · ' + dShow(r.date) : t === 'components' ? (r.type || '') + ': ' + (r.name || '') + ' · ' + g(r.weaponId)
+      : t === 'barrels' ? 'Barrel ' + (r.name || '') + ' · ' + g(r.weaponId) : t === 'gunInfo' ? 'Owners of ' + g(r.id) : (r.name || r.id);
+  }
+  function kill(t, ids, at) {
+    const d = D(), set = new Set(ids); at = at || GSStore.now();
+    d[t].filter(r => set.has(r.id)).forEach(r => {
+      if (t !== 'gunInfo') d.tombs.push({ app: 'GS', table: GSX.sheetOfTable(t), id: r.id, uid: '', label: labelOf(t, r), at, by: 'SR GunSafe' });
+      d.trash.push({ table: t, row: JSON.parse(JSON.stringify(r)), at, by: 'this phone' });
+    });
+    d[t] = d[t].filter(r => !set.has(r.id));
+    d.tombs = GSX.mergeTombs(d.tombs, []);
+  }
+  const TRASH_DAYS = 30;
+  function purgeTrash() { const cut = new Date(Date.now() - TRASH_DAYS * 864e5).toISOString(); const d = D(); const n = d.trash.length; d.trash = d.trash.filter(x => x && x.at >= cut); if (d.trash.length !== n && !ro()) GSStore.changed('link'); }
+  function undo(i) {
+    const d = D(), x = d.trash[i]; if (!x) return;
+    const row = Object.assign({}, x.row, { updated: GSStore.now() });            // newer than the delete: it wins everywhere
+    if (!d[x.table].some(r => r.id === row.id)) d[x.table].push(row);
+    d.trash.splice(i, 1);
+  }
 
   /* ---------- home ---------- */
   function storeLine() {
@@ -323,6 +347,7 @@
         <div class="box span2" style="grid-column:span 2;margin:0">File: <b>${esc((s.folder || '/Stoic Ranger/') + st.file)}</b>${M.linked() ? '<br>Shared with SR Shooting, so both apps use this file.' : ''}<br>${st.last && st.last.at ? 'Last sync: <b>' + esc(dShow(st.last.at.slice(0, 10)) + ' ' + st.last.at.slice(11, 16)) + ' UTC</b> · ' + esc(st.last.msg) : 'Not synced yet.'}<br>Syncs when the app opens, after each change and with Sync now.</div>
         ${msg ? `<p class="err" style="color:${msg.ok ? 'var(--ok)' : 'var(--bad)'}">${esc(msg.t)}</p>` : ''}
         <button type="button" class="button ghost" id="ncTest"${st.busy ? ' disabled' : ''}>Test connection</button><button type="button" class="button svc" id="ncSync"${st.busy ? ' disabled' : ''}>${st.busy ? 'Syncing …' : 'Save and sync now'}</button>
+        <button type="button" class="button ghost span2" style="grid-column:span 2" id="ncReplace"${st.busy || !st.on ? ' disabled' : ''}>Replace this phone's data with the Nextcloud copy</button>
         <p class="sub span2" style="grid-column:span 2;margin:0">If the file was changed somewhere else (PC, Excel, another phone), both sets of changes are merged. Nothing is overwritten: before each upload a copy is kept in ${esc(s.folder || '/Stoic Ranger/')}backups/ (the newest 30).</p>`;
       if (!st.native) h += '<p class="err">Nextcloud sync works in the Android app.</p>';
     }
@@ -335,10 +360,15 @@
     h += '<h2 class="sec">Owners <small>a gun can have several</small></h2>';
     h += M.owners().map(o => { const n = M.guns().filter(g => M.gunOwners(g.id).includes(o.id)).length; return `<div class="row"><div><b>${esc(o.name)}</b></div><div class="r">${n} gun${n === 1 ? '' : 's'}</div>${ro() ? '' : `<button type="button" class="del" data-delown="${esc(o.id)}" aria-label="Delete owner">×</button>`}</div>`; }).join('') || '<p class="empty">No owners yet.</p>';
     if (!ro()) h += '<div class="form" style="margin-top:10px"><label class="field"><span>New owner</span><input id="owName" placeholder="Name"></label><button type="button" class="button ghost" id="owAdd" style="align-self:end">Add owner</button></div>';
+    // what went with a deleted gun or ammunition is listed under it (Undo brings it all back)
+    const heads = D().trash.filter(x => x && (x.table === 'guns' || x.table === 'munitions')).map(x => x.at + '|' + x.by);
+    const tr = D().trash.map((x, i) => ({ x, i })).filter(o => o.x && o.x.row && (o.x.table === 'guns' || o.x.table === 'munitions' || !heads.includes(o.x.at + '|' + o.x.by))).sort((a, b) => a.x.at < b.x.at ? 1 : -1);
+    h += `<h2 class="sec">Recently deleted <small>kept ${TRASH_DAYS} days</small></h2><p class="sub" style="margin:0 0 6px">A delete is passed to all your devices and the PC with the next sync. Undo brings an entry back everywhere.</p>`;
+    h += tr.slice(0, 50).map(({ x, i }) => `<div class="row"><div><b>${esc(labelOf(x.table, x.row))}</b><div class="sub">${dShow(x.at.slice(0, 10))} ${esc(x.at.slice(11, 16))} UTC · ${esc(x.by || '')}</div></div>${ro() ? '' : `<button type="button" class="mini" data-undo="${i}">Undo</button>`}</div>`).join('') || '<p class="empty">Nothing deleted in the last 30 days.</p>';
     h += `<h2 class="sec">Database file</h2><p class="sub" style="margin:0 0 8px">${esc(st.file)}: the GS_ sheets can be opened and edited in Excel. Opening a file merges it into the app; nothing is deleted.</p>
       <div class="actions"><button type="button" class="button ghost" id="xSave">Save database file</button><button type="button" class="button ghost" id="xOpen"${ro() ? ' disabled' : ''}>Open a file</button></div>`;
     const info = (() => { try { return window.GSNative ? JSON.parse(GSNative.appInfo()) : {}; } catch (e) { return {}; } })();
-    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.1')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
+    h += `<h2 class="sec">About</h2><dl class="kv"><dt>App</dt><dd>SR GunSafe ${esc(info.version || '0.1.2')}</dd><dt>Units</dt><dd>Metric (mm, m, g), prices in EUR</dd><dt>Data</dt><dd>On this phone${s.mode === 'nextcloud' ? ' and in your Nextcloud' : ''}. No accounts, no tracking.</dd></dl>`;
     h += '<details><summary class="sub">Back button log and errors</summary><pre class="log" id="backLog"></pre></details>';
     return h;
   }
@@ -374,7 +404,7 @@
       const what = { service: 'this service or cleaning entry', moves: 'this stock movement', rounds: 'these rounds' }[t];
       confirmBox('Delete entry?', 'Delete ' + what + '? A copy of your data is kept in the backups.', 'Delete', () => {
         GSStore.backup('before-delete-' + GSStore.stamp() + '.json');
-        D()[t] = D()[t].filter(x => x.id !== id); tombstone(id); save('delete', 'Deleted'); render(true);
+        kill(t, [id]); save('delete', 'Deleted · on all devices at the next sync'); render(true);
       }, true);
     }; });
     if ($('lnYes')) $('lnYes').onclick = () => { const p = GSLink.allow(); render(true); GS.toast(p ? GSLink.problemText(p) : 'Linked with SR Shooting'); };
@@ -390,11 +420,11 @@
       if ($('gFits')) $('gFits').onchange = () => { M.setInfo(g.id, { fits: $('gFits').value.split(/[;,]/).map(s => s.trim()).filter(Boolean) }); save('fits', 'Saved'); };
       if ($('gDel')) $('gDel').onclick = () => confirmBox('Delete gun?', `Delete <b>${esc(g.name)}</b> with its parts, barrels and history? A copy of your data is kept in the backups.`, 'Delete gun', () => {
         GSStore.backup('before-delete-' + GSStore.stamp() + '.json');
-        const d = D(), gone = x => x.weaponId === g.id;
-        [g.id].concat(d.barrels.filter(gone).map(x => x.id), d.components.filter(gone).map(x => x.id), d.service.filter(gone).map(x => x.id), d.rounds.filter(gone).map(x => x.id)).forEach(tombstone);
-        d.guns = d.guns.filter(x => x.id !== g.id); d.barrels = d.barrels.filter(x => !gone(x)); d.components = d.components.filter(x => !gone(x));
-        d.service = d.service.filter(x => !gone(x)); d.rounds = d.rounds.filter(x => !gone(x)); d.gunInfo = d.gunInfo.filter(x => x.id !== g.id);
-        save('delete', 'Gun deleted'); location.replace('#home');
+        const d = D(), mine = t => d[t].filter(x => x.weaponId === g.id).map(x => x.id);
+        const at = GSStore.now();
+        ['barrels', 'components', 'service', 'rounds'].forEach(t => kill(t, mine(t), at));
+        kill('gunInfo', [g.id], at); kill('guns', [g.id], at);
+        save('delete', 'Gun deleted · on all devices at the next sync'); location.replace('#home');
       }, true);
     }
     if (v === 'gunedit') {
@@ -483,9 +513,9 @@
       const m = M.mun(r.id);
       $('mDel').onclick = () => confirmBox('Delete ammunition?', `Delete <b>${esc(m.name)}</b> with its purchases and take-outs? A copy of your data is kept in the backups.`, 'Delete', () => {
         GSStore.backup('before-delete-' + GSStore.stamp() + '.json');
-        const d = D(); tombstone(m.id); d.moves.filter(x => x.munitionId === m.id).forEach(x => tombstone(x.id));
-        d.munitions = d.munitions.filter(x => x.id !== m.id); d.moves = d.moves.filter(x => x.munitionId !== m.id);
-        save('delete', 'Ammunition deleted'); location.replace('#ammo');
+        const at = GSStore.now();
+        kill('moves', D().moves.filter(x => x.munitionId === m.id).map(x => x.id), at); kill('munitions', [m.id], at);
+        save('delete', 'Ammunition deleted · on all devices at the next sync'); location.replace('#ammo');
       }, true);
     }
     if (v === 'munedit' && $('fMunE')) {
@@ -548,6 +578,10 @@
     const apply = () => { const f = ncFields(), c = check(f); if (c) { msg = { ok: false, t: c }; render(true); return false; } const p = Object.assign({ mode: 'nextcloud' }, f); if (!p.password) delete p.password; GSSync.save(p); return true; };
     if ($('ncTest')) $('ncTest').onclick = async () => { if (!apply()) return; msg = { ok: true, t: 'Testing …' }; render(true); const t = await GSSync.test(); msg = { ok: t.ok, t: t.msg }; render(true); };
     if ($('ncSync')) $('ncSync').onclick = async () => { if (!apply()) return; msg = { ok: true, t: 'Syncing …' }; render(true); const s = await GSSync.sync('now'); msg = { ok: s.ok, t: s.msg }; render(true); if (s.ok) GS.toast(M.linked() ? 'Synced · SR Shooting uses the same file' : 'Synced with Nextcloud'); };
+    if ($('ncReplace')) $('ncReplace').onclick = () => confirmBox('Replace this phone\'s data?', 'GunSafe\'s data on this phone is replaced by the copy in <b>' + esc(GSSync.fileName()) + '</b> on Nextcloud. Nothing is merged. A backup of the phone\'s data is made first.', 'Replace', async () => {
+      msg = { ok: true, t: 'Loading the Nextcloud copy …' }; render(true);
+      const r = await GSSync.replaceFromRemote(); msg = { ok: r.ok, t: r.msg }; render(true); if (r.ok) GS.toast('Nextcloud copy loaded');
+    }, true);
     if ($('linkSw')) $('linkSw').onchange = () => {
       if ($('linkSw').checked) {
         $('linkSw').checked = false;
@@ -560,8 +594,15 @@
     sc.querySelectorAll('[data-delown]').forEach(b => { b.onclick = () => {
       const o = M.owner(b.dataset.delown), used = M.guns().filter(g => M.gunOwners(g.id).includes(o.id)).length;
       confirmBox('Delete owner?', `Delete <b>${esc(o.name)}</b>?${used ? ' The owner is taken off ' + used + ' gun' + (used === 1 ? '' : 's') + '.' : ''}`, 'Delete', () => {
-        D().owners = D().owners.filter(x => x.id !== o.id); D().gunInfo.forEach(i => { i.owners = (i.owners || []).filter(x => x !== o.id); }); tombstone(o.id); save('delete', 'Owner deleted'); render(true);
+        D().gunInfo.forEach(i => { i.owners = (i.owners || []).filter(x => x !== o.id); }); kill('owners', [o.id]); save('delete', 'Owner deleted'); render(true);
       }, true);
+    }; });
+    sc.querySelectorAll('[data-undo]').forEach(b => { b.onclick = () => {
+      const x = D().trash[+b.dataset.undo]; if (!x) return;
+      // a gun or ammunition comes back with what was deleted with it at the same moment
+      const group = D().trash.map((y, i) => ({ y, i })).filter(o => o.y.at === x.at && o.y.by === x.by && (o.i === +b.dataset.undo || ((x.table === 'guns' || x.table === 'munitions') && o.y.table !== x.table)));
+      group.map(o => o.i).sort((a, c) => c - a).forEach(undo);
+      save('undo', 'Restored · on all devices at the next sync'); render(true);
     }; });
     if ($('xSave')) $('xSave').onclick = () => {
       try {
@@ -574,9 +615,12 @@
       const doImport = bytes => {
         let file; try { file = GSX.read(bytes); } catch (e) { GS.toast('This is not a readable xlsx file.'); return; }
         if (!file.data) { GS.toast('This file has no SR GunSafe sheets (GS_…).'); return; }
-        const m = GSX.merge(null, GSX.tablesOf(D()), file.data, D().deleted);
+        const tombs = GSX.mergeTombs(D().tombs, file.tombs);
+        const m = GSX.merge(null, GSX.tablesOf(D()), file.data, tombs, D().trash);
         GSStore.backup('before-import-' + GSStore.stamp() + '.json');
-        GSX.TABLES.forEach(t => { D()[t] = m.data[t]; }); save('import', `Opened: ${m.added} new, ${m.changed} filled in`); render(true);
+        const at = GSStore.now();
+        GSX.TABLES.forEach(t => { D()[t] = m.data[t]; }); D().tombs = tombs; m.removed.forEach(x => D().trash.push({ table: x.table, row: x.row, at, by: 'opened file' }));
+        save('import', `Opened: ${m.added} new, ${m.changed} filled in` + (m.removed.length ? `, ${m.removed.length} deleted elsewhere` : '')); render(true);
       };
       if (window.GSNative) GSSync.native('openFile').then(o => { if (o.ok && o.data) doImport(GSSync.unb64(o.data)); else if (o.msg !== 'cancelled') GS.toast('Could not open: ' + o.msg); });
       else { const i = document.createElement('input'); i.type = 'file'; i.accept = '.xlsx'; i.onchange = () => { const f = i.files[0]; if (f) f.arrayBuffer().then(b => doImport(new Uint8Array(b))); }; i.click(); }
@@ -596,6 +640,7 @@
     if (['home', 'gun', 'svclog', 'ammo', 'mun', 'settings'].includes(route().v) && !document.querySelector('.overlay')) render(true);
   };
   GS.pause = () => GSStore.flush();
+  purgeTrash();
   if (window.SR_EMBLEM) $('hHome').innerHTML = SR_EMBLEM;
   $('hHome').onclick = () => { if ((location.hash || '#home') !== '#home') location.hash = '#home'; };
   $('menuBtn').onclick = () => { if (route().v !== 'settings') GS.go('#settings'); };

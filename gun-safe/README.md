@@ -1,4 +1,14 @@
-# SR GunSafe 0.1.1 (Stoic Ranger Gun Safe)
+# SR GunSafe 0.1.2 (Stoic Ranger Gun Safe)
+
+## 0.1.2 (2026-11-14): delete on all devices (shared contract section E)
+- A delete now reaches every device and the PC: it is written to the shared hidden `_Deleted` sheet of the database
+  file (App GS, sheet, ID, label, time). An entry is gone everywhere when it was not changed after the delete; a
+  later change wins. Other apps' deletes in that sheet are kept. A row deleted only in Excel still comes back.
+- Every entry now carries its last change time (`Updated` column).
+- Settings › **Recently deleted**: everything deleted in the last 30 days (also deletes that came from another
+  device), with **Undo** (brings it back on all devices; a gun or ammunition comes back with its parts and log).
+- Settings › **Replace this phone's data with the Nextcloud copy** (backup first, nothing merged).
+- Data format 2 (backup before the change; the old local list of deleted IDs became tombstones).
 
 ## 0.1.1 (2026-11-14): sync fixes, tested against a real Nextcloud 30
 - Rows typed in Excel without an ID come in once (matched by name, or date, gun and rounds …), never again at the
@@ -43,7 +53,7 @@ rounds log, keeping other apps' sheets in database.xlsx, and the storage calls o
 works on its own and says "SR Shooting needs an update". Contract: `00_docs/SHARED-DB-CONTRACT.md`.
 
 ## Build and test
-    node gun-safe/tools/test-app.mjs          # 64 browser tests (Playwright/Chromium)
+    node gun-safe/tools/test-app.mjs          # 77 browser tests (Playwright/Chromium)
     bash gun-safe/tools/test-nextcloud.sh <database.xlsx>   # real Nextcloud 30 in Docker, the app's own WebDAV code
     KEYSTORE=/path/debug.keystore bash gun-safe/tools/build-debug.sh
     unzip -p gun-safe/build/outputs/*.apk classes.dex | strings | grep -c LambdaMetafactory   # must be 0

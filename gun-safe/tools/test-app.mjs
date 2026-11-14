@@ -124,7 +124,7 @@ const browser = await chromium.launch();
     const X = XLSX, wb = X.read(GSX.write(GSStore.data, null, 't'), { type: 'array' });
     const ws = wb.Sheets.GS_Owners; ws.B2 = { t: 's', v: 'Manuel F.' }; X.utils.sheet_add_aoa(ws, [['O9', 'Paul', '']], { origin: -1 });
     const r = GSX.read(new Uint8Array(X.write(wb, { type: 'array', bookType: 'xlsx' }))).data;
-    const m = GSX.merge(GSX.tablesOf(GSStore.data), GSX.tablesOf(GSStore.data), r, GSStore.data.deleted);
+    const m = GSX.merge(GSX.tablesOf(GSStore.data), GSX.tablesOf(GSStore.data), r, GSStore.data.tombs);
     return { o1: m.data.owners.find(o => o.id === 'O1').name, n: m.data.owners.length, added: m.added, changed: m.changed };
   });
   ok(ex.o1 === 'Manuel F.' && ex.n === 3 && ex.added === 1 && ex.changed === 1, 'Excel edits merge in ' + JSON.stringify(ex));
@@ -167,11 +167,43 @@ const browser = await chromium.launch();
   await back();
   ok(await page.locator('.overlay').count() === 0 && (await page.evaluate(() => location.hash)) === '#svclog', 'Back closes the confirm, stays on the page');
   await page.locator('[data-del^="service|"]').first().click(); await page.click('[data-x=ok]');
-  const del = await page.evaluate(() => ({ n: GSStore.data.service.length, t: GSStore.data.deleted.length, bk: Object.keys(localStorage).some(k => k.includes('.backup.before-delete')) }));
-  ok(del.n === n0 - 1 && del.t === 1 && del.bk, 'deleted with tombstone and backup');
-  // a tombstoned row is not brought back by a merge
-  const tomb = await page.evaluate(() => { const old = JSON.parse(JSON.stringify(GSX.tablesOf(GSStore.data))); old.service.push({ id: GSStore.data.deleted[0], date: '2026-01-01', weaponId: 'G1', kind: 'Cleaning', cleaningDone: true, changes: [] }); return GSX.merge(null, GSX.tablesOf(GSStore.data), old, GSStore.data.deleted).data.service.length === GSStore.data.service.length; });
-  ok(tomb, 'tombstones keep deleted rows deleted');
+  const del = await page.evaluate(() => ({ n: GSStore.data.service.length, t: GSStore.data.tombs, tr: GSStore.data.trash.length, bk: Object.keys(localStorage).some(k => k.includes('.backup.before-delete')) }));
+  ok(del.n === n0 - 1 && del.t.length === 1 && del.t[0].app === 'GS' && del.t[0].table === 'GS_Service_Log' && /Z$/.test(del.t[0].at) && del.tr === 1 && del.bk, 'deleted with tombstone, Recently deleted and backup ' + JSON.stringify(del.t));
+  // delete on all devices (contract E)
+  const de = await page.evaluate(() => {
+    const X = XLSX, d = GSStore.data, id = d.tombs[0].id;
+    const old = GSX.tablesOf(d); old.service.push({ id, date: '2026-01-01', weaponId: 'G1', kind: 'Cleaning', cleaningDone: true, changes: [], updated: '2026-01-01T00:00:00.000Z' });
+    const back = GSX.merge(null, GSX.tablesOf(d), old, d.tombs, d.trash).data.service.some(e => e.id === id);
+    const newer = Object.assign({}, old.service.slice(-1)[0], { updated: new Date(Date.now() + 60000).toISOString() });
+    old.service[old.service.length - 1] = newer;
+    const wins = GSX.merge(null, GSX.tablesOf(d), old, d.tombs, d.trash).data.service.some(e => e.id === id);
+    // a delete from another device: the row goes here too and lands in Recently deleted
+    const other = [{ app: 'GS', table: 'GS_Owners', id: 'O2', uid: '', label: 'Ines', at: new Date(Date.now() + 1000).toISOString(), by: 'PC' }, { app: 'SR', table: 'Weapons', id: 'W7', uid: 'u7', label: 'Sako', at: '2026-11-01T10:00:00.000Z', by: 'SR' }];
+    const m = GSX.merge(GSX.tablesOf(d), GSX.tablesOf(d), GSX.tablesOf(d), GSX.mergeTombs(d.tombs, other), d.trash);
+    // the tombstones travel in the file: hidden _Deleted, other apps' rows kept
+    const wb0 = X.utils.book_new(); X.utils.book_append_sheet(wb0, X.utils.aoa_to_sheet([['App', 'Table', 'ID', 'Source uid', 'Label', 'Deleted at', 'Deleted by'], ['SR', 'Weapons', 'W7', 'u7', 'Sako', '2026-11-01T10:00:00.000Z', 'SR']]), '_Deleted');
+    const bytes = GSX.write(d, new Uint8Array(X.write(wb0, { type: 'array', bookType: 'xlsx' })), 't');
+    const rd = GSX.read(bytes), wb = X.read(bytes, { type: 'array' });
+    // a row typed in Excel without ID that matches a deleted entry stays deleted
+    const del0 = d.trash[0].row, xw = X.read(bytes, { type: 'array' });
+    X.utils.sheet_add_aoa(xw.Sheets.GS_Service_Log, [['', del0.date, del0.weaponId, del0.kind, 'yes', '', '']], { origin: -1 });
+    const xr = GSX.read(new Uint8Array(X.write(xw, { type: 'array', bookType: 'xlsx' })));
+    const again = GSX.merge(GSX.tablesOf(d), GSX.tablesOf(d), xr.data, GSX.mergeTombs(d.tombs, xr.tombs), d.trash).data.service.length === d.service.length;
+    return { back, wins, gone: !m.data.owners.some(o => o.id === 'O2') && m.removed.length === 1, tombs: rd.tombs.map(t => t.app + ':' + t.id).join(), hidden: wb.Workbook.Sheets[wb.SheetNames.indexOf('_Deleted')].Hidden, again };
+  });
+  ok(!de.back, 'a deleted entry does not come back from an older copy');
+  ok(de.wins, 'an entry changed after the delete wins (last change wins)');
+  ok(de.gone, 'a delete from another device removes the entry here');
+  ok(/SR:W7/.test(de.tombs) && /GS:E/.test(de.tombs) && de.hidden === 1, 'tombstones in the hidden _Deleted sheet, other apps\' kept ' + de.tombs);
+  ok(de.again, 'an Excel row without ID matching a deleted entry stays deleted');
+  // Recently deleted: listed in Settings, Undo brings it back with a newer change time
+  await page.evaluate(() => GS.go('#settings'));
+  ok(/Recently deleted/i.test(await txt()) && await page.locator('[data-undo]').count() === 1, 'Recently deleted listed');
+  await page.click('[data-undo]');
+  const un = await page.evaluate(() => { const d = GSStore.data, t = d.tombs[0], r = d.service.find(e => e.id === t.id); return { back: !!r, newer: !!r && r.updated > t.at, trash: d.trash.length }; });
+  ok(un.back && un.newer && un.trash === 0, 'Undo restores, newer than the delete ' + JSON.stringify(un));
+  await page.evaluate(() => GS.go('#svclog'));
+  await page.locator('[data-del^="service|"]').first().click(); await page.click('[data-x=ok]');
 
   // Back: pages → home → double-Back closes
   await page.evaluate(() => { GS.go('#ammo'); });
@@ -325,6 +357,16 @@ const FAKE = () => {
   await page.evaluate(() => { GSStore.data.owners.push({ id: 'O2', name: 'Paul', notes: '' }); GSStore.changed('owner'); });
   await page.waitForFunction(() => __mem.puts > 0 && XLSX.utils.sheet_to_json(XLSX.read(GSSync.unb64(__mem.dav['Stoic Ranger/database.xlsx'].data), { type: 'array' }).Sheets.GS_Owners).some(o => o.Name === 'Paul'), null, { timeout: 8000 }).then(() => ok(true, ''), () => ok(false, 'auto sync after a change'));
 
+  // replace this phone's data with the Nextcloud copy: backup first, file wins, nothing merged
+  const rp = await page.evaluate(async () => {
+    await GSSync.sync('now');
+    GSStore.data.owners.push({ id: 'O99', name: 'Only on this phone', notes: '' });
+    const nb = __mem.backups.length;
+    const r = await GSSync.replaceFromRemote();
+    return { ok: r.ok, msg: r.msg, local: GSStore.data.owners.some(o => o.id === 'O99'), paul: GSStore.data.owners.some(o => o.name === 'Paul'), backup: __mem.backups.slice(nb).some(n => /before-replace-from-nextcloud/.test(n)) };
+  });
+  ok(rp.ok && !rp.local && rp.paul && rp.backup, 'replace with the Nextcloud copy ' + JSON.stringify(rp));
+
   // SR Shooting switched to local → GunSafe adopts it on start
   await page.evaluate(() => { __mem.srStorage = { mode: 'local', folder: '/Stoic Ranger/', changed: new Date(Date.now() + 1000).toISOString() }; GSSync.pull(); });
   ok((await page.evaluate(() => GSSync.state().on)) === false, 'adopts phone-only from the linked app');
@@ -353,6 +395,32 @@ const FAKE = () => {
   ok(/newer version/i.test(t) && t.includes('Future gun') && !t.includes('Add a gun'), 'newer data: read-only notice, shown, no edits ' + t);
   await page.evaluate(() => { GSStore.changed('x'); GSStore.flush(); });
   ok((await page.evaluate(() => JSON.parse(__mem.db).format)) === 99, 'newer data never written');
+  await ctx.close();
+}
+
+/* ---------------- D: format 1 → 2, change times, gun delete + Undo ---------------- */
+{
+  const ctx = await browser.newContext();
+  await ctx.addInitScript(FAKE);
+  await ctx.addInitScript(() => { window.__mem.db = JSON.stringify({ app: 'sr-gunsafe', format: 1, data: { owners: [{ id: 'O1', name: 'Manuel' }], guns: [{ id: 'G1', name: 'Glock' }], barrels: [{ id: 'GB1', weaponId: 'G1', name: 'F' }], service: [{ id: 'E1', date: '2026-01-01', weaponId: 'G1', kind: 'Cleaning', cleaningDone: true }], gunInfo: [{ id: 'G1', owners: ['O1'] }], deleted: ['E3', 'GM2'], link: { sr: 'no' } } }); });
+  const page = await ctx.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(String(e)));
+  await page.goto(URL);
+  const mg = await page.evaluate(() => ({ f: GSStore._db().format, t: GSStore.data.tombs.map(x => x.table + ':' + x.id).join(), old: 'deleted' in GSStore.data, bk: __mem.backups.some(n => /before-format-2/.test(n)) }));
+  ok(mg.f === 2 && mg.t === 'GS_Service_Log:E3,GS_Munitions:GM2' && !mg.old && mg.bk, 'format 1 → 2: backup, deleted IDs became tombstones ' + JSON.stringify(mg));
+  const st = await page.evaluate(() => { const o = GSStore.data.owners[0], g = GSStore.data.guns[0]; const before = o.updated; o.name = 'Manuel F.'; GSStore.changed('edit'); return { before: before || '', o: o.updated || '', g: g.updated || '' }; });
+  ok(!st.before && /Z$/.test(st.o) && !st.g, 'only the changed row gets a change time ' + JSON.stringify(st));
+  await page.evaluate(() => GS.go('#gun/G1'));
+  await page.click('#gDel'); await page.click('[data-x=ok]');
+  await page.waitForTimeout(50);
+  const gd = await page.evaluate(() => ({ g: GSStore.data.guns.length, s: GSStore.data.service.length, b: GSStore.data.barrels.length, t: GSStore.data.tombs.length }));
+  ok(gd.g === 0 && gd.s === 0 && gd.b === 0 && gd.t === 5, 'gun deleted with its barrels and log, tombstones ' + JSON.stringify(gd));
+  await page.evaluate(() => GS.go('#settings'));
+  ok(await page.locator('[data-undo]').count() === 1, 'Recently deleted shows the gun once (its parts under it)');
+  await page.click('[data-undo]');
+  const gu = await page.evaluate(() => ({ g: GSStore.data.guns.length, s: GSStore.data.service.length, b: GSStore.data.barrels.length, own: GSModel.gunOwners('G1').length }));
+  ok(gu.g === 1 && gu.s === 1 && gu.b === 1 && gu.own === 1, 'Undo brings the gun back with its barrels, log and owners ' + JSON.stringify(gu));
+  ok(errors.length === 0, 'no page errors (D): ' + errors.join(' | '));
   await ctx.close();
 }
 

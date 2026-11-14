@@ -109,18 +109,25 @@ window.GSSync = (() => {
         }
         if (!g.ok) { res = { ok: false, msg: g.msg || ('Nextcloud answered ' + g.status) }; break; }
         const remote = unb64(g.data || '');
-        let file = null;
-        try { file = GSX.read(remote).data; } catch (e) { res = { ok: false, msg: 'The file on Nextcloud is not a readable xlsx; it was left unchanged.' }; break; }
+        let file = null, fileTombs = [];
+        try { const rd = GSX.read(remote); file = rd.data; fileTombs = rd.tombs; } catch (e) { res = { ok: false, msg: 'The file on Nextcloud is not a readable xlsx; it was left unchanged.' }; break; }
         const base = GSStore.aux('sync-base');
-        let added = 0, changed = 0;
-        if (file) {
-          if (!base) GSStore.backup('before-first-sync-' + GSStore.stamp() + '.json');
-          const m = GSX.merge(base, GSX.tablesOf(GSStore.data), file, GSStore.data.deleted);
-          added = m.added; changed = m.changed;
-          if (added || changed) { const d = GSStore.data; GSX.TABLES.forEach(t => { d[t] = m.data[t]; }); GSStore.changed('sync'); GSStore.flush(); }
+        let added = 0, changed = 0, removed = 0;
+        const d = GSStore.data, tombs = GSX.mergeTombs(d.tombs, fileTombs);   // deletes from every device and app
+        const tombsChanged = JSON.stringify(tombs) !== JSON.stringify(d.tombs);
+        if (!base && file) GSStore.backup('before-first-sync-' + GSStore.stamp() + '.json');
+        const m = GSX.merge(base, GSX.tablesOf(d), file || {}, tombs, d.trash);
+        added = m.added; changed = m.changed; removed = m.removed.length;
+        if (added || changed || removed || tombsChanged) {
+          if (removed) GSStore.backup('before-sync-delete-' + GSStore.stamp() + '.json');
+          GSX.TABLES.forEach(t => { d[t] = m.data[t]; });
+          d.tombs = tombs;
+          const at = GSStore.now();
+          m.removed.forEach(x => d.trash.push({ table: x.table, row: x.row, at, by: 'another device' }));
+          GSStore.changed('sync'); GSStore.flush();
         }
-        const bytes = GSX.write(GSStore.data, remote, 'SR GunSafe');
-        const sameAsRemote = file && GSX.sameData(file, GSStore.data);
+        const bytes = GSX.write(d, remote, 'SR GunSafe');
+        const sameAsRemote = file && GSX.sameData(file, d) && JSON.stringify(GSX.mergeTombs(fileTombs, [])) === JSON.stringify(d.tombs);
         if (!sameAsRemote) {
           if (!(await backupRemote(s, remote))) { res = { ok: false, msg: 'Could not save the backup copy on Nextcloud, so nothing was uploaded.' }; break; }
           const p = await putChecked(path, bytes, g.etag || '', remote);
@@ -128,7 +135,7 @@ window.GSSync = (() => {
           if (!p.ok) { res = { ok: false, msg: p.msg }; break; }
         }
         GSStore.aux('sync-base', GSX.tablesOf(GSStore.data));
-        res = { ok: true, msg: added || changed ? `Synced: ${added} new and ${changed} changed from Nextcloud` : 'Synced', added, changed }; break;
+        res = { ok: true, msg: added || changed || removed ? `Synced: ${added} new, ${changed} changed` + (removed ? `, ${removed} deleted on another device` : '') : 'Synced', added, changed, removed }; break;
       }
       if (!res.msg) res = { ok: false, msg: 'The file kept changing on Nextcloud; try again in a moment.' };
     } catch (e) { res = { ok: false, msg: String(e && e.message || e) }; }
@@ -136,6 +143,40 @@ window.GSSync = (() => {
     last = { at: new Date().toISOString(), ok: res.ok, msg: res.msg };
     GSStore.aux('sync-last', last);
     tell();
+    return res;
+  }
+  /** "Replace this phone's data with the Nextcloud copy": a backup of the phone's data first, then GunSafe's tables
+   *  become exactly what the file holds (nothing merged). Settings, the link and SR Shooting's cached data stay. */
+  async function replaceFromRemote() {
+    if (!N || !N.nc) return { ok: false, msg: 'Nextcloud sync works in the Android app.' };
+    if (!on()) return { ok: false, msg: 'Nextcloud is not set up.' };
+    if (GSStore.readOnly) return { ok: false, msg: 'The data is read-only (saved by a newer version).' };
+    clearTimeout(timer);                                       // a sync waiting after a change is not needed any more
+    for (let i = 0; busy && i < 200; i++) await new Promise(r => setTimeout(r, 300));   // let a running sync finish
+    if (busy) return { ok: false, msg: 'A sync is running; try again in a moment.' };
+    busy = true; tell();
+    let res;
+    try {
+      const s = setting(), g = await native('nc', 'get', folderOf(s) + fileName(), '', '');
+      if (g.status === 404) res = { ok: false, msg: fileName() + ' is not on Nextcloud yet. Nothing was changed.' };
+      else if (!g.ok) res = { ok: false, msg: g.msg || ('Nextcloud answered ' + g.status) };
+      else {
+        let file = null, rd = null;
+        try { rd = GSX.read(unb64(g.data || '')); file = rd.data; } catch (e) { file = undefined; }
+        if (file === undefined) res = { ok: false, msg: 'The file on Nextcloud is not a readable xlsx. Nothing was changed.' };
+        else if (!GSStore.backup('before-replace-from-nextcloud-' + GSStore.stamp() + '.json')) res = { ok: false, msg: 'Could not make a backup of the phone\'s data, so nothing was changed.' };
+        else {
+          const d = GSStore.data, f = file || {};
+          GSX.TABLES.forEach(t => { d[t] = Array.isArray(f[t]) ? f[t].filter(r => r && r.id) : []; });
+          d.tombs = GSX.mergeTombs(rd.tombs, []);
+          GSStore.aux('sync-base', GSX.tablesOf(d));
+          GSStore.changed('replace'); GSStore.flush();
+          const n = GSX.TABLES.reduce((a, t) => a + d[t].length, 0);
+          res = { ok: true, msg: 'This phone now has the Nextcloud copy (' + n + ' entries). The previous data is kept in the backups.' };
+        }
+      }
+    } catch (e) { res = { ok: false, msg: String(e && e.message || e) }; }
+    busy = false; tell();
     return res;
   }
   /** After a change: sync a few seconds later (several quick changes → one sync). */
@@ -151,5 +192,5 @@ window.GSSync = (() => {
   }
   function state() { const s = setting(); return { setting: s, on: on(), busy, last: last.at ? last : (GSStore.aux('sync-last') || last), file: fileName(), native: !!(N && N.nc) }; }
   GSStore.onChange(why => { if (why !== 'sync' && why !== 'replace' && why !== 'link') soon(); });
-  return { setting, save, pull, sync, soon, test, state, fileName, onState(f) { listeners.push(f); }, b64, unb64, native };
+  return { setting, save, pull, sync, soon, test, replaceFromRemote, state, fileName, onState(f) { listeners.push(f); }, b64, unb64, native };
 })();

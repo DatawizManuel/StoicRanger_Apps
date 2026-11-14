@@ -35,7 +35,30 @@ window.GSX = (() => {
     rounds: ['GS_Rounds_Log', 'R', [['ID', 'id'], ['Date', 'date', 'd'], ['Gun ID', 'weaponId'], ['Munition ID', 'munitionId'], ['Rounds', 'rounds', 'i'], ['Note', 'note']]],
   };
   const TABLES = Object.keys(SHEETS);
-  const ours = n => n === HIDDEN || /^GS_/.test(n);
+  // last change of each entry (UTC ISO), needed to decide against a delete from another device (contract E)
+  TABLES.forEach(t => SHEETS[t][2].push(['Updated', 'updated']));
+  const DELETED = '_Deleted', DEL_COLS = [['App', 'app'], ['Table', 'table'], ['ID', 'id'], ['Source uid', 'uid'], ['Label', 'label'], ['Deleted at', 'at'], ['Deleted by', 'by']];
+  const ours = n => n === HIDDEN || n === DELETED || /^GS_/.test(n);
+  const sheetOfTable = t => SHEETS[t][0];
+  /** The shared _Deleted list: union by (app, table, uid or id), the newer time stays, older than 365 days dropped. */
+  function mergeTombs(a, b) {
+    const m = new Map(), cut = new Date(Date.now() - 365 * 864e5).toISOString();
+    arr(a).concat(arr(b)).forEach(x => {
+      if (!x || !x.app || !x.table || !(x.id || x.uid) || !x.at || String(x.at) < cut) return;
+      const k = x.app + '|' + x.table + '|' + (x.uid || x.id), o = m.get(k);
+      if (!o || String(x.at) > o.at) m.set(k, { app: txt(x.app), table: txt(x.table), id: txt(x.id), uid: txt(x.uid), label: txt(x.label), at: txt(x.at), by: txt(x.by) });
+    });
+    return [...m.values()].sort((x, y) => x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
+  }
+  function tombsIn(wb) {
+    const X = window.XLSX, ws = wb.Sheets[DELETED]; if (!ws) return [];
+    return X.utils.sheet_to_json(ws, { defval: '', raw: true }).map(r => { const o = {}; DEL_COLS.forEach(([h, k]) => { o[k] = r[h] instanceof Date ? r[h].toISOString() : txt(r[h]); }); return o; });
+  }
+  /** Is this GunSafe row deleted (on any device)? Gone when its last change is not newer than the delete. */
+  const deadIn = tombs => {
+    const m = new Map(); arr(tombs).forEach(x => { if (x.app === 'GS') m.set(x.table + '|' + x.id, x.at); });
+    return (t, r) => { const at = r && r.id ? m.get(sheetOfTable(t) + '|' + r.id) : null; return !!at && !(String(r.updated || '') > at); };
+  };
 
   function cell(v, ty) {
     if (v == null) return '';
@@ -53,8 +76,10 @@ window.GSX = (() => {
   function write(data, existing, by) {
     const X = window.XLSX; if (!X) throw new Error('xlsx library missing');
     let wb;
+    let tombs = arr(data.tombs);
     if (existing && existing.length) {
       wb = X.read(existing, { type: 'array', cellDates: true, cellStyles: true });
+      tombs = mergeTombs(tombsIn(wb), tombs);              // other apps' deletes stay in the shared list
       const hidden = {};
       arr(wb.Workbook && wb.Workbook.Sheets).forEach((s, i) => { hidden[wb.SheetNames[i]] = s && s.Hidden; });
       wb.SheetNames.filter(ours).forEach(n => { delete wb.Sheets[n]; });
@@ -68,12 +93,13 @@ window.GSX = (() => {
     });
     X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([
       ['SR GunSafe', 'Guns with their owners, builds, service and cleaning log, ammunition stock, purchases and take-outs.'],
-      ['Editing', 'You can edit the GS_ sheets in Excel. Keep the ID columns as they are; a new row may leave ID empty. To delete an entry, delete it in the app: rows deleted here are kept by the app.'],
+      ['Editing', 'You can edit the GS_ sheets in Excel. Keep the ID columns as they are; a new row may leave ID empty. To delete an entry, delete it in the app (it is then deleted on all devices): rows deleted only here come back.'],
       ['Guns', 'GS_Guns holds the guns entered in SR GunSafe. Guns from SR Shooting are in its Weapons sheet; GS_Gun_Info adds owners and extra calibres for both (Gun ID).'],
       ['Ammo', 'GS_Ammo_Moves: Purchase rows add rounds (Price EUR = price paid for all of them), Withdrawal rows take rounds out (negative). Rounds fired come from SR Shooting or GS_Rounds_Log.'],
       ['Units', 'Metric: mm, m, g. Prices in EUR.'],
       ['Saved', (by || 'SR GunSafe') + ' ' + new Date().toISOString().slice(0, 16).replace('T', ' ')],
       ['Format', 'SR GunSafe sheets ' + FORMAT]]), 'GS_Info');
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([DEL_COLS.map(c => c[0])].concat(mergeTombs(tombs, []).map(x => DEL_COLS.map(([, k]) => x[k] || '')))), DELETED);
     const copy = {}; TABLES.forEach(t => { copy[t] = clone(arr(data[t])); });
     const full = JSON.stringify({ mark: MARK, format: FORMAT, saved: new Date().toISOString(), db: copy });
     const rows = [[MARK, FORMAT, 'Do not edit: a copy of the SR GunSafe data for the app. The GS_ sheets win over it.']];
@@ -81,7 +107,7 @@ window.GSX = (() => {
     X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), HIDDEN);
     wb.Workbook = wb.Workbook || {};
     const prev = {}; arr(wb.Workbook.Sheets).forEach(s => { if (s && s.name) prev[s.name] = s.Hidden; });
-    wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: n === HIDDEN ? 1 : (prev[n] || 0) }));
+    wb.Workbook.Sheets = wb.SheetNames.map(n => ({ name: n, Hidden: n === HIDDEN || n === DELETED ? 1 : (prev[n] || 0) }));
     return new Uint8Array(X.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
   }
 
@@ -122,7 +148,7 @@ window.GSX = (() => {
         Object.keys(rec).forEach(k => { m[k] = rec[k]; });
       });
     });
-    return { data: hasCopy || found.length ? F : null, hasCopy, found, sheetNames: wb.SheetNames.slice() };
+    return { data: hasCopy || found.length ? F : null, tombs: tombsIn(wb), hasCopy, found, sheetNames: wb.SheetNames.slice() };
   }
   function nextId(rows, p) {
     let n = 0; arr(rows).forEach(r => { const s = String(r && r.id || ''); if (s.startsWith(p) && /^\d+$/.test(s.slice(p.length))) n = Math.max(n, +s.slice(p.length)); });
@@ -146,10 +172,14 @@ window.GSX = (() => {
    *  Nothing is deleted: rows only in the app stay; rows only in the file come in unless they were deleted in the app
    *  (tombstones). Rows without ID (typed in Excel) are matched to an existing entry by name (or date, gun, rounds …),
    *  else get the next free ID. When the file and the app use the same ID for two different new entries (made on
-   *  two phones before a sync), the app's entry gets a new ID and both are kept. Returns { data, added, changed }. */
-  function merge(base, app, file, deleted) {
-    const out = clone(app), gone = new Set(arr(deleted));
-    let added = 0, changed = 0;
+   *  two phones before a sync), the app's entry gets a new ID and both are kept.
+   *  tombs: the merged _Deleted list. A row (here or in the file) whose last change is not newer than its delete is
+   *  gone; rows removed that way are returned in "removed" (for Recently deleted). trash: rows deleted here (a row
+   *  typed in Excel without ID that matches one of them stays deleted). Returns { data, added, changed, removed }. */
+  function merge(base, app, file, tombs, trash) {
+    const out = clone(app), dead = deadIn(tombs), gone = new Set(arr(tombs).filter(x => x.app === 'GS').map(x => x.id));
+    const binned = arr(trash).map(x => x && x.row && { t: x.table, k: null, row: x.row }).filter(Boolean);
+    let added = 0, changed = 0; const removed = [];
     const same = (a, b) => JSON.stringify(a == null ? '' : a) === JSON.stringify(b == null ? '' : b);
     const freeId = (t, p) => { const all = arr(out[t]).concat(arr(file && file[t])).concat([...gone].map(id => ({ id }))); return nextId(all, p); };
     const reId = (t, from, to) => {
@@ -166,9 +196,10 @@ window.GSX = (() => {
           if (!prefix) return;
           const k = keyOf(t, f);
           if (A.some(r => keyOf(t, r) === k)) return;          // already there (an earlier sync wrote it back with its ID)
+          if (binned.some(x => x.t === t && keyOf(t, x.row) === k)) return;   // that entry was deleted: stays deleted
           const n = clone(f); n.id = freeId(t, prefix); A.push(n); added++; return;
         }
-        if (gone.has(f.id)) return;
+        if (dead(t, f)) return;                               // deleted on some device and not changed since
         let a = A.find(r => r.id === f.id), b = B.get(f.id);
         if (a && !b && prefix && keyOf(t, a) !== keyOf(t, f)) {
           // same ID, different entries, neither synced before: keep both, the app's one moves to a new ID
@@ -176,9 +207,10 @@ window.GSX = (() => {
           reId(t, a.id, to); a.id = to; a = null;
         }
         if (!a) {
-          if (base && b) return;              // in the base, not in the app any more: deleted here, stays deleted
+          if (base && b && !(String(f.updated || '') > String(b.updated || ''))) return;   // dropped here and not changed since
           A.push(clone(f)); added++; return;
         }
+        if (String(f.updated || '') > String(a.updated || '')) a.updated = f.updated;
         let ch = false;
         Object.keys(f).forEach(k => {
           if (same(f[k], a[k])) return;
@@ -187,9 +219,10 @@ window.GSX = (() => {
         });
         if (ch) changed++;
       });
-      out[t] = A;
+      // entries deleted on another device (tombstone newer than their last change) leave this one too
+      out[t] = A.filter(r => { if (!dead(t, r)) return true; removed.push({ table: t, row: r }); return false; });
     });
-    return { data: out, added, changed };
+    return { data: out, added, changed, removed };
   }
   const tablesOf = d => { const o = {}; TABLES.forEach(t => { o[t] = clone(arr(d[t])); }); return o; };
   /** Same content? Empty fields (missing, null, '', []) and the order of fields don't count, so a sync with no
@@ -197,5 +230,5 @@ window.GSX = (() => {
   const empty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
   const normRow = r => { const o = {}; Object.keys(r || {}).sort().forEach(k => { if (!empty(r[k])) o[k] = r[k]; }); return o; };
   const sameData = (a, b) => TABLES.every(t => JSON.stringify(arr(a && a[t]).map(normRow)) === JSON.stringify(arr(b && b[t]).map(normRow)));
-  return { FORMAT, MIME, SHEETS, TABLES, write, read, merge, tablesOf, sameData, ours };
+  return { FORMAT, MIME, SHEETS, TABLES, write, read, merge, mergeTombs, tablesOf, sameData, sheetOfTable, ours };
 })();
