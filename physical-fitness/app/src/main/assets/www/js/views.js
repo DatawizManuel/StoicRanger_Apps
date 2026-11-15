@@ -34,7 +34,7 @@
     const link = x => EX[x] ? `<a href="#ex/${x}">${esc(EX[x].n)}</a>` : esc(x || '');
     const mob = (window.MOB || []).filter(m => m.ex === id);
     return `<div class="stack"><div class="eyebrow">${esc(EX_PATTERNS[e.pat] || '')} · level ${e.lvl}${e.side ? ' · per side' : ''}</div><h1>${esc(e.n)}</h1>
-        <div class="tags">${(e.equip.length ? e.equip : ['none']).map(k => `<span class="pill ${k === 'none' || P.has(eq, k) ? '' : 'warn'}">${k === 'none' ? 'No equipment' : esc(P.EQUIP_NAMES[k])}${k !== 'none' && !P.has(eq, k) ? ' · not in Setup' : ''}</span>`).join('')}<span class="pill">${doseText[e.dose]}</span></div></div>
+        <div class="tags">${(e.equip.length ? e.equip : ['none']).map(k => `<span class="pill ${k === 'none' || P.has(eq, k) ? '' : 'warn'}">${k === 'none' ? 'No equipment' : esc(P.EQUIP_NAMES[k])}${k !== 'none' && !P.has(eq, k) ? ' · not in Settings' : ''}</span>`).join('')}<span class="pill">${doseText[e.dose]}</span></div></div>
       <div class="stage" id="stage">${FIG.svg(e, 0, { label: e.n })}</div>
       <div class="row"><button type="button" class="btn sm" data-anim="1" id="animBtn">Pause</button><span class="small muted">The figure moves between start and end position.</span></div>
       <div class="card stack"><h3>How to</h3><ol class="steps">${e.how.map(s => `<li>${esc(s)}</li>`).join('')}</ol></div>
@@ -142,7 +142,7 @@
     PF.put('activities', row); PF.ui.act = null; PF.toast('Activity saved'); PF.go('#act');
     PF.rerender();
   };
-  PF.on.delact = async v => { if (!PF.guard()) return; if (await PF.confirm('Delete activity?', 'This removes it from the log.', 'Delete', true)) { PF.del('activities', v); PF.rerender(); } };
+  PF.on.delact = async v => { if (!PF.guard()) return; if (await PF.confirm('Delete activity?', 'This removes it from the log. You can undo it for 30 days under Settings › Recently deleted.', 'Delete', true)) { const a = PF.db.activities.find(x => x.id === v); PF.del('activities', v, a ? `${(ACT[a.type] || ACT.other).n} ${a.min || 0} min, ${fmtD(a.date)}` : 'Activity'); PF.rerender(); } };
 
   /* =====================================================================================================
      DASHBOARD
@@ -162,7 +162,8 @@
         <div class="tile"><div class="eyebrow">Weight moved</div><div class="v">${PF.num(tonnage / 1000)}<span class="u">t</span></div></div>
         <div class="tile"><div class="eyebrow">Other training</div><div class="v">${PF.num(actMin / 60)}<span class="u">h · ${PF.num(km)} km</span></div></div>
         <div class="tile"><div class="eyebrow">Mobility days</div><div class="v">${mobDays}</div></div>
-        <div class="tile"><div class="eyebrow">Assessments</div><div class="v">${PF.db.assessments.length}</div></div></div>`;
+        <div class="tile"><div class="eyebrow">Assessments</div><div class="v">${PF.db.assessments.length}</div></div></div>
+      ${PF.body.drinksCard()}${PF.body.weightCard()}`;
     if (pl) {
       const an = P.analyze(pl, P.weekNo(pl) - 1);
       out += `<div class="card stack chart"><h3>Block ${pl.block}: minutes per week</h3>${minutesChart(pl)}<div class="legend"><span><i style="background:var(--sect)"></i>Plan sessions</span><span><i style="background:var(--gold)"></i>Other training</span></div></div>
@@ -226,7 +227,8 @@
     const D = PF.ui.setup; const dirty = JSON.stringify(D) !== JSON.stringify(cfgOf(PF.db.settings));
     const toggle = (k, label) => `<div class="toggle"><span>${label}</span>${W.sw(D.eq[k], 'eqsw="' + k + '" data-x', label)}</div>`;
     const info = PF.appInfo();
-    return `<div class="stack"><h1>Setup</h1></div>
+    return `<div class="stack"><h1>Settings</h1></div>
+      ${PF.body.profileCard()}
       <div class="card stack"><h3>Time</h3>
         <div class="field"><span class="lbl">Sessions per week</span>${W.stepper(D.sessions, 'sess', 'Sessions per week')}</div>
         <div class="field"><span class="lbl">Minutes per session</span>${W.chips([D.minutes], [20, 30, 45, 60, 75, 90], 'mins', v => v + ' min')}</div>
@@ -244,9 +246,10 @@
       ${PF.sync ? PF.sync.section() : ''}
       <div class="card stack"><h3>Data</h3>
         <div class="small">Your data is always kept on this phone${PF.sync && PF.sync.enabled() ? ' and synced to your Nextcloud' : ''}. App updates keep it; when a new version changes the format, the data is converted and a copy of the old file is kept first.</div>
-        <div class="small muted">Excel file (fitness.xlsx): one sheet per table, all starting with PF_ (plans, sets, sessions, activities, mobility, assessments, settings) plus an exercise list. Open it in Excel, edit it, and import it back here or on another phone. Importing merges: nothing on this phone is deleted.</div>
+        <div class="small muted">Excel file (fitness.xlsx): one sheet per table, all starting with PF_ (plans, sets, sessions, activities, mobility, assessments, drinks, weight, settings) plus an exercise list. Open it in Excel, edit it, and import it back here or on another phone. Importing merges: nothing on this phone is deleted.</div>
         <div class="row wrap"><button type="button" class="btn primary" data-xls="export">Export to Excel</button><button type="button" class="btn" data-xls="share">Share Excel file</button><button type="button" class="btn" data-xls="import">Import Excel file</button></div>
-        <div class="small muted">${PF.db.sets.length} sets · ${PF.db.sessions.length} sessions · ${PF.db.activities.length} activities · ${PF.db.mobility.length} mobility entries · ${PF.db.plans.length} plans</div></div>
+        <div class="small muted">${PF.db.sets.length} sets · ${PF.db.sessions.length} sessions · ${PF.db.activities.length} activities · ${PF.db.mobility.length} mobility entries · ${PF.db.drinks.length} drinks · ${PF.db.weights.length} weights · ${PF.db.plans.length} plans</div></div>
+      ${PF.body.trashCard()}
       <div class="card small muted">SR Physical Fitness ${esc(info.version || PF.VERSION)} · data format ${PF.SCHEMA}${PF.readOnly ? ' (file: ' + PF.dataSchema + ', read-only)' : ''} · Stoic Ranger</div>`;
   };
   const D = () => PF.ui.setup;
@@ -349,7 +352,7 @@
         <div class="field"><span class="lbl">Minutes per session</span>${W.chips([N.minutes], [20, 30, 45, 60, 75, 90], 'npmin', v => v + ' min')}</div>
         <div class="field"><span class="lbl">Training days</span>${W.chips(N.days, PF.DAYS, 'npday')}${N.days.length !== N.sessions ? `<div class="small warn">Pick ${N.sessions} days.</div>` : ''}</div>
         <div class="field"><label for="npstart">Start date</label><input class="inp" type="date" id="npstart" value="${esc(N.start)}" data-in="npstart"><div class="small muted">Default: Monday next week.</div></div></div>
-      ${mgCard(N.skip, 'npmg', 'For this block. Tap a group to leave it out. You can change it later in Setup.')}
+      ${mgCard(N.skip, 'npmg', 'For this block. Tap a group to leave it out. You can change it later in Settings.')}
       ${preview(N)}
       <button type="button" class="btn primary" data-createplan="1" ${N.days.length !== N.sessions ? 'disabled' : ''}>Create plan</button>`;
   };

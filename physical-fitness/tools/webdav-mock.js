@@ -5,7 +5,7 @@ const http = require('http'), crypto = require('crypto');
 
 function start({ user = 'manuel', password = 'app-pass-1', port = 0 } = {}) {
   const files = new Map(), dirs = new Set(['/']);
-  const st = { files, dirs, log: [], fail412: 0 };
+  const st = { files, dirs, log: [], fail412: 0, corrupt: 0 };
   const root = `/remote.php/dav/files/${encodeURIComponent(user)}`;
   const etag = b => '"' + crypto.createHash('md5').update(b).digest('hex') + '"';
   const srv = http.createServer((q, r) => {
@@ -15,6 +15,7 @@ function start({ user = 'manuel', password = 'app-pass-1', port = 0 } = {}) {
       const body = Buffer.concat(chunks);
       const send = (code, h = {}, b = '') => { r.writeHead(code, h); r.end(b); };
       st.log.push(q.method + ' ' + q.url);
+      if (q.url.startsWith('/__ctl?')) { for (const [k, v] of new URL(q.url, 'http://x').searchParams) st[k] = +v; return send(200); }
       if (q.headers.authorization !== 'Basic ' + Buffer.from(user + ':' + password).toString('base64')) return send(401, { 'WWW-Authenticate': 'Basic realm="Nextcloud"' });
       const u = new URL(q.url, 'http://x');
       if (!u.pathname.startsWith(root + '/')) return send(404);
@@ -31,7 +32,8 @@ function start({ user = 'manuel', password = 'app-pass-1', port = 0 } = {}) {
         if (st.fail412 > 0) { st.fail412--; return send(412); }        // someone else wrote meanwhile
         if (q.headers['if-none-match'] === '*' && f) return send(412);
         if (q.headers['if-match'] && (!f || f.etag !== q.headers['if-match'])) return send(412);
-        files.set(p, { data: body, etag: etag(body + Date.now() + Math.random()) });
+        const stored = st.corrupt > 0 ? (st.corrupt--, body.subarray(0, Math.max(0, body.length - 3))) : body;   // a damaged upload
+        files.set(p, { data: stored, etag: etag(stored + Date.now() + Math.random()) });
         return send(f ? 204 : 201, { ETag: files.get(p).etag });
       }
       if (method === 'MKCOL') {

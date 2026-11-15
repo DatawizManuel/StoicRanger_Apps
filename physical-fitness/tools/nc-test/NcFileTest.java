@@ -9,15 +9,25 @@ public class NcFileTest {
     static int fails = 0;
     static void ok(boolean c, String m) { System.out.println((c ? "PASS " : "FAIL ") + m); if (!c) fails++; }
 
+    static void ctl(int port, String k, int v) throws Exception {
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL("http://127.0.0.1:" + port + "/__ctl?" + k + "=" + v).openConnection();
+        c.getResponseCode(); c.disconnect();
+    }
+
     public static void main(String[] a) throws Exception {
         String base = "http://127.0.0.1:" + a[0];
-        byte[] v1 = "version 1".getBytes(StandardCharsets.UTF_8), v2 = "version 2".getBytes(StandardCharsets.UTF_8);
+        byte[] v1 = "PK version 1".getBytes(StandardCharsets.UTF_8), v2 = "PK version 2".getBytes(StandardCharsets.UTF_8);
 
-        NcFile bad = new NcFile(new WebDav(base, "manuel", "wrong"), "/Stoic Ranger/", "fitness.xlsx");
+        WebDav wrong = new WebDav(base, "manuel", "wrong"); wrong.allowPlainHttp = true;
+        NcFile bad = new NcFile(wrong, "/Stoic Ranger/", "fitness.xlsx");
         ok(bad.test().status == 401, "wrong app password: 401");
-        ok(new NcFile(new WebDav("http://127.0.0.1:1", "manuel", "x"), "/Stoic Ranger/", "fitness.xlsx").download().status == 0, "no server: status 0 (offline), no crash");
+        WebDav none = new WebDav("http://127.0.0.1:1", "manuel", "x"); none.allowPlainHttp = true;
+        ok(new NcFile(none, "/Stoic Ranger/", "fitness.xlsx").download().status == 0, "no server: status 0 (offline), no crash");
 
         WebDav dav = new WebDav(base + "/", "manuel", "app-pass-1");
+        dav.allowPlainHttp = true;
+        WebDav https = new WebDav(base, "manuel", "app-pass-1");
+        ok(https.get("x").status == 0, "plain http refused unless a test allows it");
         ok(dav.url("Stoic Ranger/backups/a b.xlsx").endsWith("/remote.php/dav/files/manuel/Stoic%20Ranger/backups/a%20b.xlsx"), "paths encoded per segment");
         NcFile f = new NcFile(dav, "/Stoic Ranger/", "fitness.xlsx");
         ok(f.test().status == 200, "test makes the folder");
@@ -27,21 +37,21 @@ public class NcFileTest {
         ok(u.ok() && !u.etag.isEmpty(), "first upload creates the file (If-None-Match *), ETag " + u.etag);
         ok(f.upload(v1, "", "20261107-100001").status == 412, "create refused when the file exists (no blind overwrite)");
         d = f.download();
-        ok(d.status == 200 && new String(d.body, StandardCharsets.UTF_8).equals("version 1"), "download returns the file and its ETag");
+        ok(d.status == 200 && new String(d.body, StandardCharsets.UTF_8).equals("PK version 1"), "download returns the file and its ETag");
         ok(f.upload(v2, "\"stale\"", "20261107-100002").status == 412, "upload with a stale ETag: 412");
-        ok(new String(f.download().body, StandardCharsets.UTF_8).equals("version 1"), "412 left the file unchanged");
+        ok(new String(f.download().body, StandardCharsets.UTF_8).equals("PK version 1"), "412 left the file unchanged");
         u = f.upload(v2, d.etag, "20261107-100003");
         ok(u.ok(), "upload with the current ETag (If-Match) works");
         List<String> b = dav.list("Stoic Ranger/backups");
         ok(b.contains("fitness-20261107-100003.xlsx"), "backup copy made before the upload: " + b);
-        ok(new String(dav.get("Stoic Ranger/backups/fitness-20261107-100003.xlsx").body, StandardCharsets.UTF_8).equals("version 1"), "backup holds the version before the upload");
+        ok(new String(dav.get("Stoic Ranger/backups/fitness-20261107-100003.xlsx").body, StandardCharsets.UTF_8).equals("PK version 1"), "backup holds the version before the upload");
 
         // someone else's file in backups/ and 33 more uploads: only our own backups beyond the newest 30 go
         dav.put("Stoic Ranger/backups/database-20200101-000000.xlsx", v1, null);
         dav.put("Stoic Ranger/backups/my notes.xlsx", v1, null);
         for (int i = 0; i < 33; i++) {
             d = f.download();
-            u = f.upload(("v" + i).getBytes(StandardCharsets.UTF_8), d.etag, String.format("20261108-1200%02d", i));
+            u = f.upload(("PK v" + i).getBytes(StandardCharsets.UTF_8), d.etag, String.format("20261108-1200%02d", i));
             if (!u.ok()) { ok(false, "upload " + i + " failed " + u.status); break; }
         }
         b = dav.list("Stoic Ranger/backups/");
@@ -49,7 +59,20 @@ public class NcFileTest {
         ok(mine == 30, "newest 30 backups kept (" + mine + ")");
         ok(b.contains("fitness-20261108-120032.xlsx") && !b.contains("fitness-20261107-100003.xlsx"), "the oldest went, the newest stayed");
         ok(b.contains("database-20200101-000000.xlsx") && b.contains("my notes.xlsx"), "other files in backups/ untouched (names with spaces listed)");
-        ok(new String(f.download().body, StandardCharsets.UTF_8).equals("v32"), "file holds the last upload");
+        ok(new String(f.download().body, StandardCharsets.UTF_8).equals("PK v32"), "file holds the last upload");
+        // 0.3.1: uploads are checked
+        ok(f.upload("not a zip".getBytes(StandardCharsets.UTF_8), f.download().etag, "20261114-090000").status == 0
+            && new String(f.download().body, StandardCharsets.UTF_8).equals("PK v32"), "bytes that are not an xlsx are never sent");
+        int port = Integer.parseInt(a[0]);
+        ctl(port, "corrupt", 1);                      // the next PUT arrives damaged: read back, sent again, fine
+        d = f.download();
+        u = f.upload("PK good 1".getBytes(StandardCharsets.UTF_8), d.etag, "20261114-090001");
+        ok(u.ok() && new String(f.download().body, StandardCharsets.UTF_8).equals("PK good 1"), "damaged upload noticed and sent again");
+        ctl(port, "corrupt", 5);                      // stays damaged: the version from before goes back in place
+        d = f.download();
+        u = f.upload("PK good 2".getBytes(StandardCharsets.UTF_8), d.etag, "20261114-090002");
+        ctl(port, "corrupt", 0);
+        ok(!u.ok() && new String(f.download().body, StandardCharsets.UTF_8).equals("PK good 1"), "still damaged: backup put back, file as before (" + u.error + ")");
         System.exit(fails == 0 ? 0 : 1);
     }
 }

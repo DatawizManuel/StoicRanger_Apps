@@ -98,7 +98,7 @@ async function run(theme) {
     const out = new Uint8Array(PF.xls.build(PF.db, other)); const w2 = XLSX.read(out, { type: 'array' });
     const twice = XLSX.read(new Uint8Array(PF.xls.build(PF.db, out)), { type: 'array' });
     const names = w2.SheetNames; const hid = Object.fromEntries(w2.Workbook.Sheets.map(x => [x.name, x.Hidden]));
-    const own = names.filter(n => n !== 'Weapons' && n !== '_StoicRanger').every(n => n.startsWith('PF_') || n === '_PF_Data');
+    const own = names.filter(n => n !== 'Weapons' && n !== '_StoicRanger').every(n => n.startsWith('PF_') || n === '_PF_Data' || n === '_Deleted');
     const kept = XLSX.utils.sheet_to_json(w2.Sheets.Weapons)[0].Name === 'Rifle' && hid._StoicRanger === 1 && hid._PF_Data === 1;
     const d = PF.xls.parse(out); const full = d.full && d.full.db.sets.length === PF.db.sets.length;
     // a 0.1.x file: sheets without prefix and a hidden _PF meta sheet
@@ -114,6 +114,90 @@ async function run(theme) {
   ok(lay.full, 'hidden _PF_Data holds the full copy');
   ok(lay.legacyOk, '0.1.x Excel files still import');
   ok(lay.settingsSkip === 'neck', 'muscle groups travel in the Excel settings');
+  // ---------- 0.3.0: drinks, weight, profile, recently deleted ----------
+  await go('#setup');
+  for (const [k, v] of [['startKg', '84.5'], ['startDate', ''], ['heightCm', '181'], ['goalKg', '79'], ['drinkMl', '2500']]) {
+    if (k === 'startDate') await p.evaluate(() => { const i = document.querySelector('[data-k=startDate]'); i.value = PF.iso(PF.addDays(PF.today(), -40)); i.dispatchEvent(new Event('change', { bubbles: true })); });
+    else { await p.fill(`[data-ch=prof][data-k=${k}]`, v); await p.dispatchEvent(`[data-ch=prof][data-k=${k}]`, 'change'); }
+  }
+  ok(await p.evaluate(() => { const r = PF.db.settings.profile; return r.startKg === 84.5 && r.heightCm === 181 && r.goalKg === 79 && r.drinkMl === 2500 && /^\d{4}-/.test(r.startDate); }), 'user profile saved (start weight + date, height, goals)');
+  await p.fill('[data-ch=prof][data-k=heightCm]', '20'); await p.dispatchEvent('[data-ch=prof][data-k=heightCm]', 'change');
+  ok(await p.evaluate(() => PF.db.settings.profile.heightCm === 181), 'nonsense profile value refused');
+  await go('#dashboard');
+  await click('[data-drink="250"]'); await click('[data-drink="500"]');
+  await click('[data-drink="other"]'); await p.fill('#dkMl', '330'); await click('[data-dk]');
+  ok(await p.evaluate(() => PF.db.drinks.length === 3 && PF.body.dayMl(PF.todayIso()) === 1080 && PF.db.drinks.every(d => !('type' in d))), 'drinks added: +250, +500, other 330 = 1080 ml, no drink types');
+  ok(await p.evaluate(() => /1,080 ml/.test(document.getElementById('drinks').innerText) && /of 2,500 ml/.test(document.getElementById('drinks').innerText)), 'today against the goal shown');
+  await p.evaluate(() => { for (let k = 1; k <= 7; k++) PF.put('drinks', { date: PF.iso(PF.addDays(PF.today(), -k)), time: '12:00', ml: 2100 }); });
+  ok(await p.evaluate(() => Math.round(PF.body.avg7()) === 2100), '7-day average (days before today)');
+  // weights: 5 weeks of entries going down, one per day; same date again updates that day
+  await p.evaluate(() => { for (let k = 35; k >= 1; k -= 2) PF.body.logWeight(PF.iso(PF.addDays(PF.today(), -k)), 84 - (35 - k) * 0.08); });
+  await click('[data-logw="1"]'); await p.fill('#wKg', '81,2'); await click('[data-wsave]');
+  const nW = await p.evaluate(() => PF.db.weights.length);
+  await click('[data-logw="1"]'); await p.fill('#wKg', '81.0'); await click('[data-wsave]');
+  ok(await p.evaluate(n => PF.db.weights.length === n && PF.body.weights().slice(-1)[0].kg === 81, nW), 'log weight: one entry per day, same date updates it');
+  const g = await p.evaluate(() => { const x = PF.body.goal(); return { togo: x.togo, eta: x.eta && PF.iso(x.eta), slope: x.slope }; });
+  ok(Math.abs(g.togo - 2) < 0.01 && g.slope < 0 && !!g.eta, 'goal: kg to go and estimated date at the trend ' + JSON.stringify(g));
+  ok(await p.evaluate(() => PF.body.series()[0].start === true && PF.body.series()[0].kg === 84.5), 'start weight from the profile is the first point');
+  for (const tf of ['1M', '1Y', 'All', '3M']) {
+    await click(`[data-wtf="${tf}"]`);
+    const c = await p.evaluate(() => { const svg = document.querySelector('#weight svg'); const pl = svg.querySelectorAll('polyline'); return { lines: pl.length, primary: pl[pl.length - 1].getAttribute('stroke'), w: +pl[pl.length - 1].getAttribute('stroke-width'), tw: +pl[0].getAttribute('stroke-width'), dots: svg.querySelectorAll('circle').length, goal: !!svg.querySelector('line[stroke-dasharray]') }; });
+    ok(c.lines === 2 && c.primary === 'var(--sect)' && c.w > c.tw && c.goal && (tf === '1M' || tf === '3M' ? c.dots > 0 : c.dots === 0), `weight graph ${tf}: measured primary bold, trend thin, goal dashed, dots ${c.dots}`);
+  }
+  ok(await p.evaluate(() => PF.db.ui.wtf === '3M'), 'timeframe remembered');
+  await shot('16-drinks-weight');
+  // delete + undo (Recently deleted)
+  const wid = await p.evaluate(() => PF.body.weights()[3].id);
+  await click('#weight summary');
+  await click(`[data-delw="${wid}"]`); await click('[data-c="1"]');
+  await click('[data-deldrink]');
+  ok(await p.evaluate(id => !PF.db.weights.some(w => w.id === id) && PF.db.deleted.some(d => d.table === 'weights' && d.id === id) && PF.db.trash.length === 2, wid), 'delete leaves a tombstone and a Recently deleted entry');
+  await go('#setup'); await shot('17-settings');
+  ok(await p.evaluate(() => /Recently deleted/.test(document.getElementById('trash').innerText) && document.querySelectorAll('[data-undel]').length === 2), 'Settings shows Recently deleted');
+  const undoIdx = await p.evaluate(id => PF.db.trash.findIndex(x => x.row.id === id), wid);
+  await click(`[data-undel="${undoIdx}"]`);
+  ok(await p.evaluate(id => { const w = PF.db.weights.find(x => x.id === id); const d = PF.db.deleted.find(x => x.id === id); return !!w && w.at > d.at && PF.db.trash.length === 1; }, wid), 'Undo brings it back, newer than the delete');
+  await go('#today'); ok(await p.evaluate(() => /Your data:\s*only on this phone/.test(document.getElementById('dataLine').innerText)), '"Your data" line on the home page, links to Settings');
+  ok(await p.evaluate(() => [...document.querySelectorAll('nav.tabs a')].some(a => a.textContent.trim() === 'Settings')), 'labelled Settings button');
+  // Excel: drinks + weights + profile + _Deleted travel; zip patch keeps other parts byte-identical
+  const xl = await p.evaluate(() => {
+    const u8 = new Uint8Array(PF.xls.build()); const d = PF.xls.parse(u8);
+    const e = PF.normalize(PF.emptyDb()); PF.xls.merge(e, d);
+    const prof = JSON.stringify(e.settings.profile) === JSON.stringify(PF.db.settings.profile);
+    const wb = XLSX.read(u8, { type: 'array' });
+    const tomb = XLSX.utils.sheet_to_json(wb.Sheets._Deleted).some(r => r.App === 'PF' && r.Table === 'PF_Weight');
+    const num = typeof wb.Sheets.PF_Weight.C2.v === 'number' && typeof wb.Sheets.PF_Drinks.D2.v === 'number';
+    // an Excel row without id for a date that exists = the same entry; a new date = new entry
+    const ws = wb.Sheets.PF_Weight; const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    const day = rows[rows.length - 1].date;
+    rows.push({ id: '', date: day, kg: 80.4, note: 'typed in Excel', at: '' }, { id: '', date: PF.iso(PF.addDays(PF.today(), -100)), kg: 86, note: '', at: '' });
+    wb.Sheets.PF_Weight = XLSX.utils.json_to_sheet(rows);
+    const d2 = PF.xls.parse(new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })));
+    const c2 = PF.clone(PF.db); const r = PF.xls.merge(c2, d2);
+    const sameDay = c2.weights.filter(w => w.date === day);
+    return { drinks: e.drinks.length === PF.db.drinks.length, weights: e.weights.length === PF.db.weights.length, prof, tomb, num, matched: sameDay.length === 1 && sameDay[0].kg === 80.4, added: r.added === 1 };
+  });
+  ok(xl.drinks && xl.weights && xl.prof, 'Excel round trip: PF_Drinks, PF_Weight and the profile');
+  ok(xl.tomb, 'deletes go to the shared _Deleted sheet (App PF)');
+  ok(xl.num, 'kg and ml written as numbers');
+  ok(xl.matched && xl.added, 'Excel rows without id: same date = same weight entry, new date = new entry');
+  const zp = await p.evaluate(() => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['ID', 'Name', 'Calibre'], ['g1', 'Rifle', '.308']]); ws['!cols'] = [{ wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Weapons');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['App', 'Table', 'ID', 'Source uid', 'Label', 'Deleted at', 'Deleted by'], ['GS', 'GS_Guns', 'x1', '', 'Old gun', new Date().toISOString(), 'GunSafe']]), '_Deleted');
+    wb.Workbook = { Sheets: [{ name: 'Weapons', Hidden: 0 }, { name: '_Deleted', Hidden: 1 }] };
+    const other = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+    const out = new Uint8Array(PF.xls.build(PF.db, other));
+    const A = XLSX.CFB.read(other, { type: 'array' }), Bz = XLSX.CFB.read(out, { type: 'array' });
+    const part = (z, n) => { const e = XLSX.CFB.find(z, '/' + n); return e && e.content ? Array.from(e.content).join(',') : null; };
+    const w2 = XLSX.read(out, { type: 'array' });
+    const tombs = XLSX.utils.sheet_to_json(w2.Sheets._Deleted);
+    return { weapons: part(A, 'xl/worksheets/sheet1.xml') === part(Bz, 'xl/worksheets/sheet1.xml'), styles: part(A, 'xl/styles.xml') === part(Bz, 'xl/styles.xml'),
+      gs: tombs.some(r => r.App === 'GS' && r.ID === 'x1'), pf: tombs.some(r => r.App === 'PF'), hidden: w2.Workbook.Sheets.find(s => s.name === '_Deleted').Hidden === 1, pk: out[0] === 0x50 && out[1] === 0x4b };
+  });
+  ok(zp.weapons && zp.styles && zp.pk, 'zip patch: other apps\' sheet parts and styles stay byte-identical');
+  ok(zp.gs && zp.pf && zp.hidden, 'shared _Deleted keeps the other apps\' rows and adds ours (hidden)');
   // persistence: reload keeps data
   await p.reload(); await p.waitForTimeout(300);
   ok(await p.evaluate(() => PF.db.sets.length >= 1 && PF.db.plans.length === 1 && PF.db.activities.length === 1), 'data survives reload');

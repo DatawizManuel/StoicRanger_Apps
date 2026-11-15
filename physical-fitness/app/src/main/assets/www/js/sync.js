@@ -21,10 +21,10 @@
   /* ---------- state = what the file holds: settings, tables, tombstones (fields that have a column) ---------- */
   const FIELDS = {};
   for (const [sh, t] of Object.entries(X.TABLE)) FIELDS[t] = X.COLS[sh].filter(c => !X.HELPER.includes(c) && c !== 'at');
-  const SETTINGS = ['sessions', 'minutes', 'days', 'eq', 'skip', 'theme'];
+  const SETTINGS = ['sessions', 'minutes', 'days', 'eq', 'skip', 'profile', 'theme'];
   const pickRow = (t, r) => { const o = { id: r.id, at: r.at || '' }; for (const c of FIELDS[t]) o[c] = r[c] == null ? null : r[c]; return o; };
   S.local = (db = PF.db) => {
-    const st = { settings: {}, deleted: (db.deleted || []).map(d => ({ table: d.table, id: d.id, at: d.at || '' })) };
+    const st = { settings: {}, deleted: (db.deleted || []).map(d => ({ table: d.table, id: d.id, at: d.at || '', label: d.label || '' })) };
     for (const k of SETTINGS.concat(['at'])) st.settings[k] = PF.clone(db.settings[k] ?? null);
     for (const t of PF.TABLES) st[t] = db[t].map(r => pickRow(t, r));
     return st;
@@ -32,9 +32,11 @@
   /** parsed workbook (X.parse) → state; rows typed in Excel without id get one, without time get now */
   S.remote = data => {
     const now = PF.now(); const st = { settings: {}, deleted: [] };
-    if (data.settings) { const s = X.settingsFrom(data.settings, PF.db.settings); for (const k of SETTINGS.concat(['at'])) if (s[k] !== undefined) st.settings[k] = s[k]; if ('eq' in st.settings && !Object.keys(data.settings).some(k => /_kg$|bands|bar|band|bench|gripper|roller/.test(k))) delete st.settings.eq; }
-    for (const [sh, t] of Object.entries(X.TABLE)) st[t] = (data.tables[sh] || []).map(r => { if (!r.id) r.id = PF.uid(t[0]); if (!r.at) r.at = now; return pickRow(t, r); });
-    st.deleted = (data.tables.Deleted || []).filter(d => d.table && d.id).map(d => ({ table: d.table, id: d.id, at: d.at || now }));
+    if (data.settings) { const s = X.settingsFrom(data.settings, PF.db.settings); for (const k of SETTINGS.concat(['at'])) if (s[k] !== undefined) st.settings[k] = s[k]; if ('eq' in st.settings && !Object.keys(data.settings).some(k => /^(kettlebells|dumbbells|sandbags)_kg$|bands|bar|band|bench|gripper|roller/.test(k))) delete st.settings.eq; if (st.settings.profile === undefined) delete st.settings.profile; }
+    for (const [sh, t] of Object.entries(X.TABLE)) st[t] = (data.tables[sh] || []).map(r => { if (!r.id) r.id = X.matchId(t, r, PF.db[t]) || PF.uid(t[0]); if (!r.at) r.at = now; return pickRow(t, r); });
+    const tm = new Map(), cut = new Date(Date.now() - 365 * 864e5).toISOString();    // PF_Deleted and the shared _Deleted: one list
+    for (const d of (data.tables.Deleted || [])) { if (!d.table || !d.id) continue; const at = d.at || now; if (at < cut) continue; const k = d.table + '|' + d.id, o = tm.get(k); if (!o || o.at < at) tm.set(k, { table: d.table, id: d.id, at, label: d.label || (o && o.label) || '' }); }
+    st.deleted = [...tm.values()];
     return st;
   };
   const N_ = X.norm;
@@ -46,7 +48,7 @@
   S.merge = (base, L, R) => {
     base = base || {}; const now = PF.now(); const out = { settings: {}, deleted: [] };
     const tomb = new Map();
-    for (const d of (L.deleted || []).concat(R.deleted || [])) { const k = d.table + '|' + d.id; if (!tomb.has(k) || tomb.get(k).at < d.at) tomb.set(k, { table: d.table, id: d.id, at: d.at }); }
+    for (const d of (L.deleted || []).concat(R.deleted || [])) { const k = d.table + '|' + d.id; const o = tomb.get(k); if (!o || o.at < d.at) tomb.set(k, { table: d.table, id: d.id, at: d.at, label: d.label || (o && o.label) || '' }); }
     out.deleted = [...tomb.values()];
     for (const t of PF.TABLES) {
       const map = l => { const m = new Map(); (l || []).forEach(r => { if (r && r.id && !m.has(r.id)) m.set(r.id, r); }); return m; };
@@ -68,8 +70,10 @@
       out[t] = list;
     }
     const bs = base.settings || {}, ls = L.settings || {}, rs = R.settings || {};
+    const first = !base.settings, remoteNewer = !ls.at || (rs.at || '') > ls.at;   // first sync: a phone whose settings were never changed takes the file's; else the later change
     for (const k of SETTINGS) {
       if (!(k in rs)) { out.settings[k] = ls[k]; continue; }
+      if (first) { out.settings[k] = remoteNewer ? rs[k] : ls[k]; continue; }
       out.settings[k] = !sameVal(ls[k], bs[k]) || sameVal(rs[k], bs[k]) ? ls[k] : rs[k];
     }
     out.settings.at = later(ls.at, rs.at) || '';
@@ -156,7 +160,7 @@
         if (!S.same(out, S.local())) { PF.flush(); PF.backupDb(`db-before-sync-${PF.todayIso()}-${Date.now()}.json`); }
         const changedHere = S.applyLocal(out); quietSave();
         if (changedHere) S.refresh();
-        if (!rem || data.missing || !data.full || !S.same(out, rem)) {
+        if (!rem || data.missing || !data.full || !S.same(out, rem) || +(data.meta && data.meta.schema || 0) < PF.SCHEMA || PF.db.deleted.length && !(data.tombs || []).some(x => x.app === 'PF')) {
           const up = new Uint8Array(X.build(PF.db, bytes));
           const u = await nc('ncUpload', PF.b64.fromBytes(up), d.status === 200 ? d.etag : '');
           if (u.status === 412) continue;                         // written elsewhere meanwhile: again from the top
@@ -206,7 +210,8 @@
       <div class="field"><label for="stFile">File</label><input class="inp" id="stFile" autocomplete="off" value="${esc(st.file || 'fitness.xlsx')}"></div>
       <div class="small muted">The app password is stored encrypted on this phone only (Android Keystore), never in a file or a backup. Physical Fitness writes only its own sheets (PF_…); other sheets in the file stay as they are.</div>
       <div class="row wrap"><button type="button" class="btn primary" data-stsave="1">Save and sync</button>${st.url && st.mode === 'nextcloud' ? '<button type="button" class="btn" data-stsync="1">Sync now</button>' : ''}</div>
-      <div class="small" id="syncStatus">${esc(S.status())}</div>` : ''}
+      <div class="small" id="syncStatus">${esc(S.status())}</div>
+      ${st.url && st.mode === 'nextcloud' ? '<div class="small muted">Is this phone hopelessly out of step? Replace its data with what the file on Nextcloud holds (a copy of this phone\'s data is kept first).</div><button type="button" class="btn sm" data-streplace="1">Replace this phone\'s data with the Nextcloud copy</button>' : ''}` : ''}
       <h3 style="margin-top:6px">Linked Stoic Ranger apps</h3>
       <div class="small muted">Linked apps share one database file (database.xlsx) and this setting: switching here switches them too. Only apps you tick, and only Stoic Ranger apps.</div>
       ${peers.length ? peers.map(p => `<div class="toggle"><span>${esc(LABEL[p.pkg] || p.name || p.pkg)}</span>${PF.w.sw(p.linked, 'link="' + esc(p.pkg) + '" data-x', LABEL[p.pkg] || p.pkg)}</div>`).join('') : '<div class="small muted">No other Stoic Ranger app is installed.</div>'}</div>`;
@@ -235,6 +240,26 @@
     PF.toast(r.ok ? 'Synced with Nextcloud.' : 'Saved. ' + (meta().msg || ''), !r.ok);
   };
   PF.on.stsync = async () => { const r = await S.run(); PF.toast(r.ok ? 'Synced with Nextcloud.' : (r.busy ? 'A sync is running.' : meta().msg || 'Not synced.'), !r.ok && !r.busy); };
+  /* Replace this phone's data with the Nextcloud copy (contract E): backup first; only this app's tables and deletes,
+     settings and the storage setting stay */
+  S.replace = async (ask = true) => {
+    if (!S.enabled() || !PF.guard()) return { ok: false };
+    if (ask && !(await PF.confirm("Replace this phone's data?", `Plans, sessions, sets, activities, mobility, drinks and weights on this phone are replaced by what ${PF.esc(S.storage().file || 'the file')} on Nextcloud holds. A copy of this phone's data is kept first. Settings stay as they are.`, 'Replace', true))) return { ok: false };
+    const d = await nc('ncDownload');
+    if (d.status !== 200) { PF.toast(d.status === 404 ? 'There is no file on Nextcloud yet. Nothing was changed.' : S.why(d), true); return { ok: false }; }
+    let data; try { data = X.parse(PF.b64.toBytes(d.b64)); } catch (e) { PF.toast('Could not read the Nextcloud file: ' + e.message + '. Nothing was changed.', true); return { ok: false }; }
+    if (data.newer) { PF.toast('The file comes from a newer SR Physical Fitness: update the app first. Nothing was changed.', true); return { ok: false }; }
+    PF.flush(); PF.backupDb(`db-before-replace-${PF.todayIso()}-${Date.now()}.json`);
+    const rem = S.remote(data), full = data.full && data.full.db || {};
+    for (const t of PF.TABLES) { const f = new Map((full[t] || []).map(r => [r.id, r])); PF.db[t] = rem[t].map(r => Object.assign({}, f.get(r.id) || {}, r)); }
+    PF.db.deleted = rem.deleted.map(x => Object.assign({}, x));
+    PF.normalize(PF.db);
+    const m = meta(); m.target = S.target(S.storage()); m.base = S.local();
+    setMsg('Replaced with the Nextcloud copy', true);
+    PF.rerender(); PF.toast("This phone's data now matches Nextcloud. The old data was kept as a backup.");
+    return { ok: true };
+  };
+  PF.on.streplace = () => S.replace();
   PF.on.link = (pkg, el, e) => {
     if (!N || !N.linkSet) return;
     const st = S.storage(); const p = (st.peers || []).find(x => x.pkg === pkg); const on = !(p && p.linked);

@@ -34,9 +34,23 @@ Rules (Stoic Ranger standing rule 1, never lose device data):
 Exercise ids (`js/ex/*.js`) and mobility ids (`MOB` in `js/ex/mob.js`) are permanent: they are never renamed
 or reused, so logged sets keep pointing at the right exercise.
 
+## Format 2 (app 0.3.0)
+
+Everything of format 1, plus:
+
+| table | fields |
+| --- | --- |
+| settings.profile | startKg, startDate, heightCm, goalKg, drinkMl (metric) |
+| drinks | id, at, date, time, ml |
+| weights | id, at, date, kg, note (one per day; two phones logging the same day before a sync: the later change is shown, both rows are kept) |
+| deleted | table, id, at, label (also written to the shared hidden `_Deleted` sheet, contract E; tombstones older than 365 days are dropped) |
+| trash | (not exported) what this phone deleted, 30 days, for Undo: {table, row, at, label} |
+
 ## Migrations
 
-None yet (first format).
+- **1 → 2** (0.3.0): adds the empty tables `drinks` and `weights` and `settings.profile` with defaults (drinking goal
+  2000 ml). Nothing existing is changed. A backup `db-schema1-<date>.json` is made first. The xlsx file says data
+  format 2 in `_PF_Data`, so a 0.2.0 phone refuses to change a synced file (message: update the app).
 
 - 0.1.1 (format 1): no data change.
 - 0.2.0 (format 1): adds `settings.skip` (muscle groups not targeted; missing = all targeted) and `sync`. Both are

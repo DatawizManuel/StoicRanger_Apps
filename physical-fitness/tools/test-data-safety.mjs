@@ -14,7 +14,7 @@ const bridge = files => `
     loadDb: () => window.__files.db || '', loadDbBackup: () => window.__files.bak || '',
     saveDb: t => { window.__writes++; window.__files.bak = window.__files.db || ''; window.__files.db = t; return true; },
     backupDb: n => { window.__backups.push([n, window.__files.db || '']); return true; },
-    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.2.0', android: '14', device: 'test' }),
+    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.3.0', android: '14', device: 'test' }),
     saveFile: () => {}, openFile: () => {}, shareFile: () => {}, shareText: () => {}, print: () => {} };`;
 async function page(files) {
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage(); const errs = [];
@@ -33,19 +33,24 @@ let p = await page({});
 ok(await p.evaluate(() => PF.firstRun && !PF.readOnly), 'first start: empty database');
 await p.evaluate(() => { PF.put('activities', { date: '2026-11-03', type: 'walk', min: 30 }); PF.flush(); });
 const saved = await p.evaluate(() => JSON.parse(window.__files.db));
-ok(saved.app === 'sr-physical-fitness' && saved.schema === 1 && saved.activities.length === 1, 'saved to db.json via the bridge');
+ok(saved.app === 'sr-physical-fitness' && saved.schema === 2 && saved.activities.length === 1, 'saved to db.json via the bridge');
 ok(!p.errs.length, 'no errors on first start ' + p.errs.join(' | ')); await p.ctx.close();
 
 // 2. existing data of the same schema: loaded, unknown fields kept, nothing lost
-p = await page({ db: sample(1) });
+p = await page({ db: sample(2) });
 const r2 = await p.evaluate(() => { PF.put('activities', { date: '2026-11-04', type: 'run', min: 20 }); PF.flush(); const d = JSON.parse(window.__files.db); return { n: d.activities.length, keep: d.activities[0].futureField, sets: d.sets.length, backups: window.__backups.length }; });
 ok(r2.n === 2 && r2.keep === 'keep me' && r2.sets === 1, 'existing data kept, unknown fields kept');
 ok(r2.backups === 0, 'no migration backup needed for the same schema'); await p.ctx.close();
 
-// 3. older schema (simulated: data says schema 0 → migrate to 1): backup first, then converted
+// 3. older schema: 0.2.0 data (schema 1) → 0.3.0 (schema 2: drinks, weights, profile): backup first, then converted
+p = await page({ db: sample(1) });
+const r3 = await p.evaluate(() => { PF.flush(); const d = JSON.parse(window.__files.db); return { migrated: PF.migrated, backups: window.__backups.map(b => b[0]), schema: PF.db.schema, sets: PF.db.sets.length, hist: PF.db.history.length,
+  fresh: Array.isArray(PF.db.drinks) && Array.isArray(PF.db.weights) && PF.db.settings.profile && PF.db.settings.profile.drinkMl === 2000, keep: PF.db.activities[0].futureField, kb: PF.db.settings.eq.kb.join(), savedSchema: d.schema }; });
+ok(r3.backups.length === 1 && /db-schema1-/.test(r3.backups[0]) && r3.schema === 2 && r3.sets === 1 && r3.hist === 1 && r3.fresh && r3.keep === 'keep me' && r3.kb === '16', 'older data (0.2.0): backup kept, then migrated without losing rows; drinks, weights, profile added'); await p.ctx.close();
+// 3b. even older (schema 0): also goes through every step
 p = await page({ db: sample(0) });
-const r3 = await p.evaluate(() => ({ migrated: PF.migrated, backups: window.__backups.map(b => b[0]), schema: PF.db.schema, sets: PF.db.sets.length, hist: PF.db.history.length }));
-ok(r3.backups.length === 1 && /db-schema0-/.test(r3.backups[0]) && r3.schema === 1 && r3.sets === 1 && r3.hist === 1, 'older data: backup kept, then migrated without losing rows'); await p.ctx.close();
+const r3b = await p.evaluate(() => ({ backups: window.__backups.map(b => b[0]), schema: PF.db.schema, sets: PF.db.sets.length }));
+ok(r3b.backups.length === 1 && /db-schema0-/.test(r3b.backups[0]) && r3b.schema === 2 && r3b.sets === 1, 'schema 0 data: backup, migrated to 2'); await p.ctx.close();
 
 // 4. newer schema: read-only, never written
 p = await page({ db: sample(99) });
@@ -59,7 +64,7 @@ ok(r4.ro && r4.same && r4.writes === 0 && r4.banner, 'newer data opens read-only
 ok(!p.errs.length, 'read-only views without errors ' + p.errs.join(' | ')); await p.ctx.close();
 
 // 5. damaged db.json: previous copy used, damaged one kept
-p = await page({ db: '{"app":"sr-physical-fit', bak: sample(1) });
+p = await page({ db: '{"app":"sr-physical-fit', bak: sample(2) });
 const r5 = await p.evaluate(() => ({ rec: PF.recovered, sets: PF.db.sets.length, kept: window.__backups.some(b => /damaged/.test(b[0]) && b[1].startsWith('{"app"')) }));
 ok(r5.rec && r5.sets === 1 && r5.kept, 'damaged file: previous copy restored, damaged file kept'); await p.ctx.close();
 

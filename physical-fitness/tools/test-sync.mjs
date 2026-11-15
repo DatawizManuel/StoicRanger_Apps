@@ -28,7 +28,7 @@ const bridge = (name, mode) => `
     loadDb: () => window.__files.db || '', loadDbBackup: () => window.__files.bak || '',
     saveDb: t => { window.__files.bak = window.__files.db || ''; window.__files.db = t; return true; },
     backupDb: n => { window.__backups.push(n); return true; },
-    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.2.0', android: '14', device: '${name}' }),
+    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.3.0', android: '14', device: '${name}' }),
     saveFile: () => {}, openFile: () => {}, shareFile: () => {}, shareText: () => {}, print: () => {},
     storageGet: () => JSON.stringify({ mode: window.__mode, url: 'https://cloud.example.com', user: 'manuel', folder: '/Stoic Ranger/', file: 'fitness.xlsx', hasPassword: true, changed: '', peers: [{ pkg: 'at.stoicranger.dailythoughts', installed: true, linked: false, name: 'SR_Daily Thoughts' }] }),
     storageSet: (j, pw) => { window.__mode = JSON.parse(j).mode; return window.PFNative.storageGet(); },
@@ -126,6 +126,28 @@ await B.evaluate(() => PF.sync.run());
 await B.evaluate(() => { PF.db.settings.skip = ['neck']; PF.db.settings.minutes = 60; PF.db.settings.at = PF.now(); PF.save(true); });
 await sync(B); await sync(A);
 ok(await A.evaluate(() => PF.db.settings.skip.join() === 'neck' && PF.db.settings.minutes === 60), 'settings changed on the other phone arrive');
+
+// 7b. 0.3.0: drinks, weights and the profile travel; a delete reaches the other phone; Undo wins; Replace
+await A.evaluate(() => { PF.body.addDrink(250); PF.body.addDrink(500); PF.body.logWeight(PF.todayIso(), 82.4); PF.body.logWeight(PF.iso(PF.addDays(PF.today(), -3)), 83);
+  PF.body.setProfile('startKg', 85); PF.body.setProfile('goalKg', 78); PF.flush(); });
+await sync(A); await sync(B);
+ok(await B.evaluate(() => PF.db.drinks.length === 2 && PF.body.dayMl(PF.todayIso()) === 750 && PF.db.weights.length === 2 && PF.db.settings.profile.goalKg === 78 && PF.db.settings.profile.startKg === 85), 'drinks, weights and the profile arrive on the other phone');
+ok(await B.evaluate(b64 => { const wb = XLSX.read(PF.b64.toBytes(b64), { type: 'array' }); return !!wb.Sheets.PF_Drinks && !!wb.Sheets.PF_Weight && wb.Sheets._PF_Data && wb.SheetNames.includes('Weapons'); }, srv.bytes.toString('base64')), 'file has PF_Drinks and PF_Weight, other sheets kept');
+await A.evaluate(() => { PF.body.logWeight(PF.iso(PF.addDays(PF.today(), -5)), 83.3, 'Ä morning & <fasted>'); PF.flush(); }); await sync(A);
+const C = await phone('C'); await sync(C);
+ok(await C.evaluate(() => PF.db.settings.profile.goalKg === 78 && PF.db.settings.profile.startKg === 85 && PF.db.weights.some(w => w.note === 'Ä morning & <fasted>')), 'a new phone takes the profile from the file on its first sync; notes exact');
+await C.ctx.close();
+const wDel = await B.evaluate(() => { const w = PF.body.weights()[0]; PF.del('weights', w.id, 'Weight test'); PF.flush(); return w.id; });
+await sync(B); await sync(A);
+ok(await A.evaluate(id => !PF.db.weights.some(w => w.id === id), wDel), 'a weight deleted on one phone is gone on the other');
+ok(await A.evaluate(b64 => XLSX.utils.sheet_to_json(XLSX.read(PF.b64.toBytes(b64), { type: 'array' }).Sheets._Deleted).some(r => r.App === 'PF' && r.Table === 'PF_Weight'), srv.bytes.toString('base64')), 'the delete is in the shared _Deleted sheet');
+await B.evaluate(() => { PF.undel(PF.db.trash.findIndex(x => x.label === 'Weight test')); PF.flush(); });
+await sync(B); await sync(A);
+ok(await A.evaluate(id => PF.db.weights.some(w => w.id === id), wDel), 'Undo on one phone brings it back on the other');
+// A gets out of step (local junk not synced); Replace takes the Nextcloud copy, backup first, settings stay
+await A.evaluate(() => { PF.db.drinks.push({ id: 'junk', at: PF.now(), date: PF.todayIso(), time: '01:00', ml: 9999 }); PF.db.settings.theme = 'dark'; PF.flush(); });
+const rep = await A.evaluate(async () => { const n = window.__backups.length; const r = await PF.sync.replace(false); return { ok: r.ok, junk: PF.db.drinks.some(d => d.id === 'junk'), n: PF.db.drinks.length, bk: window.__backups.slice(n).some(x => /db-before-replace/.test(x)), theme: PF.db.settings.theme }; });
+ok(rep.ok && !rep.junk && rep.n === 2 && rep.bk && rep.theme === 'dark', 'Replace with the Nextcloud copy: backup first, data replaced, settings kept ' + JSON.stringify(rep));
 
 // 8. the Setup screen shows the section; switching to "this phone only" stops syncing
 await A.evaluate(() => PF.go('#setup')); await A.waitForTimeout(200);

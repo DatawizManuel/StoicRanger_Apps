@@ -49,7 +49,7 @@ PF.openFile = (mimes = '') => new Promise(res => {
   i.onchange = async () => { const f = i.files[0]; if (!f) return res({ ok: false, msg: 'cancelled' }); res({ ok: true, name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }); };
   i.click();
 });
-PF.VERSION = '0.2.0';
+PF.VERSION = '0.3.0';
 PF.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: PF.VERSION, android: '-', device: navigator.userAgent.slice(0, 60) }; } catch (e) { return { version: PF.VERSION }; } };
 
 /* ---------- database ----------
@@ -61,13 +61,16 @@ PF.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: PF.VE
    - Data written by a newer app (schema > PF.SCHEMA) is never overwritten: the app opens it read-only.
    - A damaged db.json falls back to the previous copy (db.bak.json); the damaged file is kept in backups.
    Tables are flat lists of rows with a permanent id and an `at` change time, so they map 1:1 to Excel sheets. */
-PF.SCHEMA = 1;
+PF.SCHEMA = 2;
 PF.APP_ID = 'sr-physical-fitness';
-PF.TABLES = ['assessments', 'plans', 'sets', 'sessions', 'activities', 'mobility'];
+PF.TABLES = ['assessments', 'plans', 'sets', 'sessions', 'activities', 'mobility', 'drinks', 'weights'];
+/* user profile (Settings › User profile); more fields can come later. Metric: kg, cm, ml. */
+PF.DEFAULT_PROFILE = () => ({ startKg: null, startDate: '', heightCm: null, goalKg: null, drinkMl: 2000 });
 PF.DEFAULT_SETTINGS = () => ({
   sessions: 3, minutes: 45, days: ['Mon', 'Wed', 'Fri'],
   eq: { kb: [10, 12, 16, 24], db: [], sb: [10, 20], bar: true, bands: ['light', 'medium', 'heavy'], mini: true, bench: true, gripper: false, roller: false },
   skip: [],          // muscle groups not targeted (PF.plan.MGROUPS keys); new blocks start with these
+  profile: PF.DEFAULT_PROFILE(),
   theme: 'auto'
 });
 PF.emptyDb = () => ({
@@ -79,19 +82,32 @@ PF.emptyDb = () => ({
   sessions: [],      // {id, at, plan, week, sess, date, done, note}
   activities: [],    // {id, at, date, type, name, min, km, m, elev, kg, hr, rpe, note}
   mobility: [],      // {id, at, date, item}
+  drinks: [],        // {id, at, date, time, ml}            (0.3.0) one row per drink, no types
+  weights: [],       // {id, at, date, kg, note}            (0.3.0) one row per day
   deleted: [],       // {table, id, at}: deletions, so an Excel import does not bring a deleted row back
+  trash: [],         // {table, row, at, label}: what this phone deleted, kept 30 days for Undo (not exported)
   ui: {},            // small view state (not exported)
   history: []        // migrations done on this file
 });
 PF.MIGRATIONS = {
-  // 2: db => { … }   next data format: add/convert only, never delete user entries
+  // add/convert only, never delete user entries
+  2: db => {         // 0.3.0: drinks and weight log, user profile (new, empty; nothing existing changes)
+    if (!Array.isArray(db.drinks)) db.drinks = [];
+    if (!Array.isArray(db.weights)) db.weights = [];
+    db.settings = db.settings || {};
+    if (!db.settings.profile) db.settings.profile = PF.DEFAULT_PROFILE();
+  }
 };
 PF.normalize = db => {
   const e = PF.emptyDb();
   db.settings = Object.assign(e.settings, db.settings || {});
   db.settings.eq = Object.assign(PF.DEFAULT_SETTINGS().eq, db.settings.eq || {});
   if (!Array.isArray(db.settings.skip)) db.settings.skip = [];
-  for (const t of PF.TABLES.concat(['deleted', 'history'])) if (!Array.isArray(db[t])) db[t] = [];
+  db.settings.profile = Object.assign(PF.DEFAULT_PROFILE(), db.settings.profile && typeof db.settings.profile === 'object' ? db.settings.profile : {});
+  for (const t of PF.TABLES.concat(['deleted', 'history', 'trash'])) if (!Array.isArray(db[t])) db[t] = [];
+  const cut30 = new Date(Date.now() - 30 * 864e5).toISOString(), cut365 = new Date(Date.now() - 365 * 864e5).toISOString();
+  db.trash = db.trash.filter(x => x && x.row && x.at >= cut30);                // Recently deleted: 30 days
+  db.deleted = db.deleted.filter(d => d && d.table && d.id && (!d.at || d.at >= cut365));   // tombstones: 365 days (contract E)
   if (!db.ui || typeof db.ui !== 'object') db.ui = {};
   for (const t of PF.TABLES) {               // every row has an id; duplicates (same id) are merged to one
     const seen = new Map();
@@ -164,10 +180,22 @@ PF.put = (table, row) => {
   if (i >= 0) list[i] = row; else list.push(row);
   PF.save(); return row;
 };
-PF.del = (table, id) => {
+/** delete a row everywhere (tombstone, contract E); with a label it is kept 30 days under Settings › Recently deleted */
+PF.del = (table, id, label) => {
   if (PF.readOnly) return;
+  const row = PF.db[table].find(r => r.id === id), at = PF.now();
   PF.db[table] = PF.db[table].filter(r => r.id !== id);
-  PF.db.deleted.push({ table, id, at: PF.now() });
+  PF.db.deleted = PF.db.deleted.filter(d => !(d.table === table && d.id === id));
+  PF.db.deleted.push({ table, id, at, label: label || '' });
+  if (row && label) PF.db.trash.push({ table, row: PF.clone(row), at, label });
   PF.save();
+};
+/** Undo a delete: the entry is saved again with a new change time, which beats the delete on every device */
+PF.undel = i => {
+  if (PF.readOnly) return false;
+  const x = PF.db.trash[i]; if (!x) return false;
+  PF.db.trash.splice(i, 1);
+  PF.put(x.table, PF.clone(x.row));
+  return true;
 };
 PF.load();

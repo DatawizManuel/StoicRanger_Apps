@@ -57,7 +57,7 @@
     ['mobility', 'Mobility', '<circle cx="12" cy="5" r="2"/><path d="M12 7.5v6M12 13.5l-4 6M12 13.5l4 6M6 10l6 1 6-1"/>'],
     ['library', 'Exercises', '<path d="M3 9h3v6H3zM18 9h3v6h-3zM6 12h12M8 7v10M16 7v10"/>'],
     ['dashboard', 'Dashboard', '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
-    ['setup', 'Setup', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
+    ['setup', 'Settings', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
   ];
   function shell() {
     document.body.innerHTML = `<div class="app"><header class="top"><button class="back" id="hBack" aria-label="Back" hidden>‹</button><img class="logo" src="img/emblem.svg" alt="" id="hLogo">
@@ -130,8 +130,8 @@
         <a class="card row" href="#setup"><span class="badge pill ${PF.db.settings._setupSeen ? 'ok' : 'now'}">1</span><span class="spacer"><b>Your time and equipment</b><div class="small muted">${PF.db.settings.sessions} × ${PF.db.settings.minutes} min per week</div></span><span class="chev">›</span></a>
         <a class="card row" href="#assess"><span class="badge pill ${a ? 'ok' : 'now'}">2</span><span class="spacer"><b>Assessment training</b><div class="small muted">${a ? 'Done ' + fmtD(a.date) : '7 short tests and 4 mobility checks set your starting levels'}</div></span><span class="chev">›</span></a>
         <a class="card row" href="#new"><span class="badge pill ${a ? 'now' : ''}">3</span><span class="spacer"><b>Create your 12-week plan</b><div class="small muted">Pick a start date</div></span><span class="chev">›</span></a>
-        <div class="card small muted">Everything you enter stays on this phone. Export it to Excel any time under Setup → Data.</div>`;
-      return out + mobCard() + actsCard();
+        <div class="card small muted">Everything you enter stays on this phone. Export it to Excel any time under Settings → Data.</div>`;
+      return out + mobCard() + actsCard() + dataLine();
     }
     const wn = P.weekNo(pl), cw = P.curW(pl);
     if (wn < 1) out += `<div class="card"><div class="eyebrow">Block ${pl.block}</div><h2>Starts ${fmtDY(pl.start)}</h2><div class="small muted">${pl.cfgHist[0].cfg.sessions} × ${pl.cfgHist[0].cfg.minutes} min per week. You can look at week 1 already.</div></div>`;
@@ -147,7 +147,7 @@
     }
     out += weekCard(pl, cw);
     if (wn >= 11 && wn <= 12) out += `<a class="card row" href="#next"><span class="spacer"><b>Block ${pl.block + 1} preview</b><div class="small muted">Proposal from what you logged so far</div></span><span class="chev">›</span></a>`;
-    return out + mobCard() + actsCard();
+    return out + mobCard() + actsCard() + dataLine();
   };
   function weekCard(pl, w) {
     const keys = P.sessionKeys(pl, w); const nx = P.next(pl);
@@ -157,6 +157,12 @@
   function mobCard() {
     const ds = PF.todayIso(); const list = P.mobDay(ds), done = P.mobDone(ds); const n = list.filter(x => done.includes(x.item.id)).length;
     return `<a class="card row" href="#mobility"><span class="spacer"><b>Daily mobility block</b><div class="small muted">${n ? `${n} of ${list.length} done today` : `${list.length} drills, about ${Math.round(list.length * 1.7)} min · optional`}</div></span>${n === list.length ? '<span class="pill ok">✓ Done</span>' : ''}<span class="chev">›</span></a>`;
+  }
+  /* "Your data: …" (building standard 6.2): where the data lives, one tap to Settings */
+  PF.dataLine = dataLine;
+  function dataLine() {
+    const S = PF.sync, on = S && S.enabled(), st = on ? S.storage() : null;
+    return `<a class="card row small" href="#setup" id="dataLine"><span class="spacer"><b>Your data:</b> ${on ? `this phone + Nextcloud (${esc(st.file || 'fitness.xlsx')}) · ${esc(S.status())}` : 'only on this phone'}</span><span class="btn xs">Settings</span></a>`;
   }
   PF.actsCard = actsCard;
   function actsCard() {
