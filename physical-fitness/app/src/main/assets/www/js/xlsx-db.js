@@ -1,0 +1,336 @@
+/* SR Physical Fitness — Excel file: export, import and the Nextcloud file. Layout per the shared Stoic Ranger
+   database contract (00_docs/SHARED-DB-CONTRACT.md): every sheet of this app starts with PF_, plus one hidden
+   sheet _PF_Data with a full JSON copy. The app writes only its own sheets and keeps every other sheet of the
+   workbook unchanged, so the same file can later hold other Stoic Ranger apps too. Unlinked file name: fitness.xlsx.
+   One sheet per table, same fields as the app database, readable and editable in Excel without the app.
+   Files from 0.1.x (sheets without prefix, hidden _PF) are still read.
+   Import merges by id: a row changed later wins (an Excel edit counts as newer when the row is unchanged on the
+   phone); rows deleted on either side stay deleted (Deleted sheet); nothing on the phone is lost. */
+'use strict';
+(function () {
+  const X = PF.xls = {};
+  const COLS = {
+    Assessments: ['id', 'date', 'swingKg', 'gobletKg', 'pressKg', 'pullup', 'pushup', 'situp', 'hang', 'toe', 'squat', 'reachR', 'reachL', 'note', 'at'],
+    Plans: ['id', 'block', 'start', 'status', 'prev', 'assessment', 'created', 'cfgHist', 'base', 'swaps', 'at'],
+    Sessions: ['id', 'plan', 'week', 'sess', 'date', 'done', 'note', 'at'],
+    Sets: ['id', 'date', 'plan', 'week', 'sess', 'slot', 'ex', 'exercise', 'set', 'reps', 'kg', 'sec', 'm', 'done', 'at'],
+    Activities: ['id', 'date', 'type', 'name', 'min', 'km', 'm', 'elev', 'kg', 'hr', 'rpe', 'note', 'at'],
+    Mobility: ['id', 'date', 'item', 'drill', 'at'],
+    Drinks: ['id', 'date', 'time', 'ml', 'at'],
+    Weight: ['id', 'date', 'kg', 'note', 'at'],
+    Deleted: ['table', 'id', 'at']
+  };
+  const TABLE = { Assessments: 'assessments', Plans: 'plans', Sessions: 'sessions', Sets: 'sets', Activities: 'activities', Mobility: 'mobility', Drinks: 'drinks', Weight: 'weights' };
+  const SHEET_OF = {}; for (const [sh, t] of Object.entries(TABLE)) SHEET_OF[t] = sh;
+  const JSONCOL = ['cfgHist', 'base', 'swaps'];
+  const HELPER = ['exercise', 'drill'];                 // shown for reading, ignored on import
+  const NUM = ['ml', 'block', 'week', 'sess', 'set', 'reps', 'kg', 'sec', 'm', 'min', 'km', 'elev', 'hr', 'rpe', 'swingKg', 'gobletKg', 'pressKg', 'pullup', 'pushup', 'situp', 'hang', 'toe', 'reachR', 'reachL'];
+  const BOOL = ['done'];
+  X.FILE = () => `fitness-${PF.todayIso()}.xlsx`;
+  X.SYNC_FILE = 'fitness.xlsx';
+  const PRE = 'PF_', HIDDEN = '_PF_Data', CHUNK = 30000;
+  const OLD = ['README', 'Settings', 'Exercises', '_PF'].concat(Object.keys(COLS));   // 0.1.x sheet names (own file only)
+  X.mine = n => n.startsWith(PRE) || n === HIDDEN;
+  const mobName = id => { const m = (window.MOB || []).find(x => x.id === id); return m && EX[m.ex] ? EX[m.ex].n : ''; };
+
+  /* ---------- the shared _Deleted list (contract E): every app keeps all rows, acts only on its own (App = PF) ---------- */
+  const DELETED = '_Deleted', DEL_COLS = [['App', 'app'], ['Table', 'table'], ['ID', 'id'], ['Source uid', 'uid'], ['Label', 'label'], ['Deleted at', 'at'], ['Deleted by', 'by']];
+  X.DELETED = DELETED;
+  const s_ = v => v == null ? '' : v instanceof Date ? v.toISOString() : String(v);
+  /** union by (app, table, uid or id); the newer time stays; older than 365 days dropped */
+  X.mergeTombs = (a, b) => {
+    const m = new Map(), cut = new Date(Date.now() - 365 * 864e5).toISOString();
+    (a || []).concat(b || []).forEach(x => {
+      if (!x || !x.app || !x.table || !(x.id || x.uid) || !x.at || String(x.at) < cut) return;
+      const k = x.app + '|' + x.table + '|' + (x.uid || x.id), o = m.get(k);
+      if (!o || String(x.at) > o.at) m.set(k, { app: s_(x.app), table: s_(x.table), id: s_(x.id), uid: s_(x.uid), label: s_(x.label), at: s_(x.at), by: s_(x.by) });
+    });
+    return [...m.values()].sort((x, y) => x.at < y.at ? -1 : x.at > y.at ? 1 : 0);
+  };
+  X.tombsIn = wb => { const ws = wb.Sheets[DELETED]; if (!ws) return []; return XLSX.utils.sheet_to_json(ws, { defval: '', raw: true }).map(r => { const o = {}; DEL_COLS.forEach(([h, k]) => { o[k] = s_(r[h]); }); return o; }); };
+  /** this app's tombstones {table, id, at} ↔ shared rows {app: 'PF', table: 'PF_Weight', …} */
+  const toShared = d => ({ app: 'PF', table: PRE + (SHEET_OF[d.table] || d.table), id: d.id, uid: '', label: d.label || '', at: d.at, by: 'SR Physical Fitness' });
+  const fromShared = x => { const sh = String(x.table).replace(/^PF_/, ''); return TABLE[sh] ? { table: TABLE[sh], id: x.id, at: x.at, label: x.label || '' } : null; };
+
+  /* ---------- this app's sheets as rows ---------- */
+  const width = rows => (rows[0] || []).map((h, i) => Math.min(40, Math.max(8, ...rows.slice(0, 200).map(r => String(r[i] ?? '').length))));
+  X.sheets = (db = PF.db, others = []) => {
+    const out = [], add = (name, rows, hidden) => out.push({ name: hidden ? name : PRE + name, rows, hidden: !!hidden });
+    add('README', [['SR Physical Fitness – data file'], [''], ['Every sheet is one table of the app. Each row has a permanent id: keep it when you edit a row.'],
+      ['Add a row: leave id empty, the app gives it one (a row without id that matches an entry, e.g. a weight on the same date, updates that entry).'],
+      ['Delete a row: delete it in the app. A row deleted only here comes back at the next sync.'],
+      ['Dates are YYYY-MM-DD, times HH:MM. Weights in kg, drinks in ml, distances in km or m, durations in minutes or seconds as the column says.'],
+      ['Columns "exercise" and "drill" are only there to read; the app uses the ids next to them.'],
+      ['Import this file in the app under Settings → Data. Importing merges: nothing on the phone is deleted unless it was deleted in an app.'],
+      ['All sheets of SR Physical Fitness start with PF_. Other sheets in this file belong to other Stoic Ranger apps and are left as they are.'],
+      [''], ['Exported', new Date().toLocaleString('en-GB')], ['App version', PF.appInfo().version || PF.VERSION], ['Data format', PF.SCHEMA]]);
+    const s = db.settings, pr = s.profile || {};
+    add('Settings', [['key', 'value'], ['sessions', s.sessions], ['minutes', s.minutes], ['days', s.days.join(', ')], ['kettlebells_kg', s.eq.kb.join(', ')], ['dumbbells_kg', s.eq.db.join(', ')],
+      ['sandbags_kg', s.eq.sb.join(', ')], ['bands', s.eq.bands.join(', ')], ['pullup_bar', s.eq.bar ? 'yes' : 'no'], ['mini_band', s.eq.mini ? 'yes' : 'no'], ['bench', s.eq.bench ? 'yes' : 'no'],
+      ['gripper', s.eq.gripper ? 'yes' : 'no'], ['wrist_roller', s.eq.roller ? 'yes' : 'no'], ['not_targeted', (s.skip || []).join(', ')],
+      ['start_weight_kg', pr.startKg ?? ''], ['start_date', pr.startDate || ''], ['height_cm', pr.heightCm ?? ''], ['weight_goal_kg', pr.goalKg ?? ''], ['drink_goal_ml', pr.drinkMl ?? ''], ['day_start', (s.remind || {}).start || ''], ['day_end', (s.remind || {}).end || ''], ['drink_reminders', (s.remind || {}).n ?? 0],
+      ['theme', s.theme || 'auto'], ['changed', s.at || '']]);
+    for (const [sheet, cols] of Object.entries(COLS)) {
+      const list = sheet === 'Deleted' ? db.deleted.map(d => ({ table: d.table, id: d.id, at: d.at })) : db[TABLE[sheet]];
+      add(sheet, [cols].concat(list.map(r => cols.map(c => {
+        if (c === 'exercise') return EX[r.ex] ? EX[r.ex].n : '';
+        if (c === 'drill') return mobName(r.item);
+        const v = r[c]; if (JSONCOL.includes(c)) return JSON.stringify(v ?? null);
+        if (BOOL.includes(c)) return v ? 'yes' : 'no';
+        return v ?? '';
+      }))));
+    }
+    add('Exercises', [['id', 'name', 'group', 'pattern', 'equipment', 'level', 'main muscles', 'supporting muscles', 'dose']].concat(EXLIST.map(e => [e.id, e.n, EX_GROUPS[e.g], EX_PATTERNS[e.pat], e.equip.join(', '), e.lvl, e.prim.join(', '), e.sec.join(', '), e.dose])));
+    const full = JSON.stringify({ app: PF.APP_ID, schema: PF.SCHEMA, saved: PF.now(), by: 'SR Physical Fitness ' + (PF.appInfo().version || PF.VERSION), db: X.dataPart(db) });
+    const hrows = [[PF.APP_ID, PF.SCHEMA, 'Do not edit: a copy of the SR Physical Fitness data for the apps. The PF_ sheets win over it.']];
+    for (let i = 0; i < full.length; i += CHUNK) hrows.push([full.slice(i, i + CHUNK)]);
+    add(HIDDEN, hrows, true);
+    const tombs = X.mergeTombs(others, db.deleted.map(toShared));
+    add(DELETED, [DEL_COLS.map(c => c[0])].concat(tombs.map(x => DEL_COLS.map(([, k]) => x[k] || ''))), true);
+    return out;
+  };
+
+  /* ---------- writing: an existing file is changed inside its zip (only our parts), else written new ----------
+     As Daily Thoughts 0.3.1 / building standard 4.2: the parts of the PF_ sheets, _PF_Data and _Deleted are replaced (or
+     added, with their entries in workbook.xml, its rels and [Content_Types].xml). Every other part stays byte for byte,
+     so other apps' sheets, drop-down lists, styles and named ranges are untouched. Numbers are written as numbers, text as
+     inline strings (needs nothing from the rest of the workbook). */
+  const xesc = v => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const colL = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+  X.sheetXml = (rows, widths) => {
+    const cols = widths && widths.length ? `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w + 2}" customWidth="1"/>`).join('')}</cols>` : '';
+    const body = rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => {
+      if (v === '' || v == null) return '';
+      const ref = colL(ci) + (ri + 1);
+      if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xesc(v)}</t></is></c>`;
+    }).join('')}</row>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${rows.length > 1 && rows[0].length > 1 ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : ''}${cols}<sheetData>${body}</sheetData></worksheet>`;
+  };
+  const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const WS_TYPE = REL_NS + '/worksheet', WS_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
+  const attr = (tag, name) => { const m = new RegExp('\\s' + name.replace(':', '\\:') + '="([^"]*)"').exec(tag); return m ? m[1] : null; };
+  const unx = v => String(v).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  /** replaces only our sheets inside the original xlsx zip; throws if the file is unusual */
+  X.patch = (orig, sheets) => {
+    const C = XLSX.CFB, dec = new TextDecoder(), enc = new TextEncoder();
+    const zip = C.read(orig, { type: 'array' });
+    const get = n => { const e = C.find(zip, '/' + n); return e && e.content ? dec.decode(e.content) : null; };
+    const put = (n, txt) => { const e = C.find(zip, '/' + n), b = enc.encode(txt); if (e) { e.content = b; e.size = b.length; } else C.utils.cfb_add(zip, '/' + n, b); };
+    const rootRels = get('_rels/.rels');
+    const off = rootRels && (rootRels.match(/<Relationship\b[^>]*>/g) || []).find(t => /\/officeDocument$/.test(attr(t, 'Type') || ''));
+    let wbPath = (off ? attr(off, 'Target') : 'xl/workbook.xml').replace(/^\//, '');
+    const dir = wbPath.includes('/') ? wbPath.slice(0, wbPath.lastIndexOf('/') + 1) : '';
+    const relsPath = dir + '_rels/' + wbPath.slice(dir.length) + '.rels';
+    let wbx = get(wbPath), rels = get(relsPath), ct = get('[Content_Types].xml');
+    if (!wbx || !rels || !ct || !/<sheets\b[^>]*>[\s\S]*<\/sheets>/.test(wbx)) throw new Error('unusual workbook');
+    const relTags = rels.match(/<Relationship\b[^>]*\/?>/g) || [];
+    const target = id => { const t = relTags.find(r => attr(r, 'Id') === id); if (!t) return null; const g = attr(t, 'Target'); return g.startsWith('/') ? g.slice(1) : dir + g; };
+    const sheetTags = (/<sheets\b[^>]*>([\s\S]*)<\/sheets>/.exec(wbx)[1].match(/<sheet\b[^>]*\/>/g)) || [];
+    const rAttr = t => { const m = /\s([\w-]+):id="([^"]*)"/.exec(t); return m ? m[2] : null; };
+    let maxId = Math.max(0, ...sheetTags.map(t => +attr(t, 'sheetId') || 0));
+    const usedR = new Set(relTags.map(r => attr(r, 'Id')));
+    const parts = new Set(zip.FullPaths.map(f => f.replace(/^[^/]*\//, '')));
+    for (const sh of sheets) {
+      const xml = X.sheetXml(sh.rows, sh.hidden ? null : width(sh.rows));
+      const tag = sheetTags.find(t => unx(attr(t, 'name') || '') === sh.name);
+      if (tag) {
+        const path = target(rAttr(tag)); if (!path) throw new Error('sheet without part: ' + sh.name);
+        put(path, xml);
+        wbx = wbx.replace(tag, tag.replace(/\sstate="[^"]*"/, '').replace(/\s*\/>$/, (sh.hidden ? ' state="hidden"' : '') + '/>'));
+        continue;
+      }
+      let k = 1; while (parts.has(dir + 'worksheets/sheet' + k + '.xml')) k++;
+      const path = dir + 'worksheets/sheet' + k + '.xml'; parts.add(path);
+      let n = 1; while (usedR.has('rId' + n)) n++;
+      const rid = 'rId' + n; usedR.add(rid);
+      put(path, xml);
+      rels = rels.replace(/<\/Relationships>\s*$/, `<Relationship Id="${rid}" Type="${WS_TYPE}" Target="/${path}"/></Relationships>`);
+      if (!ct.includes(`PartName="/${path}"`)) ct = ct.replace(/<\/Types>\s*$/, `<Override PartName="/${path}" ContentType="${WS_CT}"/></Types>`);
+      wbx = wbx.replace(/<\/sheets>/, `<sheet xmlns:r="${REL_NS}" name="${xesc(sh.name)}" sheetId="${++maxId}"${sh.hidden ? ' state="hidden"' : ''} r:id="${rid}"/></sheets>`);
+    }
+    put(wbPath, wbx); put(relsPath, rels); put('[Content_Types].xml', ct);
+    const mark = zip.FullPaths.findIndex(f => /\u0001Sh33tJ5$/.test(f));            // the library's own marker entry
+    if (mark >= 0) { zip.FullPaths.splice(mark, 1); zip.FileIndex.splice(mark, 1); }
+    return new Uint8Array(C.write(zip, { fileType: 'zip', type: 'array', compression: true }));
+  };
+  /** the whole workbook written new with the Excel library (no file yet, a 0.1.x file, or the patch did not work) */
+  X.rebuild = (sheets, existing) => {
+    let wb = XLSX.utils.book_new(), keepHidden = {};
+    if (existing && existing.length) {
+      wb = XLSX.read(existing, { type: 'array', cellStyles: true, bookVBA: true });
+      const oldOwn = !!wb.Sheets._PF;                                  // a 0.1.x file of this app alone
+      (wb.Workbook && wb.Workbook.Sheets || []).forEach(x => { if (x.Hidden) keepHidden[x.name] = x.Hidden; });
+      for (const n of wb.SheetNames.slice()) if (X.mine(n) || n === DELETED || oldOwn && OLD.includes(n)) { delete wb.Sheets[n]; wb.SheetNames.splice(wb.SheetNames.indexOf(n), 1); }
+    }
+    for (const sh of sheets) { const ws = XLSX.utils.aoa_to_sheet(sh.rows); if (!sh.hidden) ws['!cols'] = width(sh.rows).map(w => ({ wch: w })); XLSX.utils.book_append_sheet(wb, ws, sh.name); }
+    const hid = new Set(sheets.filter(x => x.hidden).map(x => x.name));
+    wb.Workbook = Object.assign(wb.Workbook || {}, { Sheets: wb.SheetNames.map(n => ({ name: n, Hidden: hid.has(n) ? 1 : keepHidden[n] || 0 })) });
+    return new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true }));
+  };
+  /** does the written file read back as what we meant to write? */
+  const readsBack = (out, db) => {
+    try {
+      const d = X.parse(out); if (!d.full || !d.full.db) return false;
+      return Object.entries(TABLE).every(([sh, t]) => (d.tables[sh] || []).length === db[t].length && (d.full.db[t] || []).length === db[t].length);
+    } catch (e) { return false; }
+  };
+  /** workbook bytes with this app's sheets; `existing` (bytes of the current file) keeps every other part as it is */
+  X.build = (db = PF.db, existing = null) => {
+    let others = [], legacy = false;
+    if (existing && existing.length) {
+      try { const wb = XLSX.read(existing, { type: 'array', bookSheets: false }); others = X.tombsIn(wb); legacy = !!wb.Sheets._PF; } catch (e) { others = []; }
+    }
+    const sheets = X.sheets(db, others);
+    if (existing && existing.length && !legacy) {
+      try { const out = X.patch(existing, sheets); if (readsBack(out, db)) return out; console.warn('zip patch did not read back, writing the workbook new'); }
+      catch (e) { console.warn('zip patch failed, writing the workbook new: ' + e.message); }
+    }
+    return X.rebuild(sheets, existing);
+  };
+  /** what goes into the file: settings (without the storage setting), tables and tombstones; not ui/history */
+  X.dataPart = db => { const o = { settings: PF.clone(db.settings), deleted: PF.clone(db.deleted) }; delete o.settings.nc; for (const t of PF.TABLES) o[t] = PF.clone(db[t]); return o; };
+  const bytes = () => new Uint8Array(X.build());
+  const MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  X.export = async () => { const r = await PF.saveFile(X.FILE(), MIME, bytes()); if (r && r.ok) PF.toast('Saved: ' + (r.msg || X.FILE())); else if (r && r.msg !== 'cancelled') PF.toast('Could not save: ' + (r.msg || ''), true); };
+  X.share = () => PF.shareFile(X.FILE(), MIME, bytes(), 'SR Physical Fitness data');
+
+  /* ---------- import ---------- */
+  const isoOf = v => {
+    if (v instanceof Date) return PF.iso(new Date(v.getTime() + 12 * 36e5));
+    if (typeof v === 'number' && v > 20000 && v < 80000) return PF.iso(new Date(Math.round((v - 25569) * 864e5) + 12 * 36e5));
+    const s = String(v ?? '').trim(); const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s); if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    return s.slice(0, 10);
+  };
+  const timeOf = v => {                                  // 14:30 typed in Excel comes back as a time of day
+    if (v instanceof Date) return String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0');
+    if (typeof v === 'number' && v >= 0 && v < 1) { const m = Math.round(v * 1440); return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+    const m = /^(\d{1,2})[:.](\d{2})/.exec(String(v).trim()); return m ? m[1].padStart(2, '0') + ':' + m[2] : String(v).trim().slice(0, 5);
+  };
+  const conv = (c, v) => {
+    if (v === '' || v == null) return c === 'note' || c === 'name' ? '' : null;
+    if (c === 'date' || c === 'start' || c === 'created') return isoOf(v);
+    if (c === 'at') return v instanceof Date ? v.toISOString() : String(v);
+    if (NUM.includes(c)) { const n = typeof v === 'number' ? v : +String(v).replace(',', '.'); return isNaN(n) ? null : n; }
+    if (BOOL.includes(c)) return v === true || /^(yes|y|true|1|ja|x|✓)$/i.test(String(v).trim());
+    if (JSONCOL.includes(c)) return JSON.parse(String(v));
+    if (c === 'squat') return String(v).trim();
+    if (c === 'time') return timeOf(v);
+    return typeof v === 'string' ? v : String(v);
+  };
+  /** parse a workbook (Uint8Array) → {meta, settings, tables, errors} */
+  X.parse = u8 => {
+    const wb = XLSX.read(u8, { type: 'array', cellDates: true });
+    const legacy = !wb.Sheets[PRE + 'Sets'] && !wb.Sheets[PRE + 'Plans'] && !wb.Sheets[HIDDEN];     // 0.1.x file
+    const nm = n => legacy ? n : PRE + n;
+    const sheet = n => wb.Sheets[nm(n)] ? XLSX.utils.sheet_to_json(wb.Sheets[nm(n)], { defval: '', raw: true }) : null;
+    const meta = {};
+    if (legacy) (wb.Sheets._PF ? XLSX.utils.sheet_to_json(wb.Sheets._PF, { defval: '', raw: true }) : []).forEach(r => meta[r.key] = r.value);
+    const out = { meta, tables: {}, errors: [], settings: null, full: null };
+    if (wb.Sheets[HIDDEN]) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[HIDDEN], { header: 1, defval: '', raw: true });
+      meta.app = String(rows[0] && rows[0][0] || ''); meta.schema = rows[0] && rows[0][1];
+      try { out.full = JSON.parse(rows.slice(1).map(r => String(r[0] ?? '')).join('')); } catch (e) { out.full = null; }
+    }
+    if (meta.app && meta.app !== PF.APP_ID) throw new Error('This is not an SR Physical Fitness file.');
+    if (!meta.app && !(legacy ? wb.Sheets.Sets || wb.Sheets.Plans : wb.Sheets[PRE + 'Sets'] || wb.Sheets[PRE + 'Plans'])) throw new Error('This file has no SR Physical Fitness sheets.');
+    if (+meta.schema > PF.SCHEMA) { out.newer = true; return out; }
+    for (const [sh, cols] of Object.entries(COLS)) {
+      const rows = sheet(sh); if (!rows) continue; const list = [];
+      rows.forEach((r, i) => {
+        if (cols.every(c => r[c] === '' || r[c] == null)) return;
+        const o = {};
+        try { for (const c of cols) if (!HELPER.includes(c) && c in r) o[c] = conv(c, r[c]); }
+        catch (e) { out.errors.push(`${sh} row ${i + 2}: ${e.message}`); return; }
+        list.push(o);
+      });
+      out.tables[sh] = list;
+    }
+    out.tombs = X.tombsIn(wb);                               // shared list, all apps
+    out.tables.Deleted = (out.tables.Deleted || []).concat(out.tombs.filter(x => x.app === 'PF').map(fromShared).filter(Boolean));
+    const st = sheet('Settings');
+    if (st) { const m = {}; st.forEach(r => m[String(r.key).trim()] = r.value); out.settings = m; }
+    return out;
+  };
+  const PKEYS = [['start_weight_kg', 'startKg', 'n'], ['start_date', 'startDate', 'd'], ['height_cm', 'heightCm', 'n'], ['weight_goal_kg', 'goalKg', 'n'], ['drink_goal_ml', 'drinkMl', 'n']];
+  const listN = v => String(v ?? '').split(/[,;]\s*/).map(x => x.trim()).filter(Boolean);
+  X.norm = v => v == null || v === '' || v === false ? '' : JSON.stringify(v);
+  /** merge parsed data into db; returns counts */
+  X.merge = (db, data) => {
+    const now = PF.now(); const c = { added: 0, updated: 0, deleted: 0 };
+    const tomb = new Map(); for (const d of db.deleted) tomb.set(d.table + '|' + d.id, d.at);
+    for (const d of (data.tables.Deleted || [])) {
+      if (!d.table || !d.id) continue; const key = d.table + '|' + d.id; const at = d.at || now;
+      const list = db[d.table]; if (!Array.isArray(list)) continue;
+      const i = list.findIndex(r => r.id === d.id);
+      if (i >= 0 && (list[i].at || '') <= at) { list.splice(i, 1); c.deleted++; }
+      if (!tomb.has(key) || tomb.get(key) < at) { db.deleted = db.deleted.filter(x => !(x.table === d.table && x.id === d.id)); db.deleted.push({ table: d.table, id: d.id, at }); tomb.set(key, at); }
+    }
+    for (const [sh, t] of Object.entries(TABLE)) {
+      for (const f of (data.tables[sh] || [])) {
+        if (!f.id) { f.id = X.matchId(t, f, db[t]) || PF.uid(t[0]); f.at = now; }
+        if (!f.at) f.at = now;
+        const ta = tomb.get(t + '|' + f.id); if (ta && ta >= f.at) continue;
+        const l = db[t].find(r => r.id === f.id);
+        if (!l) { db[t].push(f); c.added++; continue; }
+        if (f.at < (l.at || '')) continue;                         // the phone has a newer version of this row
+        const changed = Object.keys(f).some(k => k !== 'at' && X.norm(f[k]) !== X.norm(l[k]));
+        if (changed) { Object.assign(l, f); if (f.at === l.at) l.at = now; c.updated++; }
+      }
+    }
+    const s = data.settings;
+    if (s && (String(s.changed || '') > String(db.settings.at || '') || !db.plans.length && !db.sets.length)) {
+      Object.assign(db.settings, X.settingsFrom(s, db.settings)); c.settings = true;
+    }
+    PF.normalize(db);
+    return c;
+  };
+  /** PF_Settings rows {key: value} → settings fields (only the keys the sheet has) */
+  X.settingsFrom = (s, cur) => {
+    const S = { eq: PF.clone((cur || PF.DEFAULT_SETTINGS()).eq) }, yes = v => /^(yes|y|true|1|ja|x)$/i.test(String(v).trim());
+    {
+      if (+s.sessions) S.sessions = PF.clamp(+s.sessions, 2, 6); if (+s.minutes) S.minutes = +s.minutes;
+      if (s.days) S.days = listN(s.days).filter(d => PF.DAYS.includes(d));
+      if ('kettlebells_kg' in s) S.eq.kb = listN(s.kettlebells_kg).map(Number).filter(n => n > 0);
+      if ('dumbbells_kg' in s) S.eq.db = listN(s.dumbbells_kg).map(Number).filter(n => n > 0);
+      if ('sandbags_kg' in s) S.eq.sb = listN(s.sandbags_kg).map(Number).filter(n => n > 0);
+      if ('bands' in s) S.eq.bands = listN(s.bands);
+      for (const [k, e] of [['pullup_bar', 'bar'], ['mini_band', 'mini'], ['bench', 'bench'], ['gripper', 'gripper'], ['wrist_roller', 'roller']]) if (k in s) S.eq[e] = yes(s[k]);
+      if ('not_targeted' in s) S.skip = listN(s.not_targeted).map(x => { x = x.toLowerCase(); const g = PF.plan.MGROUPS.find(g => g.k === x || g.n.toLowerCase() === x); return g && g.k; }).filter(Boolean);
+      if (PKEYS.some(([k]) => k in s)) {
+        S.profile = Object.assign(PF.DEFAULT_PROFILE(), PF.clone((cur || {}).profile || {}));
+        for (const [k, f, ty] of PKEYS) if (k in s) { const v = s[k]; S.profile[f] = ty === 'd' ? (v === '' || v == null ? '' : isoOf(v)) : (v === '' || v == null || isNaN(+String(v).replace(',', '.')) ? null : +String(v).replace(',', '.')); }
+      }
+      if (['day_start', 'day_end', 'drink_reminders'].some(k => k in s)) {
+        S.remind = Object.assign(PF.DEFAULT_REMIND(), PF.clone((cur || {}).remind || {}));
+        const hm = v => { if (typeof v === 'number' && v >= 0 && v < 1) { const m = Math.round(v * 1440); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); } if (v instanceof Date) return String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0'); const m = /^(\d{1,2})[:.](\d{2})/.exec(String(v ?? '').trim()); return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, '0') + ':' + m[2] : null; };
+        if ('day_start' in s && hm(s.day_start)) S.remind.start = hm(s.day_start);
+        if ('day_end' in s && hm(s.day_end)) S.remind.end = hm(s.day_end);
+        if ('drink_reminders' in s && !isNaN(+s.drink_reminders)) S.remind.n = PF.clamp(Math.round(+s.drink_reminders), 0, 12);
+      }
+      if (s.theme) S.theme = String(s.theme); if (s.changed) S.at = String(s.changed);
+    }
+    return S;
+  };
+  X.COLS = COLS; X.TABLE = TABLE; X.HELPER = HELPER; X.SHEET_OF = SHEET_OF;
+  /* rows typed in Excel have no id: match them to an existing entry by what identifies it (standard 4.4), so they are
+     not added again at every sync. A weight is one per day: the same date is the same entry. */
+  const KEY = {
+    weights: r => r.date, drinks: r => [r.date, r.time, r.ml].join('|'), activities: r => [r.date, r.type, r.min].join('|'), assessments: r => r.date,
+    mobility: r => [r.date, r.item].join('|'), sessions: r => [r.plan, r.week, r.sess].join('|'), sets: r => [r.plan, r.week, r.sess, r.slot, r.set].join('|'), plans: r => String(r.block)
+  };
+  X.matchId = (t, r, list) => { if (!KEY[t]) return null; const k = KEY[t](r); if (!k || /^\|*$/.test(k)) return null; const m = (list || []).find(x => KEY[t](x) === k); return m ? m.id : null; };
+  X.import = async () => {
+    if (!PF.guard()) return;
+    const f = await PF.openFile('.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); if (!f.ok) return;
+    let data; try { data = X.parse(f.bytes); } catch (e) { return PF.toast('Could not read the file: ' + e.message, true); }
+    if (data.newer) return PF.toast('This file was made by a newer app version. Please update the app first.', true);
+    const ok = await PF.confirm('Import this file?', `${PF.esc(f.name)}: ${Object.entries(data.tables).map(([k, v]) => `${v.length} ${k.toLowerCase()}`).join(', ')}. It is merged with the data on this phone. A copy of the current data is kept first.`, 'Import');
+    if (!ok) return;
+    PF.flush(); PF.backupDb(`db-before-import-${PF.todayIso()}-${Date.now()}.json`);
+    const c = X.merge(PF.db, data); PF.save(true);
+    PF.ui = {}; PF.applyTheme(); PF.rerender();
+    PF.toast(`Imported: ${c.added} new, ${c.updated} updated, ${c.deleted} deleted${data.errors.length ? `, ${data.errors.length} rows skipped` : ''}`, !!data.errors.length);
+  };
+})();

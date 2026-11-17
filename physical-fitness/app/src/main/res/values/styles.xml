@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SR Physical Fitness colours (same as assets/www/css/app.css): steel section colour. -->
+    <color name="ranger">#3E5765</color>
+    <color name="stone">#E9ECE6</color>
+    <color name="charcoal">#111310</color>
+    <color name="tan">#8FB3C4</color>
+    <color name="night_bar">#1A1D18</color>
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/stone</item>
+        <item name="android:statusBarColor">@color/ranger</item>
+        <item name="android:navigationBarColor">@color/charcoal</item>
+        <item name="android:colorAccent">@color/ranger</item>
+        <item name="android:colorPrimary">@color/ranger</item>
+    </style>
+</resources>

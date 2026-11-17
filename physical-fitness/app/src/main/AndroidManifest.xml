@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
+     Exercises, drawings and plans are made on the phone. Internet is used only when the user chooses to sync with their
+     own Nextcloud (0.2.0, Setup › Where your data lives); otherwise all data stays on the phone. The Stoic Ranger signature permission is declared
+     in every Stoic Ranger app (same signing key), so the install order does not matter; Physical Fitness does not use it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <permission android:name="at.stoicranger.permission.LINK" android:protectionLevel="signature"
+        android:label="Link Stoic Ranger apps" />
+    <uses-permission android:name="at.stoicranger.permission.LINK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 0.4.0 drinking reminders: show the notification (asked on Android 13+ only when reminders are switched on),
+         and set the next reminder again after a reboot -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 11+: see which Stoic Ranger apps are installed (link consent, shared storage setting) -->
+    <queries>
+        <package android:name="at.rangebook.app" />
+        <package android:name="at.stoicranger.gunsafe" />
+        <package android:name="at.stoicranger.dailythoughts" />
+        <package android:name="at.stoicranger.fieldkit" />
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- drinking reminders (DrinkReminder.java): the alarm only from this app; Restart after reboot / update / clock change -->
+        <receiver android:name=".DrinkReminder" android:exported="false" />
+        <receiver android:name=".DrinkReminder$Restart" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".SharedFileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <!-- the shared storage setting for linked Stoic Ranger apps (LinkProvider.java); only apps with the same key -->
+        <provider
+            android:name=".LinkProvider"
+            android:authorities="${applicationId}.link"
+            android:exported="true"
+            android:readPermission="at.stoicranger.permission.LINK"
+            android:writePermission="at.stoicranger.permission.LINK" />
+    </application>
+</manifest>

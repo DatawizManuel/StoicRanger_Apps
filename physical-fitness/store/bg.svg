@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- SR Physical Fitness: steel blue (section colour #3E5765) with a soft light from the top -->
+  <defs><radialGradient id="g" cx="50%" cy="30%" r="75%"><stop offset="0" stop-color="#4B6878"/><stop offset="1" stop-color="#33495A"/></radialGradient></defs>
+  <rect width="108" height="108" fill="url(#g)"/>
+</svg>
