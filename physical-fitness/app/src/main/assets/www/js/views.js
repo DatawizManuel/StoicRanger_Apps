@@ -229,6 +229,7 @@
     const info = PF.appInfo();
     return `<div class="stack"><h1>Settings</h1></div>
       ${PF.body.profileCard()}
+      ${PF.body.remindCard()}
       <div class="card stack"><h3>Time</h3>
         <div class="field"><span class="lbl">Sessions per week</span>${W.stepper(D.sessions, 'sess', 'Sessions per week')}</div>
         <div class="field"><span class="lbl">Minutes per session</span>${W.chips([D.minutes], [20, 30, 45, 60, 75, 90], 'mins', v => v + ' min')}</div>

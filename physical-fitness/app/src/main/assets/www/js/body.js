@@ -207,6 +207,55 @@
     if (B.setProfile(f[0], v)) PF.toast('Saved');
   };
 
+  /* =========================== Settings › Drinking reminders (0.4.0, remark #4) ===========================
+     Typical day start..end and a number of reminders: spread evenly, none at the start, the last at the end
+     (08:00-20:00, 4: 11:00, 14:00, 17:00, 20:00). A reminder is shown only when today's drinks are behind the goal's
+     share of the day passed. The phone does the alarms and notifications (DrinkReminder.java, same formula). */
+  const N = window.PFNative || null;
+  const hm = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '')); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
+  const fmtHm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  B.remindTimes = (start, end, n) => { const a = hm(start), b = hm(end); if (!(n > 0) || a < 0 || b <= a) return []; return Array.from({ length: n }, (_, i) => a + Math.round((i + 1) * (b - a) / n)); };
+  B.onTrack = (drank, goal, start, end, at) => { const a = hm(start), b = hm(end); if (!(goal > 0) || b <= a) return true; const f = Math.max(0, Math.min(1, (at - a) / (b - a))); return drank >= goal * f - 0.5; };
+  const rem = () => PF.db.settings.remind || PF.DEFAULT_REMIND();
+  B.remindNative = () => !!(N && N.remindSchedule);
+  /** tell the phone to set the next alarm (after db.json is written); returns {next, allowed} */
+  B.schedule = () => { if (!B.remindNative()) return null; PF.flush(); try { const r = JSON.parse(N.remindSchedule()); B.lastSched = r; return r; } catch (e) { return null; } };
+  B.remindChanged = () => { B.schedule(); if (/^#setup/.test(location.hash) && !PF._sheet) PF.rerender(); };
+  B.remindCard = () => {
+    const r = rem(), goal = +prof().drinkMl || 0, t = B.remindTimes(r.start, r.end, r.n), st = B.lastSched || (B.remindNative() && r.n ? B.schedule() : null);
+    return `<div class="card stack" id="remind"><h3>Drinking reminders</h3>
+      <div class="small muted">Set your typical day and how many reminders you want. They are spread over the day (none right at the start, the last at the end) and only come when you are behind your drinking goal.</div>
+      <div class="row wrap"><div class="field"><label for="rmStart">Day starts</label><input class="inp" type="time" id="rmStart" data-ch="rm" data-k="start" value="${esc(r.start)}"></div>
+        <div class="field"><label for="rmEnd">Day ends</label><input class="inp" type="time" id="rmEnd" data-ch="rm" data-k="end" value="${esc(r.end)}"></div></div>
+      <div class="field"><span class="lbl">Reminders per day</span>${PF.w.stepper(r.n ? r.n : 'off', 'rmn', 'Reminders per day')}</div>
+      ${r.n ? (t.length ? `<div class="small">At ${t.map(fmtHm).join(', ')}${goal ? `, when today's drinks are behind ${fmtMl(goal)} for that time of day` : ''}.</div>` : '<div class="small warn">The day must end after it starts.</div>') : ''}
+      ${r.n && !goal ? '<div class="small warn">Set a drinking goal in the user profile above: without a goal there are no reminders.</div>' : ''}
+      ${r.n && !B.remindNative() ? '<div class="small muted">Reminders come from the Android app; this web app cannot send them.</div>' : ''}
+      ${r.n && st && st.allowed === false ? '<div class="small warn">Notifications are not allowed for this app. <button type="button" class="btn xs" data-rmperm="1">Allow notifications</button> (or in the phone settings › Apps › SR_Physical Fitness › Notifications).</div>' : ''}
+      ${r.n && st && st.next ? `<div class="small muted">Next check: ${new Date(st.next).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}.</div>` : ''}</div>`;
+  };
+  const saveRemind = (k, v) => {
+    if (!PF.guard()) return false;
+    const r = PF.db.settings.remind = Object.assign(PF.DEFAULT_REMIND(), PF.db.settings.remind || {});
+    r[k] = v; PF.db.settings.at = PF.now(); PF.save(true);
+    B.schedule();
+    if (k === 'n' && v > 0 && B.remindNative() && N.remindPermission) { try { N.remindPermission(); } catch (e) { } }
+    return true;
+  };
+  PF.on.rmn = v => { const n = PF.clamp((rem().n || 0) + +v, 0, 12); if (saveRemind('n', n)) PF.rerender(); };
+  PF.onChange.rm = el => {
+    const k = el.dataset.k, v = el.value; if (hm(v) < 0) { el.value = rem()[k]; return PF.toast('Pick a time.', true); }
+    const r = Object.assign({}, rem(), { [k]: v }); if (hm(r.end) <= hm(r.start)) { el.value = rem()[k]; return PF.toast('The day must end after it starts.', true); }
+    if (saveRemind(k, v)) PF.rerender();
+  };
+  PF.on.rmperm = () => { if (N && N.remindPermission) N.remindPermission(); };
+  // a change that arrives by sync or import (goal, reminders) sets the alarm again
+  let lastKey = null;
+  const keyNow = () => JSON.stringify([rem(), +prof().drinkMl || 0]);
+  const save0 = PF.save;
+  PF.save = now => { save0(now); const k = keyNow(); if (k !== lastKey && B.remindNative()) { lastKey = k; setTimeout(B.schedule, 400); } };
+  setTimeout(() => { lastKey = keyNow(); }, 0);
+
   /* =========================== Settings › Recently deleted =========================== */
   B.trashCard = () => {
     const l = PF.db.trash.map((x, i) => ({ x, i })).sort((a, b) => String(b.x.at).localeCompare(String(a.x.at)));

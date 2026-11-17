@@ -198,6 +198,21 @@ async function run(theme) {
   });
   ok(zp.weapons && zp.styles && zp.pk, 'zip patch: other apps\' sheet parts and styles stay byte-identical');
   ok(zp.gs && zp.pf && zp.hidden, 'shared _Deleted keeps the other apps\' rows and adds ours (hidden)');
+  // ---------- 0.4.0: drinking reminders ----------
+  await go('#setup');
+  ok(await p.evaluate(() => /Drinking reminders/.test(document.getElementById('remind').innerText) && PF.db.settings.remind.n === 0), 'Settings shows drinking reminders, off by default');
+  for (let i = 0; i < 4; i++) await click('[data-rmn="1"]');
+  ok(await p.evaluate(() => PF.db.settings.remind.n === 4 && /At 11:00, 14:00, 17:00, 20:00/.test(document.getElementById('remind').innerText)), '4 reminders in 08:00-20:00: 11:00, 14:00, 17:00, 20:00 shown');
+  await p.fill('#rmStart', '07:00'); await p.dispatchEvent('#rmStart', 'change');
+  await p.fill('#rmEnd', '21:00'); await p.dispatchEvent('#rmEnd', 'change');
+  ok(await p.evaluate(() => PF.db.settings.remind.start === '07:00' && PF.db.settings.remind.end === '21:00' && PF.body.remindTimes('07:00', '21:00', 4).join() === '630,840,1050,1260'), 'typical day changed, times follow');
+  await p.fill('#rmEnd', '06:00'); await p.dispatchEvent('#rmEnd', 'change');
+  ok(await p.evaluate(() => PF.db.settings.remind.end === '21:00'), 'a day ending before it starts is refused');
+  ok(await p.evaluate(() => PF.body.onTrack(1000, 2000, '08:00', '20:00', 840) && !PF.body.onTrack(999, 2000, '08:00', '20:00', 840) && PF.body.onTrack(0, 0, '08:00', '20:00', 840)), 'on track = the goal\'s share of the day passed (same rule as the phone)');
+  ok(await p.evaluate(() => /cannot send them/.test(document.getElementById('remind').innerText)), 'web: says reminders come from the Android app');
+  const rx = await p.evaluate(() => { const d = PF.xls.parse(new Uint8Array(PF.xls.build())); const e = PF.normalize(PF.emptyDb()); PF.xls.merge(e, d); return JSON.stringify(e.settings.remind); });
+  ok(rx === '{"n":4,"start":"07:00","end":"21:00"}', 'reminder settings travel in PF_Settings ' + rx);
+  await shot('18-reminders');
   // persistence: reload keeps data
   await p.reload(); await p.waitForTimeout(300);
   ok(await p.evaluate(() => PF.db.sets.length >= 1 && PF.db.plans.length === 1 && PF.db.activities.length === 1), 'data survives reload');

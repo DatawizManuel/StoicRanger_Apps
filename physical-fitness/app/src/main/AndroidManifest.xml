@@ -9,6 +9,10 @@
         android:label="Link Stoic Ranger apps" />
     <uses-permission android:name="at.stoicranger.permission.LINK" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 0.4.0 drinking reminders: show the notification (asked on Android 13+ only when reminders are switched on),
+         and set the next reminder again after a reboot -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Android 11+: see which Stoic Ranger apps are installed (link consent, shared storage setting) -->
     <queries>
         <package android:name="at.rangebook.app" />
@@ -38,6 +42,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- drinking reminders (DrinkReminder.java): the alarm only from this app; Restart after reboot / update / clock change -->
+        <receiver android:name=".DrinkReminder" android:exported="false" />
+        <receiver android:name=".DrinkReminder$Restart" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name=".SharedFileProvider"

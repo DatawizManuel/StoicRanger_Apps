@@ -49,7 +49,7 @@ PF.openFile = (mimes = '') => new Promise(res => {
   i.onchange = async () => { const f = i.files[0]; if (!f) return res({ ok: false, msg: 'cancelled' }); res({ ok: true, name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }); };
   i.click();
 });
-PF.VERSION = '0.3.0';
+PF.VERSION = '0.4.0';
 PF.appInfo = () => { try { return N ? JSON.parse(N.appInfo()) : { version: PF.VERSION, android: '-', device: navigator.userAgent.slice(0, 60) }; } catch (e) { return { version: PF.VERSION }; } };
 
 /* ---------- database ----------
@@ -66,11 +66,14 @@ PF.APP_ID = 'sr-physical-fitness';
 PF.TABLES = ['assessments', 'plans', 'sets', 'sessions', 'activities', 'mobility', 'drinks', 'weights'];
 /* user profile (Settings › User profile); more fields can come later. Metric: kg, cm, ml. */
 PF.DEFAULT_PROFILE = () => ({ startKg: null, startDate: '', heightCm: null, goalKg: null, drinkMl: 2000 });
+/* drinking reminders (0.4.0): number per day (0 = off) and the typical day; reminders spread evenly, none at the start */
+PF.DEFAULT_REMIND = () => ({ n: 0, start: '08:00', end: '20:00' });
 PF.DEFAULT_SETTINGS = () => ({
   sessions: 3, minutes: 45, days: ['Mon', 'Wed', 'Fri'],
   eq: { kb: [10, 12, 16, 24], db: [], sb: [10, 20], bar: true, bands: ['light', 'medium', 'heavy'], mini: true, bench: true, gripper: false, roller: false },
   skip: [],          // muscle groups not targeted (PF.plan.MGROUPS keys); new blocks start with these
   profile: PF.DEFAULT_PROFILE(),
+  remind: PF.DEFAULT_REMIND(), // 0.4.0 drinking reminders: n per day, spread over the typical day start..end
   theme: 'auto'
 });
 PF.emptyDb = () => ({
@@ -103,6 +106,7 @@ PF.normalize = db => {
   db.settings = Object.assign(e.settings, db.settings || {});
   db.settings.eq = Object.assign(PF.DEFAULT_SETTINGS().eq, db.settings.eq || {});
   if (!Array.isArray(db.settings.skip)) db.settings.skip = [];
+  db.settings.remind = Object.assign(PF.DEFAULT_REMIND(), db.settings.remind && typeof db.settings.remind === 'object' ? db.settings.remind : {});
   db.settings.profile = Object.assign(PF.DEFAULT_PROFILE(), db.settings.profile && typeof db.settings.profile === 'object' ? db.settings.profile : {});
   for (const t of PF.TABLES.concat(['deleted', 'history', 'trash'])) if (!Array.isArray(db[t])) db[t] = [];
   const cut30 = new Date(Date.now() - 30 * 864e5).toISOString(), cut365 = new Date(Date.now() - 365 * 864e5).toISOString();

@@ -1,4 +1,4 @@
-# Stoic Ranger - Physical Fitness (Android) 0.3.0
+# Stoic Ranger - Physical Fitness (Android) 0.4.0
 
 Shown as **SR_Physical Fitness** under the launcher icon (Stoic Ranger emblem on steel blue #3E5765). Package id
 `at.stoicranger.fitness`, signed with the same key as the other Stoic Ranger apps. Works offline; all data stays on the
@@ -6,6 +6,16 @@ phone unless you switch on the optional Nextcloud sync (the only use of the inte
 
 Functional fitness on a time budget: whole body, stronger, more flexible, healthy.
 
+- **0.4.0** (versionCode 5, 2026-11-17):
+  - **Drinking reminders** (Settings › Drinking reminders, remark #4): typical start and end of the day and the
+    number of reminders per day (0 = off). They are spread evenly over the day, none right at the start, the last at
+    the end (08:00–20:00 with 4: 11:00, 14:00, 17:00, 20:00). A reminder is a phone notification and only comes when
+    you are behind: today's drinks below the goal's share of the day passed (at 14:00 half the goal, at 20:00 the
+    whole goal). Tapping it opens the Dashboard. Android 13+ asks once for permission to show notifications. The
+    alarm is set again after a reboot, an app update or a clock change; Android may deliver it a few minutes late
+    (battery saving). The settings travel in `PF_Settings` (day_start, day_end, drink_reminders). The iPhone web app
+    shows the settings but cannot send reminders.
+  - Data format stays 2 (the reminder setting is added with defaults, nothing converted).
 - **0.3.0** (versionCode 4, 2026-11-15):
   - **Drinks** (Dashboard): *Add drink* +250 ml, +500 ml or another amount (date and time can be changed). No drink
     types and no advice: today's total against your daily goal, and the average of the 7 days before today. Tap a
@@ -84,7 +94,7 @@ phone is deleted unless it was deleted in an app (PF_Deleted / _Deleted). A copy
 
 ## Install the test build
 
-1. Copy `sr-physical-fitness-0.3.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
+1. Copy `sr-physical-fitness-0.4.0-debug.apk` to the phone and open it in the Files app; allow installs from that app.
 2. Play Protect may warn about an unknown app: *Install anyway* (debug build, Stoic Ranger test key).
 3. Open **SR_Physical Fitness**: Settings → Assessment → Create plan. Drinks and weight are on the Dashboard; start weight and goals under Settings › User profile.
 
@@ -109,6 +119,7 @@ phone is deleted unless it was deleted in an app (PF_Deleted / _Deleted). A copy
   Nextcloud copy, switching off).
 - `tools/test-nc.sh`: WebDav.java + NcFile.java on the JVM against `tools/webdav-mock.js` (401, 404, If-None-Match,
   If-Match, 412, backups, keep newest 30, non-xlsx refused, damaged upload re-sent, backup put back).
+- `bash tools/test-reminders.sh`: reminder times and the "on track" rule (ReminderPlan.java) on the JVM.
 - `bash tools/test-nextcloud.sh [database.xlsx]`: a real Nextcloud 30 in Docker, the Android WebDAV code behind
   `tools/nc-test/NcBridge.java`, two phones, the PC database.xlsx checked part by part (`tools/check-xlsx-parts.py`).
 - `node tools/sheet.mjs out.png [regex|group] [both|0|1|map] [cols]`: contact sheet of the drawings.

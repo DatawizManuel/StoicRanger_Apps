@@ -85,7 +85,21 @@ public class MainActivity extends Activity {
             }
         });
         if (state != null) web.restoreState(state);
-        else web.loadUrl(ORIGIN + "/www/index.html");
+        else web.loadUrl(ORIGIN + "/www/index.html" + ("dashboard".equals(getIntent().getStringExtra("open")) ? "#dashboard" : ""));
+        new Thread(new Runnable() { @Override public void run() { DrinkReminder.schedule(MainActivity.this); } }).start();
+    }
+
+    /** A drinking reminder was tapped while the app was open: show the Dashboard (drinks). */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (web != null && "dashboard".equals(intent.getStringExtra("open"))) web.evaluateJavascript("location.hash = '#dashboard'", null);
+    }
+
+    static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS";
+    private boolean notificationsAllowed() {
+        return Build.VERSION.SDK_INT < 33 || checkSelfPermission(POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED;
     }
 
     @Override
@@ -109,6 +123,12 @@ public class MainActivity extends Activity {
             Bundle b = getContentResolver().call(Uri.parse("content://" + pkg + ".link"), method, arg, null);
             return b == null ? null : new JSONObject(b.getString("json", "{}"));
         } catch (Exception e) { return null; }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(req, perms, res);
+        if (req == 21 && web != null) web.evaluateJavascript("window.PF && PF.body && PF.body.remindChanged && PF.body.remindChanged()", null);
     }
 
     @Override
@@ -313,6 +333,25 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean isNight() { return MainActivity.this.isNight(); }
+
+        /** Drinking reminders (0.4.0): set the next alarm from db.json; {next: millis or 0, allowed: notifications allowed} */
+        @JavascriptInterface
+        public String remindSchedule() {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("next", DrinkReminder.schedule(MainActivity.this));
+                o.put("allowed", notificationsAllowed());
+                return o.toString();
+            } catch (Exception e) { return "{}"; }
+        }
+
+        /** Android 13+: ask for the notification permission (the system dialog; asked only while reminders are on) */
+        @JavascriptInterface
+        public boolean remindPermission() {
+            if (notificationsAllowed()) return true;
+            runOnUiThread(new Runnable() { @Override public void run() { requestPermissions(new String[] { POST_NOTIFICATIONS }, 21); } });
+            return false;
+        }
 
         @JavascriptInterface
         public String appInfo() {

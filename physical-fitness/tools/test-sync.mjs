@@ -28,13 +28,14 @@ const bridge = (name, mode) => `
     loadDb: () => window.__files.db || '', loadDbBackup: () => window.__files.bak || '',
     saveDb: t => { window.__files.bak = window.__files.db || ''; window.__files.db = t; return true; },
     backupDb: n => { window.__backups.push(n); return true; },
-    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.3.0', android: '14', device: '${name}' }),
+    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.4.0', android: '14', device: '${name}' }),
     saveFile: () => {}, openFile: () => {}, shareFile: () => {}, shareText: () => {}, print: () => {},
     storageGet: () => JSON.stringify({ mode: window.__mode, url: 'https://cloud.example.com', user: 'manuel', folder: '/Stoic Ranger/', file: 'fitness.xlsx', hasPassword: true, changed: '', peers: [{ pkg: 'at.stoicranger.dailythoughts', installed: true, linked: false, name: 'SR_Daily Thoughts' }] }),
     storageSet: (j, pw) => { window.__mode = JSON.parse(j).mode; return window.PFNative.storageGet(); },
     storageRefresh: () => false, linkSet: () => window.PFNative.storageGet(),
     ncTest: id => window.__nc('test').then(r => cb(id, r)),
     ncDownload: id => window.__nc('get').then(r => cb(id, r)),
+    remindSchedule: () => { window.__sched = (window.__sched || 0) + 1; return JSON.stringify({ next: 0, allowed: true }); }, remindPermission: () => true,
     ncUpload: (b64, etag, id) => window.__nc('put', b64, etag).then(r => cb(id, r)) };`;
 async function phone(name, mode = 'nextcloud') {
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage(); const errs = [];
@@ -148,6 +149,12 @@ ok(await A.evaluate(id => PF.db.weights.some(w => w.id === id), wDel), 'Undo on 
 await A.evaluate(() => { PF.db.drinks.push({ id: 'junk', at: PF.now(), date: PF.todayIso(), time: '01:00', ml: 9999 }); PF.db.settings.theme = 'dark'; PF.flush(); });
 const rep = await A.evaluate(async () => { const n = window.__backups.length; const r = await PF.sync.replace(false); return { ok: r.ok, junk: PF.db.drinks.some(d => d.id === 'junk'), n: PF.db.drinks.length, bk: window.__backups.slice(n).some(x => /db-before-replace/.test(x)), theme: PF.db.settings.theme }; });
 ok(rep.ok && !rep.junk && rep.n === 2 && rep.bk && rep.theme === 'dark', 'Replace with the Nextcloud copy: backup first, data replaced, settings kept ' + JSON.stringify(rep));
+
+// 7c. 0.4.0: reminder settings changed on one phone arrive on the other and set its alarm again
+const sched0 = await A.evaluate(() => window.__sched || 0);
+await B.evaluate(() => { PF.db.settings.remind = { n: 3, start: '09:00', end: '21:00' }; PF.db.settings.at = PF.now(); PF.save(true); });
+await sync(B); await sync(A); await A.waitForTimeout(700);
+ok(await A.evaluate(s0 => JSON.stringify(PF.db.settings.remind) === '{"n":3,"start":"09:00","end":"21:00"}' && window.__sched > s0, sched0), 'reminder settings from the other phone arrive and the alarm is set again');
 
 // 8. the Setup screen shows the section; switching to "this phone only" stops syncing
 await A.evaluate(() => PF.go('#setup')); await A.waitForTimeout(200);

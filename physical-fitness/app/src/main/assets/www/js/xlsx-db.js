@@ -68,7 +68,7 @@
     add('Settings', [['key', 'value'], ['sessions', s.sessions], ['minutes', s.minutes], ['days', s.days.join(', ')], ['kettlebells_kg', s.eq.kb.join(', ')], ['dumbbells_kg', s.eq.db.join(', ')],
       ['sandbags_kg', s.eq.sb.join(', ')], ['bands', s.eq.bands.join(', ')], ['pullup_bar', s.eq.bar ? 'yes' : 'no'], ['mini_band', s.eq.mini ? 'yes' : 'no'], ['bench', s.eq.bench ? 'yes' : 'no'],
       ['gripper', s.eq.gripper ? 'yes' : 'no'], ['wrist_roller', s.eq.roller ? 'yes' : 'no'], ['not_targeted', (s.skip || []).join(', ')],
-      ['start_weight_kg', pr.startKg ?? ''], ['start_date', pr.startDate || ''], ['height_cm', pr.heightCm ?? ''], ['weight_goal_kg', pr.goalKg ?? ''], ['drink_goal_ml', pr.drinkMl ?? ''],
+      ['start_weight_kg', pr.startKg ?? ''], ['start_date', pr.startDate || ''], ['height_cm', pr.heightCm ?? ''], ['weight_goal_kg', pr.goalKg ?? ''], ['drink_goal_ml', pr.drinkMl ?? ''], ['day_start', (s.remind || {}).start || ''], ['day_end', (s.remind || {}).end || ''], ['drink_reminders', (s.remind || {}).n ?? 0],
       ['theme', s.theme || 'auto'], ['changed', s.at || '']]);
     for (const [sheet, cols] of Object.entries(COLS)) {
       const list = sheet === 'Deleted' ? db.deleted.map(d => ({ table: d.table, id: d.id, at: d.at })) : db[TABLE[sheet]];
@@ -301,6 +301,13 @@
       if (PKEYS.some(([k]) => k in s)) {
         S.profile = Object.assign(PF.DEFAULT_PROFILE(), PF.clone((cur || {}).profile || {}));
         for (const [k, f, ty] of PKEYS) if (k in s) { const v = s[k]; S.profile[f] = ty === 'd' ? (v === '' || v == null ? '' : isoOf(v)) : (v === '' || v == null || isNaN(+String(v).replace(',', '.')) ? null : +String(v).replace(',', '.')); }
+      }
+      if (['day_start', 'day_end', 'drink_reminders'].some(k => k in s)) {
+        S.remind = Object.assign(PF.DEFAULT_REMIND(), PF.clone((cur || {}).remind || {}));
+        const hm = v => { if (typeof v === 'number' && v >= 0 && v < 1) { const m = Math.round(v * 1440); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); } if (v instanceof Date) return String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0'); const m = /^(\d{1,2})[:.](\d{2})/.exec(String(v ?? '').trim()); return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, '0') + ':' + m[2] : null; };
+        if ('day_start' in s && hm(s.day_start)) S.remind.start = hm(s.day_start);
+        if ('day_end' in s && hm(s.day_end)) S.remind.end = hm(s.day_end);
+        if ('drink_reminders' in s && !isNaN(+s.drink_reminders)) S.remind.n = PF.clamp(Math.round(+s.drink_reminders), 0, 12);
       }
       if (s.theme) S.theme = String(s.theme); if (s.changed) S.at = String(s.changed);
     }

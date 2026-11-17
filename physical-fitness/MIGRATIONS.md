@@ -41,6 +41,7 @@ Everything of format 1, plus:
 | table | fields |
 | --- | --- |
 | settings.profile | startKg, startDate, heightCm, goalKg, drinkMl (metric) |
+| settings.remind | (0.4.0, added by normalize with defaults, no format change) n reminders per day (0 = off), start, end (HH:MM) |
 | drinks | id, at, date, time, ml |
 | weights | id, at, date, kg, note (one per day; two phones logging the same day before a sync: the later change is shown, both rows are kept) |
 | deleted | table, id, at, label (also written to the shared hidden `_Deleted` sheet, contract E; tombstones older than 365 days are dropped) |

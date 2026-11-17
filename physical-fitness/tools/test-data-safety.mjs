@@ -14,7 +14,7 @@ const bridge = files => `
     loadDb: () => window.__files.db || '', loadDbBackup: () => window.__files.bak || '',
     saveDb: t => { window.__writes++; window.__files.bak = window.__files.db || ''; window.__files.db = t; return true; },
     backupDb: n => { window.__backups.push([n, window.__files.db || '']); return true; },
-    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.3.0', android: '14', device: 'test' }),
+    isNight: () => false, appInfo: () => JSON.stringify({ version: '0.4.0', android: '14', device: 'test' }),
     saveFile: () => {}, openFile: () => {}, shareFile: () => {}, shareText: () => {}, print: () => {} };`;
 async function page(files) {
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const p = await ctx.newPage(); const errs = [];

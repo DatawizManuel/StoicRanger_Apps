@@ -21,7 +21,7 @@
   /* ---------- state = what the file holds: settings, tables, tombstones (fields that have a column) ---------- */
   const FIELDS = {};
   for (const [sh, t] of Object.entries(X.TABLE)) FIELDS[t] = X.COLS[sh].filter(c => !X.HELPER.includes(c) && c !== 'at');
-  const SETTINGS = ['sessions', 'minutes', 'days', 'eq', 'skip', 'profile', 'theme'];
+  const SETTINGS = ['sessions', 'minutes', 'days', 'eq', 'skip', 'profile', 'remind', 'theme'];
   const pickRow = (t, r) => { const o = { id: r.id, at: r.at || '' }; for (const c of FIELDS[t]) o[c] = r[c] == null ? null : r[c]; return o; };
   S.local = (db = PF.db) => {
     const st = { settings: {}, deleted: (db.deleted || []).map(d => ({ table: d.table, id: d.id, at: d.at || '', label: d.label || '' })) };
@@ -32,7 +32,7 @@
   /** parsed workbook (X.parse) → state; rows typed in Excel without id get one, without time get now */
   S.remote = data => {
     const now = PF.now(); const st = { settings: {}, deleted: [] };
-    if (data.settings) { const s = X.settingsFrom(data.settings, PF.db.settings); for (const k of SETTINGS.concat(['at'])) if (s[k] !== undefined) st.settings[k] = s[k]; if ('eq' in st.settings && !Object.keys(data.settings).some(k => /^(kettlebells|dumbbells|sandbags)_kg$|bands|bar|band|bench|gripper|roller/.test(k))) delete st.settings.eq; if (st.settings.profile === undefined) delete st.settings.profile; }
+    if (data.settings) { const s = X.settingsFrom(data.settings, PF.db.settings); for (const k of SETTINGS.concat(['at'])) if (s[k] !== undefined) st.settings[k] = s[k]; if ('eq' in st.settings && !Object.keys(data.settings).some(k => /^(kettlebells|dumbbells|sandbags)_kg$|bands|bar|band|bench|gripper|roller/.test(k))) delete st.settings.eq; if (st.settings.profile === undefined) delete st.settings.profile; if (st.settings.remind === undefined) delete st.settings.remind; }
     for (const [sh, t] of Object.entries(X.TABLE)) st[t] = (data.tables[sh] || []).map(r => { if (!r.id) r.id = X.matchId(t, r, PF.db[t]) || PF.uid(t[0]); if (!r.at) r.at = now; return pickRow(t, r); });
     const tm = new Map(), cut = new Date(Date.now() - 365 * 864e5).toISOString();    // PF_Deleted and the shared _Deleted: one list
     for (const d of (data.tables.Deleted || [])) { if (!d.table || !d.id) continue; const at = d.at || now; if (at < cut) continue; const k = d.table + '|' + d.id, o = tm.get(k); if (!o || o.at < at) tm.set(k, { table: d.table, id: d.id, at, label: d.label || (o && o.label) || '' }); }
