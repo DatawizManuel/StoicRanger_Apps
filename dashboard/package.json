@@ -1,0 +1,10 @@
+{
+  "name": "stoic-ranger-dashboard",
+  "productName": "Stoic Ranger Dashboard",
+  "version": "0.1.0",
+  "description": "Stoic Ranger Dashboard for Windows: one read-only overview of all Stoic Ranger apps from the shared database.xlsx.",
+  "main": "main.js",
+  "author": "Manuel Faessler",
+  "license": "UNLICENSED",
+  "private": true
+}
