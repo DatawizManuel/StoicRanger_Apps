@@ -1,4 +1,4 @@
-/* SR Field Kit 0.2.0 — optional Nextcloud sync (Manuel 2026-11-07), following 00_docs/SHARED-DB-CONTRACT.md v1.
+/* SR Field Kit 0.2.0 (0.5.0: no reload loop, #17) — optional Nextcloud sync (Manuel 2026-11-07), following 00_docs/SHARED-DB-CONTRACT.md v1.
 
    Where the data lives: "local" (on this phone only, the default) or "nextcloud" (on this phone, synced to the
    user's own Nextcloud over WebDAV). The phone always keeps its own copy (db.json) and works offline.
@@ -24,7 +24,12 @@
   const MARK = 'sr-field-kit-data', FORMAT = 1, HIDDEN = '_FK_Data', CHUNK = 30000, KEEP_BACKUPS = 30;
   const OWN = ['FK_Points', 'FK_Breathing', 'FK_DropWind', 'FK_Settings', HIDDEN];
   const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o));
-  const same = (a, b) => JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b);
+  /* Compares values whatever order their keys are in (0.5.0, remark #17: the merged copy is built with its keys in another
+     order than the phone's copy, so a plain JSON text compare always said "changed", the page reloaded after every sync,
+     the reload synced again: an endless reload loop that also threw every sub-tab back to the first one). */
+  const canon = v => v === undefined || v === null ? 'null' : Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
+    : typeof v === 'object' ? '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v);
+  const same = (a, b) => canon(a) === canon(b);
   const arr = a => Array.isArray(a) ? a : [];
   const obj = o => o && typeof o === 'object' && !Array.isArray(o) ? o : {};
   const num = v => { if (v === '' || v == null) return null; const n = +String(v).trim().replace(',', '.'); return isFinite(n) ? n : null; };
@@ -226,12 +231,29 @@
     setState({ ok: false, msg: 'Another device kept saving ' + file + ' at the same time. Try "Sync now" again.' });
     return { ok: false };
   }
-  /** Runs one sync (queued if one is running). Reloads the page when data came in from Nextcloud. */
+  /** Runs one sync (queued if one is running). Reloads the page only when data really came in from Nextcloud, and
+   *  then opens the same topic and sub-tab again. Never two reloads within 15 s, so a fault can never loop. */
   function sync(why) {
     if (running) return running.then(() => sync(why));
     running = syncOnce().catch(e => { setState({ ok: false, msg: 'Sync failed: ' + e.message }); return { ok: false }; })
-      .then(r => { running = null; if (r && r.changed) { store.flush(); setTimeout(() => location.reload(), 300); } return r; });
+      .then(r => { running = null; if (r && r.changed) { store.flush(); reloadKeepingPlace(); } return r; });
     return running;
+  }
+  function reloadKeepingPlace() {
+    let last = 0; try { last = +sessionStorage.getItem('fk-sync-reload') || 0; } catch (e) { }
+    if (Date.now() - last < 15000) return;            // a reload right after a reload: never loop (data is saved; it shows next time)
+    const tab = document.querySelector('[data-tab][aria-pressed="true"]'), ntab = document.querySelector('[data-ntab][aria-pressed="true"]'), mtab = document.querySelector('[data-mtab][aria-pressed="true"]');
+    try { sessionStorage.setItem('fk-sync-reload', String(Date.now())); sessionStorage.setItem('fk-place', JSON.stringify({ hash: location.hash, tab: tab && tab.dataset.tab, ntab: ntab && ntab.dataset.ntab, mtab: mtab && mtab.dataset.mtab, y: window.scrollY })); } catch (e) { }
+    setTimeout(() => location.reload(), 300);
+  }
+  function restorePlace() {
+    let p = null; try { p = JSON.parse(sessionStorage.getItem('fk-place') || 'null'); sessionStorage.removeItem('fk-place'); } catch (e) { }
+    if (!p) return;
+    if (p.hash && p.hash !== location.hash) location.hash = p.hash;
+    const t = p.tab && document.querySelector('[data-tab="' + p.tab + '"]'), n = p.ntab && document.querySelector('[data-ntab="' + p.ntab + '"]');
+    if (t) t.click(); if (n) n.click();
+    const m = p.mtab && document.querySelector('[data-mtab="' + p.mtab + '"]'); if (m) setTimeout(() => m.click(), 100);
+    if (p.y) setTimeout(() => window.scrollTo(0, p.y), 50);
   }
   const SYNCED = ['sr-points', 'sr-breath', 'sr-custom', 'sr-ball', 'settings'];
   store.onChange = k => { if (!SYNCED.includes(k) || cfg().mode !== 'nextcloud') return; clearTimeout(timer); timer = setTimeout(() => sync('change'), 15000); };
@@ -251,8 +273,9 @@
     try { return JSON.parse(N.linkCall(SR_PKG, 'setStorage', '')); } catch (e) { return null; }
   }
 
-  window.FKSync = { sync, cfg, state, merge, readPart, writeWb, appPart, adoptLinked, pushLinked, linked, OWN };
+  window.FKSync = { sync, cfg, state, merge, readPart, writeWb, appPart, adoptLinked, pushLinked, linked, OWN, same };
   window.addEventListener('load', () => {
+    try { restorePlace(); } catch (e) { }
     try { adoptLinked(); } catch (e) { }
     try {   // linked with Stoic Ranger since the last start: move to the shared database.xlsx (contract A)
       const c = cfg();

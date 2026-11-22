@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.4.0
+# SR Field Kit (Android) — 0.5.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
@@ -8,6 +8,20 @@ WebView itself stays offline (other web requests are blocked, only the Java side
 
 ## Versions
 
+- **0.5.0** (versionCode 9, 2026-11-22): remarks #16 and #17.
+  - **Sub-tabs no longer jump back** (#17): with Nextcloud set up, every sync wrongly reported "new data" (the merged
+    copy had its keys in another order than the phone's copy), reloaded the page, and the reload synced again: an
+    endless reload every few seconds that always opened the first sub-tab. Now the compare ignores key order, the page
+    reloads only when data really came in, never twice within 15 s, and opens the same topic, sub-tab and scroll
+    position again.
+  - **Map downloads keep running in the background** (#16): the files are fetched by Android's own download service
+    (DownloadManager). It goes on with the app closed or the phone in standby, waits for Wi-Fi when "Wi-Fi only" is on
+    (a download can be started on mobile data and starts on Wi-Fi), continues after network drops where it stopped,
+    and shows its progress in the notification bar. When all files of a region are there, the app checks each part
+    and the whole file (SHA-256), joins split maps (FK-2) and only then replaces an older copy; this happens when
+    Android reports the download as complete, or the next time the app is opened. Stop in the app removes the
+    download and its files. Note: Android's download service keeps the request, including the Nextcloud login
+    header, in its own download list until the download is finished or stopped; the app removes it then.
 - **0.4.0** (versionCode 8, 2026-11-10): remarks #11 and #13.
   - **Night & signal** (#11): Morse message, SOS and strobe with the flashlight now run inside the app on their own
     thread with exact timing (the page's timers were slowed down by the phone and cut the message off). The page

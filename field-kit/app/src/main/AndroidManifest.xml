@@ -2,7 +2,8 @@
 <!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
      Internet only for the user's own Nextcloud (0.2.0 sync, 0.3.0 map and route downloads; off until set up): every
      tool works offline, and nothing leaves the phone unless the user sets up their Nextcloud. Network state: for
-     "download maps on Wi-Fi only". The flashlight (signal light) needs no camera permission.
+     "download maps on Wi-Fi only". Since 0.5.0 map files are fetched by Android's download service (no extra
+     permission), so a download keeps running with the app closed or the phone in standby. The flashlight (signal light) needs no camera permission.
      Location only when the user taps "Use my position". The Stoic Ranger signature permission is declared in every
      Stoic Ranger app (same signing key), so the install order does not matter; Field Kit uses it to read guns and
      ammunition from Stoic Ranger, read-only and only after the user allowed it. -->
@@ -42,6 +43,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 0.5.0 (#16): map downloads run in Android's download service; when one is complete, check and store it -->
+        <receiver android:name=".MapDl$Done" android:exported="true"
+            android:permission="android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name=".SharedFileProvider"

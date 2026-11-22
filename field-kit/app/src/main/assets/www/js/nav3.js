@@ -1,4 +1,4 @@
-/* SR Field Kit 0.4.0 — Navigate: offline map, routes with tick-off, position from two bearings, map downloads from
+/* SR Field Kit 0.5.0 — Navigate: offline map, routes with tick-off, position from two bearings, map downloads from
    the user's Nextcloud (remarks #7, #9) and the coordinate converter (#3).
    Map files: files/maps/*.pmtiles on the phone (MainActivity serves pieces at /maps/<name>?o=&l=), made by the
    Stoic Ranger Map Manager (maps.json catalog, format FK-1, or FK-2 when a file is split into parts: remark #13) in
@@ -480,10 +480,19 @@
     if (!g || job) return;
     if (!N || !N.mapDownload){ $("mMsg").textContent = "Downloads work in the Android app."; return; }
     const why = ncReady(); if (why){ $("mMsg").textContent = why; return; }
-    if ($("mWifi").checked){ let ns = {}; try { ns = JSON.parse(N.netState()); } catch (x){ } if (!ns.wifi){ $("mMsg").textContent = "Not on Wi-Fi. Connect to Wi-Fi, or switch off \"Download maps on Wi-Fi only\"."; return; } }
+    if ($("mWifi").checked && !N.mapQueue){ let ns = {}; try { ns = JSON.parse(N.netState()); } catch (x){ } if (!ns.wifi){ $("mMsg").textContent = "Not on Wi-Fi. Connect to Wi-Fi, or switch off \"Download maps on Wi-Fi only\"."; return; } }
     const cat = (store.get("sr-maps-nc", {}).catalog || {}).maps || [], c = cat.find(m => m.id === g.dataset.mget); if (!c) return;
     const files = [["Map", c.base], ["Terrain", c.terrain]].filter(x => x[1] && x[1].file);
     const all = files.reduce((a, x) => a + (x[1].bytes || 0), 0);
+    if (N.mapQueue){   // 0.5.0 (#16): Android's download service fetches the files; it goes on with the app closed
+      const jobDef = { id: uid("dl-"), wifi: $("mWifi").checked, meta: { id: c.id, name: c.name, bbox: c.bbox, attribution: c.attribution, date: c.date },
+        files: files.map(([label, f]) => ({ key: label === "Map" ? "base" : "terrain", name: f.file, sha256: f.sha256 || "", bytes: f.bytes || 0,
+          pieces: Array.isArray(f.parts) && f.parts.length ? f.parts.map(p => ({ path: folder() + String(p.file), bytes: +p.bytes || 0, sha256: String(p.sha256 || "") })) : [{ path: folder() + f.file, bytes: f.bytes || 0, sha256: "" }] })) };
+      let r = {}; try { r = JSON.parse(N.mapQueue(JSON.stringify(jobDef))); } catch (x){ r = { ok: false, msg: String(x) }; }
+      if (!r.ok){ $("mMsg").textContent = "Download not started: " + (r.msg || "failed"); return; }
+      $("mMsg").textContent = "Downloading in the background: you can close the app or lock the phone; the progress is in the notification bar.";
+      pollJob(); return;
+    }
     $("mDl").hidden = false; $("mMsg").textContent = ""; let base = 0, err = null;
     job = { id: "" }; renderMaps();
     for (const [label, f] of files){
@@ -500,7 +509,43 @@
     $("mMsg").textContent = err ? (err === "cancelled" ? "Download stopped. Nothing half-done was kept." : "Download failed: " + err) : c.name + " is on the phone now and works offline.";
     renderMaps(); loadRegions();
   });
-  $("mDlStop").onclick = () => { if (N && N.mapCancel) N.mapCancel(); };
+  $("mDlStop").onclick = () => { if (N && N.mapJobCancel && job && job.dm){ N.mapJobCancel(); pollJob(); return; } if (N && N.mapCancel) N.mapCancel(); };
+  /* 0.5.0 (#16): the background download's state. Read when the app opens or comes back and every second while a
+     download runs; finished files go into the phone's map list (also when they finished with the app closed). */
+  let pollT = null;
+  function applyFinished(st){
+    const meta = st.meta || {}; if (!meta.id || !(st.finished || []).length) return;
+    const list = store.get("sr-maps", []); let m = list.find(x => x.id === meta.id); if (!m){ m = { id: meta.id }; list.push(m); }
+    Object.assign(m, { name: meta.name, bbox: meta.bbox, attribution: meta.attribution, downloaded: new Date().toISOString() });
+    st.finished.forEach(f => { m[f.key === "terrain" ? "terrain" : "base"] = { file: f.name, bytes: f.bytes, sha256: f.sha256, date: meta.date }; });
+    const cat = ((store.get("sr-maps-nc", {}).catalog || {}).maps || []).find(x => x.id === meta.id);
+    const want = cat ? ["base", "terrain"].filter(k => cat[k] && cat[k].file) : ["base"];
+    if (want.every(k => m[k] && m[k].date === meta.date)){ m.date = meta.date; delete m.imported; }
+    store.set("sr-maps", list); store.flush();
+  }
+  function pollJob(){
+    clearTimeout(pollT);
+    if (!N || !N.mapJob) return;
+    let st = { state: "none" }; try { st = JSON.parse(N.mapJob()); } catch (x){ }
+    const name = (st.meta && st.meta.name) || "Map";
+    if (st.state === "run" || st.state === "checking"){
+      job = { id: st.id, dm: true }; $("mDl").hidden = false; $("mDlStop").hidden = st.state === "checking";
+      const p = st.total ? st.done / st.total : 0; $("mDlBar").style.width = Math.round((st.state === "checking" ? 1 : p) * 100) + "%";
+      $("mDlTxt").textContent = name + " · " + (st.state === "checking" ? "checking and storing …" : st.wait ? st.wait + " · " + MB(st.done) + " of " + MB(st.total) : MB(st.done) + " of " + MB(st.total));
+      if (mode === "maps") renderMaps();
+      pollT = setTimeout(pollJob, 1000);
+      return;
+    }
+    const was = job && job.dm; job = null; $("mDl").hidden = true; $("mDlStop").hidden = false;
+    if (st.state === "done" || st.state === "error" || st.state === "cancelled"){
+      applyFinished(st);
+      $("mMsg").textContent = st.state === "done" ? name + " is on the phone now and works offline." : st.state === "cancelled" ? "Download stopped. Nothing half-done was kept." : "Download failed: " + (st.msg || "failed");
+      if (N.mapJobClear) N.mapJobClear();
+      renderMaps(); loadRegions();
+    } else if (was) renderMaps();
+  }
+  setTimeout(pollJob, 300);
+  { const prevRes = window.FK && FK.resume; if (window.FK) FK.resume = () => { pollJob(); if (prevRes) prevRes(); }; }
   $("mImport").onclick = async () => {
     if (!N || !N.pickFile) return toast("Import works in the Android app");
     const r = await call(id => N.pickFile("map", id));
@@ -514,5 +559,5 @@
   $("decl").addEventListener("input", () => { if (document.activeElement !== $("mDecl")) $("mDecl").value = $("decl").value; renderRoute(); convert(); fixCalc(); });
   $("mDecl").value = $("decl").value;
   $("mDecl").addEventListener("input", () => { $("decl").value = $("mDecl").value; $("decl").dispatchEvent(new Event("input", { bubbles: true })); $("decl").dispatchEvent(new Event("change", { bubbles: true })); });
-  window.__nav3 = { ensureMap, resect, routes: () => routes, loadRegions, renderMaps };
+  window.__nav3 = { ensureMap, resect, routes: () => routes, loadRegions, renderMaps, pollJob };
 })();

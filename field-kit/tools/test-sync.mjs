@@ -128,10 +128,25 @@ await syncSettle(p);
 const all = Object.keys(await p.evaluate(() => __nc.files()));
 ok(all.filter(k => k.startsWith('/Stoic Ranger/backups/database-')).length === 30 && all.includes('/Stoic Ranger/backups/gunsafe-20260101-000000.xlsx'), 'backups: newest 30 of database.xlsx kept, other apps\' backups untouched');
 
+// --- 4b (0.5.0, #17): nothing new → no reload; new data → reload once, same topic and sub-tab open again ---
+await p.evaluate(() => { location.hash = '#nav'; window.__marker = 1; document.querySelector('[data-ntab="map"]').click(); });
+await p.waitForTimeout(15000); const r0 = await p.evaluate(() => FKSync.sync('test')); await p.waitForTimeout(800);
+ok(r0 && r0.ok && r0.changed === false && await p.evaluate(() => window.__marker === 1), 'sync with nothing new: no change reported, page not reloaded (' + JSON.stringify(r0) + ')');
+ok(await p.evaluate(() => FKSync.same({ a: 1, b: { c: 2, d: 3 } }, { b: { d: 3, c: 2 }, a: 1 })), 'same(): key order does not matter');
+await p.evaluate(() => { const F = __nc.files(), f = F['/Stoic Ranger/database.xlsx']; const wb = XLSX.read(Uint8Array.from(atob(f.b64), c => c.charCodeAt(0)), { type: 'array' });
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets.FK_Points, { header: 1 }); rows.push(['Hut', 47.4, 13.4, '', '']); wb.Sheets.FK_Points = XLSX.utils.aoa_to_sheet(rows);
+  const u8 = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' })); let s = ''; u8.forEach(c => s += String.fromCharCode(c)); F['/Stoic Ranger/database.xlsx'] = { b64: btoa(s), etag: '"excel2"' }; __nc.saveFiles(F); });
+await p.evaluate(() => FKSync.sync('test')); await p.waitForTimeout(2500);
+ok(await p.evaluate(() => window.__marker === undefined && FKStore.get('sr-points', []).some(x => x.name === 'Hut')), 'new data from Nextcloud: page reloaded once with the new point');
+ok(await p.evaluate(() => location.hash === '#nav' && document.querySelector('[data-ntab="map"]').getAttribute('aria-pressed') === 'true'), 'after the reload the same topic and sub-tab (Navigate › Map & routes) are open');
+await p.waitForTimeout(2500);
+const r1 = await p.evaluate(() => { window.__marker = 2; return FKSync.sync('test'); }); await p.waitForTimeout(800);
+ok(r1 && r1.changed === false && await p.evaluate(() => window.__marker === 2), 'the sync after the reload finds nothing new: no reload loop');
+
 // --- 5: back to local: nothing deleted on Nextcloud ---
 await p.click('#aboutBtn'); await p.check('input[name="stm"][value="local"]'); await p.click('#ncSave'); await p.waitForTimeout(300);
 ok((await p.evaluate(() => __nc.files()))['/Stoic Ranger/database.xlsx'] && !(await p.evaluate(() => __nc.log())).some(l => l[0] === 'DELETE' && !l[1].includes('/backups/')), 'back to local: the file stays on Nextcloud, phone data kept');
-ok(await p.evaluate(() => FKStore.get('sr-points', []).length) === 2, 'back to local: points still on the phone');
+ok(await p.evaluate(() => FKStore.get('sr-points', []).length) === 3, 'back to local: points still on the phone');
 ok(p.errors.length === 0, 'no page errors ' + p.errors.join(' | '));
 await p.context().close();
 

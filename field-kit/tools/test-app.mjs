@@ -220,6 +220,32 @@ async function page(opts, hash = '') {
   ok(m4 && m4.base.file === 'gb-scotland.pmtiles' && m4.date === '2026-11-09', 'maps: joined map is on the phone under its one name');
   await p.evaluate(() => { __bridge.nc['GET /StoicRanger_Maps/maps.json'] = [200, JSON.stringify({ format: 'FK-3', version: 1, maps: [] })]; }); await p.click('#mCheck'); await p.waitForTimeout(60);
   ok((await p.$eval('#mMsg', e => e.textContent)).includes('FK-3'), 'maps: unknown newer format refused with a clear message');
+  // #16 (0.5.0): background downloads through Android's download service (fake: state in __bridge.job)
+  await p.evaluate(() => {
+    __bridge.nc['GET /StoicRanger_Maps/maps.json'] = [200, JSON.stringify({ format: 'FK-2', version: 1, maps: [{ id: 'at-wien', name: 'Austria · Vienna', date: '2026-11-20', bbox: [16.1, 48.1, 16.6, 48.3], base: { file: 'at-wien.pmtiles', bytes: 300e6, sha256: 'w1', parts: [{ file: 'at-wien.pmtiles.001', bytes: 262144000, sha256: 'a' }, { file: 'at-wien.pmtiles.002', bytes: 37856000, sha256: 'b' }] }, terrain: { file: 'at-wien-terrain.pmtiles', bytes: 50e6, sha256: 'w2' } }] })];
+    __bridge.wifi = false;   // on mobile data: the download is queued and waits for Wi-Fi in Android's service
+    FKNative.mapQueue = j => { __bridge.queued = JSON.parse(j); __bridge.job = { state: 'run', id: __bridge.queued.id, meta: __bridge.queued.meta, done: 0, total: 350e6, wait: 'Waiting for Wi-Fi', finished: [] }; return JSON.stringify({ ok: true }); };
+    FKNative.mapJob = () => JSON.stringify(__bridge.job || { state: 'none' });
+    FKNative.mapJobCancel = () => { __bridge.job.state = 'cancelled'; };
+    FKNative.mapJobClear = () => { __bridge.cleared = (__bridge.cleared || 0) + 1; __bridge.job = null; };
+  });
+  await p.click('#mCheck'); await p.waitForTimeout(60);
+  await p.click('[data-mget="at-wien"]'); await p.waitForTimeout(1200);
+  const q = await p.evaluate(() => __bridge.queued);
+  ok(q && q.wifi === true && q.files.length === 2 && q.files[0].pieces.map(x => x.path).join(',') === '/StoicRanger_Maps/at-wien.pmtiles.001,/StoicRanger_Maps/at-wien.pmtiles.002' && q.files[1].pieces[0].path === '/StoicRanger_Maps/at-wien-terrain.pmtiles', 'background download: whole region handed to Android in one job (parts, terrain, Wi-Fi only)');
+  ok((await p.$eval('#mDlTxt', e => e.textContent)).includes('Waiting for Wi-Fi') && (await p.$eval('#mMsg', e => e.textContent)).includes('close the app'), 'background download: progress shows "Waiting for Wi-Fi", note that the app may be closed');
+  await p.evaluate(() => { Object.assign(__bridge.job, { wait: '', done: 175e6 }); }); await p.waitForTimeout(1200);
+  ok((await p.$eval('#mDlTxt', e => e.textContent)).includes('175 MB of 350 MB'), 'background download: progress read from Android every second');
+  // the app was closed while it finished: on the next start / return the map is taken into the phone's list
+  await p.evaluate(() => { Object.assign(__bridge.job, { state: 'done', done: 350e6, finished: [{ key: 'base', name: 'at-wien.pmtiles', bytes: 300e6, sha256: 'w1' }, { key: 'terrain', name: 'at-wien-terrain.pmtiles', bytes: 50e6, sha256: 'w2' }] }); FK.resume(); });
+  await p.waitForTimeout(300);
+  const mw = await p.evaluate(() => FKStore.get('sr-maps', []).find(x => x.id === 'at-wien'));
+  ok(mw && mw.date === '2026-11-20' && mw.base.file === 'at-wien.pmtiles' && mw.terrain.file === 'at-wien-terrain.pmtiles' && await p.evaluate(() => __bridge.cleared === 1 && __bridge.job === null), 'background download finished while away: map taken into the phone list, job cleared');
+  ok((await p.$eval('#mMsg', e => e.textContent)).includes('is on the phone now') && await p.$eval('#mDl', e => e.hidden), 'background download: done message, progress hidden');
+  await p.evaluate(() => { FKNative.mapQueue = j => { __bridge.job = { state: 'run', id: 'x', meta: { id: 'at-wien', name: 'Austria · Vienna' }, done: 1, total: 2, finished: [] }; return '{"ok":true}'; }; const c = FKStore.get('sr-maps-nc'); c.catalog.maps[0].date = '2026-12-01'; FKStore.set('sr-maps-nc', c); __nav3.renderMaps(); });
+  await p.click('[data-mget="at-wien"]'); await p.waitForTimeout(300); await p.click('#mDlStop'); await p.waitForTimeout(300);
+  ok((await p.$eval('#mMsg', e => e.textContent)).includes('Download stopped') && await p.evaluate(() => __bridge.job === null), 'background download: Stop cancels it in Android');
+  await p.evaluate(() => { __bridge.wifi = true; delete FKNative.mapQueue; delete FKNative.mapJob; delete FKNative.mapJobCancel; delete FKNative.mapJobClear; });
   // position from two bearings
   const fx = await p.evaluate(() => { const P = { lat: 47.25, lon: 11.40 }, L1 = { lat: 47.30, lon: 11.38 }, L2 = { lat: 47.27, lon: 11.48 };
     const R = Math.PI / 180, brg = (a, b) => { const y = Math.sin((b.lon - a.lon) * R) * Math.cos(b.lat * R), x = Math.cos(a.lat * R) * Math.sin(b.lat * R) - Math.sin(a.lat * R) * Math.cos(b.lat * R) * Math.cos((b.lon - a.lon) * R); return (Math.atan2(y, x) / R + 360) % 360; };

@@ -23,6 +23,9 @@ Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.5.0 (format 1): no db.json change. A running map download is kept outside db.json (SharedPreferences
+  `fk-mapdl`, with the files in `Android/data/at.stoicranger.fieldkit/files/mapdl/` until they are checked and moved
+  into `files/maps/`). The page uses sessionStorage `fk-place` / `fk-sync-reload` only across a sync reload.
 - 0.4.0 (format 1): no data change. The phone keeps one file per map in `files/maps/`, also when the map is split
   into parts on Nextcloud (format FK-2): the parts are joined while downloading.
 - 0.3.0 (format 1, add-only): new keys `sr-routes` (`[{id, name, wps:[{lat, lon, name}], ticked, file, updated}]`),

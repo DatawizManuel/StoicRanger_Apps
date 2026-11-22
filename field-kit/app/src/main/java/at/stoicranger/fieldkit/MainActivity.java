@@ -656,6 +656,17 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void mapCancel() { mapCancel = true; }
 
+        // ---------- 0.5.0 (#16): downloads in Android's download service, they go on with the app closed ----------
+        /** job = {id, meta, wifi, files:[{key, name, sha256, bytes, pieces:[{path, bytes, sha256}]}]} → {ok, msg} */
+        @JavascriptInterface
+        public String mapQueue(String job) { return MapDl.start(MainActivity.this, job).toString(); }
+        @JavascriptInterface
+        public String mapJob() { return MapDl.state(MainActivity.this); }
+        @JavascriptInterface
+        public void mapJobCancel() { MapDl.cancel(MainActivity.this); }
+        @JavascriptInterface
+        public void mapJobClear() { MapDl.clear(MainActivity.this); }
+
         private void progress(String id, long done, long total, String state, String msg) {
             final String js = "window.FKMapProgress && FKMapProgress(" + JSONObject.quote(id) + "," + done + "," + total + "," + JSONObject.quote(state) + "," + JSONObject.quote(msg) + ")";
             runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
