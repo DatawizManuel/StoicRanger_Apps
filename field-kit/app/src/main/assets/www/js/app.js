@@ -6,7 +6,7 @@
   const store = window.FKStore, N = window.FKNative || null;
   const root = document.documentElement;
   const parse = t => { try { return JSON.parse(t); } catch(e){ return null; } };
-  const TITLES = { home: "SR Field Kit", breathe: "Breathe", nav: "Navigate", cards: "Field cards", shoot: "Shooting helpers", print: "Printables", night: "Night & signal" };
+  const TITLES = { home: "SR Field Kit", breathe: "Breathe", nav: "Navigate", cards: "Field cards", shoot: "Shooting helpers", print: "Printables", night: "Night & signal", vault: "Vault" };
   const settings = Object.assign({ units: "metric", theme: "" }, store.get("settings", {}));
   const saveSettings = () => store.set("settings", settings);
 
@@ -67,7 +67,7 @@
   }
   setUnits(settings.units, false);           // also redraws the table in the chosen units
   if (window.__srRender) window.__srRender();  // linked: Stoic Ranger values win over the saved ones
-  if (window.__ball) window.__ball();
+  if (window.__ballNow) window.__ballNow(); else if (window.__ball) window.__ball();
   // 0.6.0 (#18): while "From my database" fills and locks the load fields, the saved load stays the user's own load
   const LOADF = ["bModel","bBC","bMV","bMass","bSH","bZero"];
   function saveBall(){

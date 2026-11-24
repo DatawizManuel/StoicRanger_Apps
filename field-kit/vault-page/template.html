@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https:; img-src blob: data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Stoic Ranger · Encrypted file</title>
+<!-- SR Field Kit vault decrypt page (0.7.0). One file, no outside scripts, nothing stored, nothing sent except the
+     download of the encrypted file from the sender's Nextcloud. Link: <this page>#<nextcloud host>/<share token>.
+     The part after # never reaches this web server. The password is used only in this browser. -->
+<style>
+:root { --bg: #ffffff; --surface: #ffffff; --raised: #f1f1ec; --fg: #111111; --muted: #4a4a4a; --hair: #c9c9c1; --vt: #1F5150; --accent: #4b5320; --accent-ink: #ffffff; --bad: #9b2c1f; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121512; --surface: #1a1e1a; --raised: #232823; --fg: #dfe2d8; --muted: #9aa194; --hair: #2f3630; --vt: #6FB0AA; --accent: #c9b46a; --accent-ink: #121512; --bad: #e08070; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 "Barlow Semi Condensed", "Segoe UI", system-ui, sans-serif; }
+main { max-width: 34rem; margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; }
+.head { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid var(--vt); padding-bottom: 12px; }
+.head span { width: 48px; height: 48px; flex: none; color: var(--fg); }
+.head span svg { width: 100%; height: 100%; display: block; }
+.head b { font: 700 1.25rem/1.1 "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0; font: 700 1.7rem/1.1 "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing: .03em; text-transform: uppercase; text-wrap: balance; }
+p { margin: 0; }
+.note { color: var(--muted); font-size: .92rem; }
+.card { border: 1px solid var(--hair); border-left: 4px solid var(--vt); background: var(--surface); padding: 12px; display: grid; gap: 4px; }
+.card b { word-break: break-word; }
+label { font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+input[type=text], input[type=password] { width: 100%; font: 600 1rem/1.3 ui-monospace, "JetBrains Mono", monospace; padding: 11px 12px; background: var(--bg); color: var(--fg); border: 1px solid var(--hair); }
+input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--vt); outline-offset: 2px; }
+button, .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 10px 18px; border: 1.5px solid var(--accent); background: var(--accent); color: var(--accent-ink); font: 700 1rem/1 "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-decoration: none; }
+button.ghost, .btn.ghost { background: transparent; color: var(--fg); border-color: var(--hair); }
+button:disabled { opacity: .5; cursor: default; }
+.msg { min-height: 1.4em; font-size: .95rem; }
+.msg.bad { color: var(--bad); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1 1 160px; }
+.drop { border: 1.5px dashed var(--hair); padding: 16px; text-align: center; }
+img.pv { max-width: 100%; border: 1px solid var(--hair); background: #fff; }
+pre.pv { margin: 0; white-space: pre-wrap; word-break: break-word; background: var(--raised); border: 1px solid var(--hair); padding: 12px; font: .85rem/1.5 ui-monospace, monospace; max-height: 60vh; overflow: auto; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="head"><span>__EMBLEM__</span><b>Stoic Ranger<br>Encrypted file</b></div>
+  <section id="sLoad"><p class="note">Loading the encrypted file …</p></section>
+  <section id="sNoLink" hidden>
+    <h1>Open an encrypted file</h1>
+    <p>This page opens files sent with the SR Field Kit vault. Open the link you were sent, or pick the downloaded file below.</p>
+  </section>
+  <section id="sGone" hidden>
+    <h1>This link no longer works</h1>
+    <p>It has expired or the sender cancelled it, and the file was deleted. Ask the sender for a new link.</p>
+  </section>
+  <section id="sManual" hidden>
+    <div class="card"><p id="manualWhy">This page could not load the file directly from the sender's Nextcloud.</p>
+      <p id="dlRow" hidden>1. Download it: <a id="dlLink" href="#" rel="noopener noreferrer" target="_blank">download the encrypted file</a></p>
+      <p id="pickRow">2. Pick the downloaded file here:</p></div>
+    <div class="drop"><input type="file" id="pick" aria-label="Encrypted file"></div>
+  </section>
+  <section id="sPw" hidden>
+    <h1>Someone sent you an encrypted file</h1>
+    <div class="card"><span class="note" id="fileInfo"></span></div>
+    <p>The sender gave you a password another way. Type it here. It is checked in this browser only and never sent anywhere.</p>
+    <div><label for="pw">Password</label><input id="pw" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    <p class="msg" id="msg" aria-live="polite"></p>
+    <button type="button" id="go">Decrypt</button>
+  </section>
+  <section id="sDone" hidden>
+    <h1>File decrypted</h1>
+    <div class="card"><b id="dName"></b><span class="note" id="dSize"></span></div>
+    <div id="dPrev"></div>
+    <div class="row"><a class="btn" id="dSave" href="#" download>Save file</a></div>
+    <p class="note">The decrypted file exists only in this browser until you save it.</p>
+  </section>
+  <p class="note">Works in any current browser on iPhone, Android or PC. No app and no account needed. Encryption: AES-256-GCM, key from the password with PBKDF2-SHA256.</p>
+</main>
+<script>
+'use strict';
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var te = new TextEncoder(), td = new TextDecoder();
+  var show = function (id) { ['sLoad', 'sNoLink', 'sGone', 'sManual', 'sPw', 'sDone'].forEach(function (s) { $(s).hidden = s !== id; }); };
+  var size = function (n) { return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; };
+  var pkg = null, url = null;
+
+  function kdf(pw, salt, iter) {
+    return crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveKey']).then(function (k) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: iter, hash: 'SHA-256' }, k, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    });
+  }
+  function isPkg(u8) { return u8.length > 40 && u8[0] === 83 && u8[1] === 82 && u8[2] === 83 && u8[3] === 49; }   // "SRS1"
+  function unpack(pw, p) {
+    var iter = new DataView(p.buffer, p.byteOffset + 4, 4).getUint32(0), salt = p.subarray(8, 24), box = p.subarray(24);
+    if (iter < 100000 || iter > 10000000) return Promise.reject(new Error('bad file'));
+    return kdf(pw, salt, iter).then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: box.subarray(0, 12) }, k, box.subarray(12)); }).then(function (b) {
+      b = new Uint8Array(b);
+      var hl = new DataView(b.buffer, 0, 4).getUint32(0);
+      return { meta: JSON.parse(td.decode(b.subarray(4, 4 + hl))), bytes: b.subarray(4 + hl) };
+    });
+  }
+
+  // link: #<host[/path]>/<token>
+  var link = null, h = decodeURIComponent((location.hash || '').slice(1));
+  var m = /^([a-z0-9.-]+(?::\d+)?(?:\/[A-Za-z0-9._~-]+)*)\/([A-Za-z0-9]{6,64})$/i.exec(h);
+  if (m) link = { base: 'https://' + m[1], token: m[2] };
+
+  function gotPkg(u8, from) {
+    if (!isPkg(u8)) { manual('This is not a file from the Stoic Ranger vault.'); return; }
+    pkg = u8;
+    $('fileInfo').textContent = 'Encrypted file · ' + size(u8.length) + (from ? ' · ' + from : '');
+    show('sPw'); $('pw').focus();
+  }
+  function manual(why) {
+    if (why) $('manualWhy').textContent = why;
+    if (link) { $('dlLink').href = link.base + '/s/' + link.token + '/download'; $('dlRow').hidden = false; $('pickRow').textContent = '2. Pick the downloaded file here:'; }
+    else { $('dlRow').hidden = true; $('pickRow').textContent = 'Pick the file here:'; }
+    show('sManual');
+  }
+  function fetchBytes(u, opts) {
+    return fetch(u, opts).then(function (r) {
+      if (r.status === 404) { var e = new Error('gone'); e.gone = true; throw e; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (b) { return new Uint8Array(b); });
+  }
+  function load() {
+    if (!link) { manual(''); $('sNoLink').hidden = false; return; }
+    var dav = link.base + '/public.php/dav/files/' + encodeURIComponent(link.token);
+    fetchBytes(dav, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' }).catch(function (e) {
+      if (e.gone) throw e;
+      // older Nextcloud (before 29): the public WebDAV endpoint with the share token as user name
+      return fetchBytes(link.base + '/public.php/webdav/', { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', headers: { Authorization: 'Basic ' + btoa(link.token + ':') } });
+    }).then(function (u8) { gotPkg(u8, ''); }, function (e) {
+      if (e.gone) { show('sGone'); return; }
+      manual('This page could not load the file directly from the sender\'s Nextcloud. You can still open it in two steps.');
+    });
+  }
+  $('pick').onchange = function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    f.arrayBuffer().then(function (b) { gotPkg(new Uint8Array(b), f.name); });
+  };
+  $('pw').onkeydown = function (e) { if (e.key === 'Enter') $('go').click(); };
+  $('go').onclick = function () {
+    var msg = $('msg'), btn = $('go'), pw = $('pw').value.trim();
+    if (!pw) { msg.className = 'msg bad'; msg.textContent = 'Type the password first.'; return; }
+    btn.disabled = true; msg.className = 'msg'; msg.textContent = 'Decrypting …';
+    unpack(pw, pkg).then(function (r) {
+      var meta = r.meta || {}, type = meta.type || 'application/octet-stream', name = String(meta.name || 'file').replace(/[\\/:*?"<>|]+/g, '_');
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(new Blob([r.bytes], { type: type }));
+      $('dName').textContent = name; $('dSize').textContent = size(r.bytes.length);
+      var pv = $('dPrev'); pv.textContent = '';
+      if (/^image\/(png|jpe?g|gif|webp|bmp)$/.test(type)) { var im = document.createElement('img'); im.className = 'pv'; im.alt = name; im.src = url; pv.appendChild(im); }
+      else if (/^text\//.test(type) || /\.(txt|md|csv|json|gpx|xml|log)$/i.test(name)) { var pre = document.createElement('pre'); pre.className = 'pv'; pre.textContent = td.decode(r.bytes.subarray(0, 200000)); pv.appendChild(pre); }
+      $('dSave').href = url; $('dSave').setAttribute('download', name);
+      $('pw').value = ''; btn.disabled = false; msg.textContent = '';
+      show('sDone');
+    }, function () {
+      btn.disabled = false; msg.className = 'msg bad';
+      msg.textContent = 'Wrong password. Check it with the sender: it must match exactly, including the dashes.';
+    });
+  };
+  if (!window.crypto || !crypto.subtle) { $('sLoad').innerHTML = '<p class="msg bad">This page needs a secure (https) address and a current browser.</p>'; return; }
+  load();
+})();
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
   const fmtN = (x,d=0) => isFinite(x) ? (Math.abs(x) < 0.5*Math.pow(10,-d) ? 0 : x).toLocaleString("en",{maximumFractionDigits:d,minimumFractionDigits:d}) : "–";
 
   // ---------- routing ----------
-  const views = ["home","breathe","shoot","nav","cards","print","night"];
+  const views = ["home","breathe","shoot","nav","cards","print","night","vault"];
   let onShow = {};
   function route(){
     let h = (location.hash || "#home").slice(1); if (!views.includes(h)) h = "home"; const v = h;
@@ -191,7 +191,7 @@ window.__solve = solve;
     Object.keys(UC).forEach(id => { writeM(id, keep[id]); $(id).dataset.m = keep[id]; $(id).dataset.shown = $(id).value; }); unitLabels(); ball();
     window.dispatchEvent(new Event("fk-units")); };
   function ball(){
-    const o = { model:$("bModel").value, bc:n("bBC"), mv:readM("bMV"), sh:readM("bSH"), zero:readM("bZero"), wind:readM("bWind"), clock:+$("bClock").value, alt:readM("bAlt"), temp:readM("bTemp"), max:+$("bMax").value*DIST(), step:+$("bStep").value*DIST(), mass:readM("bMass"), imp:IMP() };
+    const o = { model:$("bModel").value, bc:n("bBC"), mv:readM("bMV"), sh:readM("bSH"), zero:readM("bZero"), wind:readM("bWind"), clock:+$("bClock").value, alt:readM("bAlt"), temp:readM("bTemp"), max:Math.min(3000, Math.max(100, +$("bMax").value || 800))*DIST(), step:+$("bStep").value*DIST(), mass:readM("bMass"), imp:IMP() };
     if (!(o.bc>0 && o.mv>0 && o.zero>0)) { $("bTable").innerHTML = ""; lastBall = null; if (window.__afterBall) window.__afterBall(null); return; }
     const res = solve(o), mv = readM("bMove")/3.6, I = o.imp, dR = R => Math.round(R / DIST()), uL = I ? "in" : "cm", cL = x => I ? x / 2.54 : x;
     lastBall = { o, res, load: ($("bPre").value === "own" && window.__srLoad) ? window.__srLoad : $("bPre").selectedOptions[0].textContent };
@@ -218,11 +218,18 @@ window.__solve = solve;
     ["bMV","bMass","bSH","bZero"].forEach(id => { if (+v[id] > 0) writeM(id, +v[id]); delete $(id).dataset.m; }); }
   window.__dwLock = on => { locked = !!on; LOADF.forEach(id => { $(id).disabled = locked; }); $("bPre").closest(".field").hidden = locked;
     document.querySelector('[data-pane="ball"]').classList.toggle("dblocked", locked); };
-  window.__dwOwn = () => { window.__srLoad = null; restoreOwn(); ball(); };
-  $("bPre").addEventListener("change", () => { window.__srLoad = null; if (window.__srClear) window.__srClear(); applyLoad(); ball(); });
-  ["bBC","bMV","bMass","bModel"].forEach(id => $(id).addEventListener("input", () => { if (locked) return; $("bPre").value = "own"; window.__srLoad = null; ball(); }));
-  window.__ball = ball;
-  ["bSH","bZero","bWind","bClock","bAlt","bTemp","bMax","bStep","bMove"].forEach(id => $(id).addEventListener("input", ball));
+  window.__dwOwn = () => { window.__srLoad = null; restoreOwn(); window.__ball(); };
+  $("bPre").addEventListener("change", () => { window.__srLoad = null; if (window.__srClear) window.__srClear(); applyLoad(); window.__ball(); });
+  ["bBC","bMV","bMass","bModel"].forEach(id => $(id).addEventListener("input", () => { if (locked) return; $("bPre").value = "own"; window.__srLoad = null; window.__ball(); }));
+  // 0.7.0 (#21): the table and graph are only calculated when "Update" is tapped (live recalculation felt laggy).
+  // Changing a value only marks the results as out of date; switching units redraws at once (same values).
+  let stale = false;
+  function markStale(){ if (!$("bUpd")) return ball(); stale = true; $("bUpd").classList.add("stale"); $("bUpdMsg").textContent = "Values changed: tap Update to calculate the table and graph."; $("bUpdMsg").classList.add("warn"); }
+  const ball0 = ball;
+  ball = function(){ stale = false; const u = $("bUpd"); if (u){ u.classList.remove("stale"); $("bUpdMsg").textContent = "Table and graph match the values above."; $("bUpdMsg").classList.remove("warn"); } ball0(); };
+  window.__ball = markStale; window.__ballNow = () => ball(); window.__ballFlush = () => { if (stale) ball(); }; window.__ballStale = () => stale;
+  ["bSH","bZero","bWind","bClock","bAlt","bTemp","bMax","bStep","bMove"].forEach(id => $(id).addEventListener("input", markStale));
+  if ($("bUpd")) $("bUpd").addEventListener("click", () => ball());
   applyLoad(); ball();
 
   function conv(){
