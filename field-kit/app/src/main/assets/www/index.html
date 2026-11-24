@@ -120,7 +120,22 @@
       <div class="results" id="bSum"></div>
       <div class="subhead"><h3 class="m0">Come-ups</h3><span class="note">Highlighted: zero distance. <span class="warn">Bronze rows: bullet below 1.2× speed of sound, less predictable.</span></span></div>
       <div class="tablewrap"><table class="data" id="bTable"></table></div>
-      <p class="formula">Same solver as the Stoic Ranger dope cards: point mass, G1 or G7 drag tables, air density from your altitude and temperature. Drop is below the line of sight; dial or hold the MIL value up. Lead is for a target crossing at the speed you set. Tap "Field cards → DOPE card" to see this table as a printable card.</p>
+      <div id="dwGraph" class="dwgraph" hidden>
+        <div class="subhead"><h3 class="m0">Trajectory</h3></div>
+        <div class="traj" id="dwMain"></div>
+        <div class="tlegend"><span><i class="lp"></i>Bullet path</span><span><i class="ll"></i>Line of sight</span><span><i class="lb"></i>Bore line (height over bore)</span><span><i class="lz"></i>Crosses line of sight</span></div>
+        <h4 class="trajh" id="dwZoomT">Close range</h4>
+        <div class="traj" id="dwZoom"></div>
+        <p class="note" id="dwCross"></p>
+      </div>
+      <div id="dwExport" class="dwexport" hidden>
+        <div class="subhead"><h3 class="m0">Export PDF</h3></div>
+        <div class="seg" role="group" aria-label="Paper size" id="dwPaper"><button type="button" data-p="A4" aria-pressed="true">A4</button><button type="button" data-p="A5" aria-pressed="false">A5</button><button type="button" data-p="A6" aria-pressed="false">A6 dope card</button></div>
+        <p class="note" id="dwPaperNote"></p>
+        <div class="row3"><button type="button" class="button" id="dwSave">Save PDF</button><button type="button" class="button ghost" id="dwShare">Share</button><button type="button" class="button ghost" id="dwPrint">Print</button></div>
+        <p class="note" id="dwMsg" aria-live="polite"></p>
+      </div>
+      <p class="formula">Same solver as the Stoic Ranger dope cards: point mass, G1 or G7 drag tables, air density from your altitude and temperature. Drop is below the line of sight; dial or hold the MIL value up. Lead is for a target crossing at the speed you set. Export PDF makes a drop table (A4, A5) or a dope card (A6) with the graph; "Field cards → DOPE card" still shows the table as a field card.</p>
     </div>
 
     <div class="panel" data-pane="conv" hidden>
@@ -342,6 +357,8 @@
 <script src="js/ballistics.js"></script>
 <script src="js/kit.js"></script>
 <script src="js/link.js"></script>
+<script src="js/pdfmin.js"></script>
+<script src="js/dwx.js"></script>
 <script src="js/wsheet.js"></script>
 <script src="js/xlsx.mini.min.js"></script>
 <script src="js/sync.js"></script>

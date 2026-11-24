@@ -7,14 +7,17 @@
      { weapons:[{id,name,caliber,sightHeightMm,zeroM,scopeUnit,clickValue,optic,twist}],
        munitions:[{id,name,caliber,bulletWeightG,bcG1,bcG7,nominalV0}], v0:{"<weaponId>|<munitionId>":{v,n}} }
    or {error:"no-provider"} when the installed Stoic Ranger is older than the link (1.1.0 has none yet).
-   State lives in db.json under "link": {linked, dismissed, w, m}. */
+   State lives in db.json under "link": {linked, dismissed, w, m, mode}.
+   0.6.0 (#18): when linked, a toggle "From my database | Own load". Database: gun + ammunition from SR Shooting,
+   the load fields are locked (no Load list). Own load: presets and every field free; it keeps its own values. */
 'use strict';
 (function(){
   const $ = id => document.getElementById(id);
   const store = window.FKStore, N = window.FKNative || null;
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const parse = t => { try { return JSON.parse(t); } catch(e){ return null; } };
-  let st = Object.assign({ linked: false, dismissed: false, w: null, m: null }, store.get("link", {}));
+  let st = Object.assign({ linked: false, dismissed: false, w: null, m: null, mode: "db" }, store.get("link", {}));
+  let cur = null;   // gun, ammunition and V0 now in use from the database (null in Own load)
   let asking = false, data = null, err = null, sr = { installed: false };
   const save = () => store.set("link", st);
 
@@ -35,6 +38,8 @@
     get data(){ return data; },
     v0Of: (w, m) => v0Of(w, m),
     refresh(){ if (st.linked){ fetchData(); render(); } },
+    /** {w, m, meas, v} while "From my database" fills the table, else null */
+    current: () => cur,
   };
 
   function apply(){
@@ -52,19 +57,27 @@
     if (w.zeroM > 0) __writeM("bZero", w.zeroM);
     ["bMV","bMass","bSH","bZero"].forEach(id => { delete $(id).dataset.m; });
     window.__srLoad = w.name + " · " + m.name;
+    cur = { w, m, meas, v };
     if (window.__ball) window.__ball();
     return { w, m, meas, v, list };
   }
 
   const box = $("srLink");
+  const lock = on => { if (window.__dwLock) window.__dwLock(on); };
+  function setMode(mode){
+    if (mode === st.mode) return;
+    st.mode = mode; save(); cur = null;
+    if (mode === "own"){ lock(false); if (window.__dwOwn) window.__dwOwn(); }
+    render();
+  }
   function render(){
-    status();
+    status(); cur = null;
     $("aboutLink").textContent = st.linked ? "Stoic Ranger (read-only: guns, ammunition, measured V0)" : (sr.installed ? "None (Stoic Ranger " + (sr.version || "") + " is on this phone)" : "None");
     $("setLink").checked = !st.dismissed;
-    if (!sr.installed || (st.dismissed && !st.linked) || store.readOnly && !st.linked){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!sr.installed || (st.dismissed && !st.linked) || store.readOnly && !st.linked){ box.hidden = true; box.innerHTML = ""; lock(false); return; }
     box.hidden = false;
     if (!st.linked){
-      box.className = "srlink off";
+      box.className = "srlink off"; lock(false);
       box.innerHTML = asking
         ? `<b>Link with Stoic Ranger?</b><p>SR Field Kit may then read your guns, ammunition and the muzzle velocities measured on your datasheets. It only reads; it never changes anything in Stoic Ranger. You can unlink any time here or under ⋯ › Settings.</p>
            <div class="row2"><button type="button" class="button" id="lkYes">Allow</button><button type="button" class="button ghost" id="lkNo">Not now</button></div>`
@@ -81,9 +94,15 @@
       return;
     }
     if (!data && !err) fetchData();
-    const head = `<div class="srhead"><span>From Stoic Ranger</span><button type="button" class="lnk" id="lkOff">Unlink</button></div>`;
+    const head = `<div class="srhead"><span>Linked with SR Shooting</span><button type="button" class="lnk" id="lkOff">Unlink</button></div>`;
+    const usable = !err && data.weapons.length;
+    const own = st.mode === "own" && usable;
+    const toggle = usable ? `<div class="seg srmode" role="group" aria-label="Load"><button type="button" data-mode="db" aria-pressed="${!own}">From my database</button><button type="button" data-mode="own" aria-pressed="${own}">Own load</button></div>` : "";
     let body;
-    if (err){
+    if (own){
+      lock(false);
+      body = `<p class="note">Own load: pick a preset or change any field below. It keeps its own values; your guns and ammunition in SR Shooting stay as they are.</p>`;
+    } else if (err){
       body = err === "no-provider"
         ? `<p>Linking is allowed, but Stoic Ranger ${esc(sr.version || "")} on this phone can't share its data yet. It works as soon as Stoic Ranger is updated to a version with linking. Until then, type the values below.</p>`
         : err === "not-permitted"
@@ -93,24 +112,27 @@
       body = `<p>No guns in Stoic Ranger yet. Add a gun and ammunition there, then come back here.</p>`;
     } else {
       const r = apply();
+      lock(!!r.m);
       body = `<div class="form srform">
         <div class="field"><label for="srW">Gun</label><select id="srW">${data.weapons.map(w => `<option value="${esc(w.id)}"${w.id === st.w ? " selected" : ""}>${esc(w.name)}</option>`).join("")}</select></div>
         <div class="field"><label for="srM">Ammunition</label><select id="srM">${r.list.length ? r.list.map(m => `<option value="${esc(m.id)}"${m.id === st.m ? " selected" : ""}>${esc(m.name)}</option>`).join("") : `<option value="">No ammunition in Stoic Ranger</option>`}</select></div>
       </div>` + (r.m ? `<p class="srsrc">${r.v ? "V0 " + esc(FKUnits.imp() ? Math.round(r.v * 3.28084) + " fps" : r.v + " m/s") + " " + (r.meas ? "measured, average of " + r.meas.n + " datasheet" + (r.meas.n === 1 ? "" : "s") : "from the maker") : "No V0 in Stoic Ranger: type it below"} · BC ${r.m.bcG7 > 0 ? "G7 " + r.m.bcG7 + (r.m.bcG1 > 0 ? " (G1 " + r.m.bcG1 + ")" : "") : (r.m.bcG1 > 0 ? "G1 " + r.m.bcG1 : "none: type it below")} · ${esc(r.m.bulletWeightG)} g · sight height ${esc(r.w.sightHeightMm)} mm · zero ${esc(r.w.zeroM)} m</p>
-        <p class="note">Change any field below to try something else; the values in Stoic Ranger stay as they are.</p>` : "");
+        <p class="note srlock">Values from SR Shooting, read only (change them there). To try other values, switch to "Own load".</p>` : `<p class="note">Pick ammunition for this gun in SR Shooting, or switch to "Own load".</p>`);
       save();
     }
     box.className = "srlink on";
-    box.innerHTML = head + body;
+    if (err || !data.weapons.length) lock(false);
+    box.innerHTML = head + toggle + body;
+    box.querySelectorAll("[data-mode]").forEach(b => { b.onclick = () => setMode(b.dataset.mode); });
     if ($("srW")) $("srW").onchange = e => { st.w = e.target.value; st.m = null; save(); render(); };
     if ($("srM")) $("srM").onchange = e => { st.m = e.target.value; save(); render(); };
-    $("lkOff").onclick = () => { st.linked = false; data = null; err = null; save(); window.__srLoad = null; render(); };
+    $("lkOff").onclick = () => { st.linked = false; data = null; err = null; save(); window.__srLoad = null; cur = null; lock(false); if (window.__dwOwn) window.__dwOwn(); render(); };
   }
   window.__srRender = render;
   window.__srClear = () => {};
   $("setLink").addEventListener("change", e => {
     if (e.target.checked) st.dismissed = false;
-    else { st.dismissed = true; st.linked = false; data = null; window.__srLoad = null; }
+    else { st.dismissed = true; st.linked = false; data = null; window.__srLoad = null; cur = null; lock(false); if (window.__dwOwn) window.__dwOwn(); }
     save(); render();
   });
   render();

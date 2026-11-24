@@ -340,6 +340,29 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Prints a PDF the web app made (Drop & wind export, 0.6.0 #19); the user picks printer or "Save as PDF". */
+    private class BytesPdfAdapter extends PrintDocumentAdapter {
+        private final byte[] pdf; private final String name;
+        BytesPdfAdapter(byte[] pdf, String name) { this.pdf = pdf; this.name = name; }
+        @Override
+        public void onLayout(PrintAttributes o, PrintAttributes n, CancellationSignal c, LayoutResultCallback cb, Bundle extras) {
+            if (c.isCanceled()) { cb.onLayoutCancelled(); return; }
+            cb.onLayoutFinished(new PrintDocumentInfo.Builder(name).setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(1).build(), true);
+        }
+        @Override
+        public void onWrite(PageRange[] pages, ParcelFileDescriptor dest, CancellationSignal c, WriteResultCallback cb) {
+            try (OutputStream os = new FileOutputStream(dest.getFileDescriptor())) {
+                os.write(pdf);
+                cb.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});
+            } catch (Exception e) { cb.onWriteFailed(e.getMessage()); }
+        }
+    }
+    private static String pdfName(String name) {
+        String n = name == null ? "SR-drop-table.pdf" : name.replaceAll("[^\\w.\\-]+", "_");
+        if (n.length() > 80) n = n.substring(0, 80);
+        return n.endsWith(".pdf") ? n : n + ".pdf";
+    }
+
     /* ---------- JS bridge ---------- */
     // ---------- signal light (remark #11): the whole Morse / SOS / strobe sequence runs here, on its own thread ----------
     private volatile Thread signalThread;
@@ -791,6 +814,42 @@ public class MainActivity extends Activity {
                     i.putExtra(Intent.EXTRA_STREAM, SharedFileProvider.uriFor(f));
                     i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     startActivity(Intent.createChooser(i, "Share"));
+                } catch (Exception ignored) { }
+            }});
+        }
+
+        /** Share a PDF the web app made (Drop & wind export): mail, Nextcloud, messenger, Files… (0.6.0 #19). */
+        @JavascriptInterface
+        public void sharePdf(final String base64, final String name) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                try {
+                    File dir = new File(getCacheDir(), "shared");
+                    dir.mkdirs();
+                    File f = new File(dir, pdfName(name));
+                    try (FileOutputStream os = new FileOutputStream(f)) { os.write(Base64.decode(base64, Base64.DEFAULT)); }
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("application/pdf");
+                    i.putExtra(Intent.EXTRA_STREAM, SharedFileProvider.uriFor(f));
+                    i.putExtra(Intent.EXTRA_SUBJECT, f.getName());
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, "Share PDF"));
+                } catch (Exception ignored) { }
+            }});
+        }
+
+        /** Print a PDF the web app made, on its paper size (A4, A5 or A6). */
+        @JavascriptInterface
+        public void printPdf(final String base64, final String name, final String paper) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                try {
+                    byte[] pdf = Base64.decode(base64, Base64.DEFAULT);
+                    PrintAttributes.MediaSize ms = "A6".equals(paper) ? PrintAttributes.MediaSize.ISO_A6
+                            : "A5".equals(paper) ? PrintAttributes.MediaSize.ISO_A5 : PrintAttributes.MediaSize.ISO_A4;
+                    PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                    PrintAttributes attrs = new PrintAttributes.Builder().setMediaSize(ms)
+                            .setColorMode(PrintAttributes.COLOR_MODE_COLOR).build();
+                    String job = pdfName(name);
+                    pm.print(job.replace(".pdf", ""), new BytesPdfAdapter(pdf, job), attrs);
                 } catch (Exception ignored) { }
             }});
         }

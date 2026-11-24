@@ -236,3 +236,35 @@ body { display: block; padding: 0; min-height: 0; overflow: hidden; -webkit-tap-
   #printout .wsheet th, #printout .wsheet td { padding: 2px 4px; font-size: 9px; }
   #printout .wsheet p, #printout .wsheet li { font-size: 9.5px; }
 }
+
+/* 0.6.0 Drop & wind: database / own load toggle (#18), trajectory graph (#20), PDF export (#19) */
+.srlink .srmode { margin: 2px 0 0; }
+.srlink .srmode button { font-weight: 600; }
+.srlink .srlock { color: var(--muted); }
+.dblocked .form input:disabled, .dblocked .form select:disabled { opacity: 1; color: var(--fg); background: var(--raised); border-style: dashed; -webkit-text-fill-color: var(--fg); }
+.dwgraph, .dwexport { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.dwgraph[hidden], .dwexport[hidden] { display: none; }
+.traj { border: 1px solid var(--hair); background: var(--surface); padding: 6px 4px 2px; }
+.traj svg { display: block; width: 100%; height: auto; font-family: var(--f-body, system-ui), sans-serif; }
+.traj .tg { stroke: var(--hair); stroke-width: .8; fill: none; }
+.traj .tb { stroke: var(--s-fc); stroke-width: 1.4; stroke-dasharray: 2 3; fill: none; }
+.traj .tl { stroke: var(--fg); stroke-width: 1.3; stroke-dasharray: 6 4; fill: none; }
+.traj .tp { stroke: var(--green); stroke-width: 2.4; fill: none; stroke-linejoin: round; }
+.traj .ts { stroke: var(--bronze); stroke-width: 2; fill: none; }
+.traj .td { fill: var(--green); }
+.traj .tz { fill: none; stroke: var(--bronze); stroke-width: 1.8; }
+.traj text { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.traj .tx, .traj .tt { fill: var(--muted); }
+.traj .tu { fill: var(--muted); font-weight: 600; }
+.traj .tv { fill: var(--fg); font-weight: 700; }
+.traj .tzl { fill: var(--bronze); font-weight: 700; }
+.tlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .8rem; color: var(--muted); }
+.tlegend span { display: inline-flex; align-items: center; gap: 6px; }
+.tlegend i { display: inline-block; width: 22px; height: 0; border-top: 2.4px solid var(--green); }
+.tlegend i.ll { border-top: 1.5px dashed var(--fg); }
+.tlegend i.lb { border-top: 1.5px dotted var(--s-fc); }
+.tlegend i.lz { width: 10px; height: 10px; border: 2px solid var(--bronze); border-radius: 50%; box-sizing: border-box; }
+.trajh { margin: 8px 0 0; font-size: .95rem; }
+.dwexport .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dwexport .row3 .button { min-width: 0; padding-left: 4px; padding-right: 4px; }
+.dwexport .note:empty { display: none; }

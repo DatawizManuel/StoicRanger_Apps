@@ -68,9 +68,12 @@
   setUnits(settings.units, false);           // also redraws the table in the chosen units
   if (window.__srRender) window.__srRender();  // linked: Stoic Ranger values win over the saved ones
   if (window.__ball) window.__ball();
+  // 0.6.0 (#18): while "From my database" fills and locks the load fields, the saved load stays the user's own load
+  const LOADF = ["bModel","bBC","bMV","bMass","bSH","bZero"];
   function saveBall(){
-    const o = { pre: $("bPre").value };
-    BALL.forEach(id => { const e = $(id); o[id] = UNIT.includes(id) ? (e.value === "" ? null : +window.__readM(id).toFixed(4)) : e.value; });
+    const prev = store.get("sr-ball", null) || {}, locked = !!document.querySelector("[data-pane='ball'].dblocked");
+    const o = { pre: locked ? prev.pre : $("bPre").value };
+    BALL.forEach(id => { const e = $(id); o[id] = locked && LOADF.includes(id) ? prev[id] : UNIT.includes(id) ? (e.value === "" ? null : +window.__readM(id).toFixed(4)) : e.value; });
     store.set("sr-ball", o);
   }
   ["input","change"].forEach(ev => $("v-shoot").addEventListener(ev, e => { if (e.target.closest("[data-pane='ball']") && !e.target.closest("#srLink")) saveBall(); }));

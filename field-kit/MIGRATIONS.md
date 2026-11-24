@@ -17,12 +17,17 @@ app version opens read-only and is never written.
 | `sr-pos` | last position `{lat, lon, src, acc, alt, t}` |
 | `sr-points` | saved points `[{name, lat, lon}]` |
 | `settings` | `{units: "metric"|"imp", theme: ""|"light"|"dark"}` |
-| `link` | Stoic Ranger link `{linked, dismissed, w, m}` |
+| `link` | Stoic Ranger link `{linked, dismissed, w, m}`; since 0.6.0 also `mode`: `"db"` (From my database, default) or `"own"` (Own load) |
+| `dw-paper` | since 0.6.0: paper size last used for the Drop & wind PDF, `"A4"`, `"A5"` or `"A6"` |
 
 Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.6.0 (format 1, add-only): `link.mode` and `dw-paper` are new; nothing is converted. `sr-ball` keeps meaning
+  "the Drop & wind inputs"; while "From my database" fills and locks the load fields, their saved part stays the
+  user's own load (only the conditions are saved), so "Own load" comes back with its own values. A db.json from 0.6.0
+  opens fine in 0.5.0 (unknown keys are kept).
 - 0.5.0 (format 1): no db.json change. A running map download is kept outside db.json (SharedPreferences
   `fk-mapdl`, with the files in `Android/data/at.stoicranger.fieldkit/files/mapdl/` until they are checked and moved
   into `files/maps/`). The page uses sessionStorage `fk-place` / `fk-sync-reload` only across a sync reload.

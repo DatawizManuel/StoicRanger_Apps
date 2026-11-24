@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.5.0
+# SR Field Kit (Android) — 0.6.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
@@ -8,6 +8,19 @@ WebView itself stays offline (other web requests are blocked, only the Java side
 
 ## Versions
 
+- **0.6.0** (versionCode 10, 2026-11-24): backlog #18, #19 and #20 (Shooting helpers › Drop & wind), as in the
+  mockup Manuel approved on 2026-11-24.
+  - **From my database | Own load** (#18): when linked with SR Shooting, a toggle at the top. "From my database":
+    pick gun and ammunition; the load values (drag model, BC, V0, bullet, sight height, zero) come from SR Shooting
+    and are locked, and the "Load" list is gone. "Own load": presets and every field free, as before. Own load keeps
+    its own values while the database side is used. Not linked: only Own load. Field Kit still only reads SR data.
+  - **Trajectory graph** (#20) below the table: bullet path out to "Out to", line of sight, bore line (height over
+    bore), every point where the path crosses the line of sight (the zero distance labelled "Zero …", each with
+    "0 cm"), and the drop in cm at every 100 m (every 50 m for tables up to 500 m). Under it a close-range view
+    (0 to about 150 m, height every 25 m, sight height). Light/dark and imperial display follow the settings.
+  - **Export PDF** (#19): pick A4 (full page with all inputs, table, graph and close-range view), A5 (half sheet) or
+    A6 (dope card: corrections in big print, small graph, cut line). Save PDF (choose a folder), Share (mail,
+    Nextcloud, messenger…) or Print on that paper size. The PDF is made on the phone (js/pdfmin.js, no library).
 - **0.5.0** (versionCode 9, 2026-11-22): remarks #16 and #17.
   - **Sub-tabs no longer jump back** (#17): with Nextcloud set up, every sync wrongly reported "new data" (the merged
     copy had its keys in another order than the phone's copy), reloaded the page, and the reload synced again: an

@@ -192,7 +192,7 @@ window.__solve = solve;
     window.dispatchEvent(new Event("fk-units")); };
   function ball(){
     const o = { model:$("bModel").value, bc:n("bBC"), mv:readM("bMV"), sh:readM("bSH"), zero:readM("bZero"), wind:readM("bWind"), clock:+$("bClock").value, alt:readM("bAlt"), temp:readM("bTemp"), max:+$("bMax").value*DIST(), step:+$("bStep").value*DIST(), mass:readM("bMass"), imp:IMP() };
-    if (!(o.bc>0 && o.mv>0 && o.zero>0)) { $("bTable").innerHTML = ""; return; }
+    if (!(o.bc>0 && o.mv>0 && o.zero>0)) { $("bTable").innerHTML = ""; lastBall = null; if (window.__afterBall) window.__afterBall(null); return; }
     const res = solve(o), mv = readM("bMove")/3.6, I = o.imp, dR = R => Math.round(R / DIST()), uL = I ? "in" : "cm", cL = x => I ? x / 2.54 : x;
     lastBall = { o, res, load: ($("bPre").value === "own" && window.__srLoad) ? window.__srLoad : $("bPre").selectedOptions[0].textContent };
     const sos = RB.air({ temp: o.temp, alt: o.alt }).c;
@@ -205,10 +205,22 @@ window.__solve = solve;
     const last = res[res.length-1], muzzleJ = 0.5*o.mass/1000*o.mv*o.mv;
     const trans = res.find(r => r.vms < 1.2*sos);
     const du = I ? " yd" : " m";
+    if (window.__afterBall) window.__afterBall(lastBall);
     $("bSum").innerHTML = cell(I ? fmtN(muzzleJ*0.737562) + " ft·lb" : fmtN(muzzleJ) + " J", "Muzzle energy") + cell(fmtN(-last.dropcm*10/last.R,1), "MIL up at " + dR(last.R) + du) + cell(fmtN(last.drift*10/last.R,1), "MIL wind at " + dR(last.R) + du) + cell(trans ? dR(trans.R) + du : "> " + dR(last.R) + du, "Stays supersonic to");
   }
+  // 0.6.0 (#18): "Own load" keeps its own values (the load part of "sr-ball"; app.js does not overwrite it while
+  // "From my database" fills and locks the load fields from SR Shooting; link.js calls __dwLock / __dwOwn).
+  const LOADF = ["bModel","bBC","bMV","bMass","bSH","bZero"];
+  let locked = false;
+  function restoreOwn(){ const v = store.get("sr-ball", null);
+    if (!v || typeof v !== "object" || !(+v.bBC > 0)) { $("bPre").value = LOADS[0][0]; applyLoad(); $("bSH").value = 4.5; writeM("bZero", 100); return; }
+    $("bPre").value = LOADS.some(l => l[0] === v.pre) ? v.pre : "own"; $("bModel").value = v.bModel === "G7" ? "G7" : "G1"; $("bBC").value = v.bBC;
+    ["bMV","bMass","bSH","bZero"].forEach(id => { if (+v[id] > 0) writeM(id, +v[id]); delete $(id).dataset.m; }); }
+  window.__dwLock = on => { locked = !!on; LOADF.forEach(id => { $(id).disabled = locked; }); $("bPre").closest(".field").hidden = locked;
+    document.querySelector('[data-pane="ball"]').classList.toggle("dblocked", locked); };
+  window.__dwOwn = () => { window.__srLoad = null; restoreOwn(); ball(); };
   $("bPre").addEventListener("change", () => { window.__srLoad = null; if (window.__srClear) window.__srClear(); applyLoad(); ball(); });
-  ["bBC","bMV","bMass","bModel"].forEach(id => $(id).addEventListener("input", () => { $("bPre").value = "own"; window.__srLoad = null; ball(); }));
+  ["bBC","bMV","bMass","bModel"].forEach(id => $(id).addEventListener("input", () => { if (locked) return; $("bPre").value = "own"; window.__srLoad = null; ball(); }));
   window.__ball = ball;
   ["bSH","bZero","bWind","bClock","bAlt","bTemp","bMax","bStep","bMove"].forEach(id => $(id).addEventListener("input", ball));
   applyLoad(); ball();

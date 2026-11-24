@@ -29,7 +29,9 @@ const BRIDGE = ({ db, installed, srJson }) => {
     keepScreenOn: () => {}, hasLocation: () => false, openAppSettings: () => {},
     srStatus: () => JSON.stringify({ installed, version: installed ? '1.2.0' : undefined }),
     srCall: () => srJson, print: (h, j) => state.printed.push(j), printAsset: (p, j) => state.assets.push(['print', p]), shareAsset: (p) => state.assets.push(['share', p]),
-    saveFile: (name, mime, b64, cb) => { state.files.push({ name, text: decodeURIComponent(escape(atob(b64))) }); setTimeout(() => FKNativeCallback(cb, { ok: true, msg: name }), 5); },
+    saveFile: (name, mime, b64, cb) => { let text; try { text = decodeURIComponent(escape(atob(b64))); } catch (e) { text = atob(b64); } state.files.push({ name, mime, text }); setTimeout(() => FKNativeCallback(cb, { ok: true, msg: name }), 5); },
+    // 0.6.0: Drop & wind PDF export (#19)
+    sharePdf: (b64, name) => state.pdfs.push(['share', name, atob(b64)]), printPdf: (b64, name, paper) => state.pdfs.push(['print', name, atob(b64), paper]),
     // 0.3.0: Nextcloud (fake server in state.nc), maps, file picker, sensors, flashlight
     syncGet: () => JSON.stringify({ mode: 'nextcloud', url: 'https://cloud.example.com', user: 'u', folder: '/Stoic Ranger/', hasPassword: true }), syncSet: () => true,
     ncRequest: (m, path, b64, ifm, depth, cb) => { state.calls.push(m + ' ' + path); const f = state.nc[m + ' ' + path]; const res = f ? { status: f[0], body: btoa(unescape(encodeURIComponent(f[1] || ''))) } : { status: m === 'MKCOL' ? 405 : m === 'PUT' ? 201 : 404, body: '' }; if (m === 'PUT') state.nc['GET ' + path] = [200, decodeURIComponent(escape(atob(b64)))]; setTimeout(() => FKNativeCallback(cb, res), 5); },
@@ -44,7 +46,7 @@ const BRIDGE = ({ db, installed, srJson }) => {
     signalStop: () => { state.signalStops++; state.torch.push(false); },
     mapDownloadParts: (folder, name, parts, sha, size, id) => { state.calls.push('DLP ' + folder + ' ' + name + ' ' + JSON.parse(parts).map(p => p.file).join(',')); setTimeout(() => FKMapProgress(id, size / 2, size, 'run', ''), 5); setTimeout(() => { state.maps = state.maps.filter(f => f.name !== name).concat([{ name, bytes: size }]); FKMapProgress(id, 0, 0, 'done', ''); }, 15); },
   };
-  Object.assign(state, { files: [], calls: [], nc: {}, maps: [], wifi: true, pick: { ok: false, msg: 'cancelled' }, sensors: { hasPressure: true, hasTemp: false, pressure: 950 }, torch: [], bright: [], signals: [], signalStops: 0 });
+  Object.assign(state, { pdfs: [], files: [], calls: [], nc: {}, maps: [], wifi: true, pick: { ok: false, msg: 'cancelled' }, sensors: { hasPressure: true, hasTemp: false, pressure: 950 }, torch: [], bright: [], signals: [], signalStops: 0 });
 };
 const SR = JSON.stringify({ weapons: [{ id: 'W1', name: 'Test rifle', caliber: '6.5 Creedmoor', sightHeightMm: 52, zeroM: 100, scopeUnit: 'mrad', clickValue: 0.1 }],
   munitions: [{ id: 'M1', name: 'Test 140', caliber: '6.5 Creedmoor', bulletWeightG: 9.07, bcG1: 0.646, bcG7: 0.326, nominalV0: 823 }], v0: { 'W1|M1': { v: 820, n: 6 } } });
@@ -124,6 +126,51 @@ async function page(opts, hash = '') {
 {
   const p = await page({ db: JSON.stringify({ app: 'sr-field-kit', format: 1, data: { link: { linked: true } } }), installed: true, srJson: '{"error":"no-provider"}' }, '#shoot');
   ok(await p.$eval('#srLink', e => e.textContent.includes("can't share its data yet")), 'older Stoic Ranger: clear message');
+  await p.context().close();
+}
+// 2b. 0.6.0: database / own load toggle (#18), trajectory graph (#20), PDF export (#19)
+{
+  const p = await page({ db: JSON.stringify({ app: 'sr-field-kit', format: 1, data: { link: { linked: true } } }), installed: true, srJson: SR }, '#shoot');
+  ok(await p.$$eval('#srLink [data-mode]', b => b.map(x => x.textContent + ':' + x.getAttribute('aria-pressed')).join()) === 'From my database:true,Own load:false', '#18 toggle shown, database first');
+  ok(await p.$eval('#bPre', e => e.closest('.field').hidden) && await p.$eval('#bBC', e => e.disabled) && await p.$eval('#bMV', e => e.disabled && e.value === '820'), '#18 database: no Load list, values locked (V0 820 from SR)');
+  ok(!(await p.$eval('#dwGraph', e => e.hidden)), '#20 graph shown below the table');
+  const zl = await p.$$eval('#dwMain .tzl', t => t.map(x => x.textContent));
+  ok(zl.some(t => /^Zero 100 m · 0 cm$/.test(t)) && zl.length === 2, '#20 both crossings marked, zero labelled: ' + zl.join(' / '));
+  const dots = await p.$$eval('#dwMain .tv', t => t.map(x => x.textContent));
+  ok(dots.length === 7 && dots.every(t => /^-\d+$/.test(t)), '#20 drop value at every 100 m dot (200-800 m): ' + dots.join(' '));
+  ok(await p.$$eval('#dwZoom .tv', t => t.length) >= 4 && await p.$eval('#dwZoom', e => e.textContent.includes('Sight height 5.2 cm')), '#20 close range: height every 25 m and sight height');
+  // own load keeps its own values
+  await p.click('[data-mode="own"]'); await p.waitForTimeout(50);
+  ok(!(await p.$eval('#bPre', e => e.closest('.field').hidden)) && !(await p.$eval('#bBC', e => e.disabled)), '#18 own load: presets and fields free');
+  await p.fill('#bBC', '0.222'); await p.dispatchEvent('#bBC', 'input');
+  await p.click('[data-mode="db"]'); await p.waitForTimeout(50);
+  ok(await p.$eval('#bBC', e => e.value) === '0.326' && await p.$eval('#bBC', e => e.disabled), '#18 back to database: SR values again');
+  await p.click('[data-mode="own"]'); await p.waitForTimeout(50);
+  ok(await p.$eval('#bBC', e => e.value) === '0.222', '#18 own load remembered its own BC');
+  await p.click('[data-mode="db"]'); await p.waitForTimeout(50);
+  // PDF export
+  for (const s of ['A4', 'A5', 'A6']) {
+    const t = await p.evaluate(s => { const u = __dwPdf(s); return String.fromCharCode.apply(null, u.subarray(0, 400)) + '|' + String.fromCharCode.apply(null, u.subarray(u.length - 40)) + '|' + u.length; }, s);
+    const box = { A4: '595.28 841.89', A5: '419.53 595.28', A6: '297.64 419.53' }[s];
+    ok(t.startsWith('%PDF-1.4') && t.includes('/MediaBox [0 0 ' + box + ']') && t.includes('%%EOF'), '#19 PDF ' + s + ' (' + t.split('|')[2] + ' bytes)');
+  }
+  const a6 = await p.evaluate(() => { const u = __dwPdf('A6'); let s = ''; for (const c of u) s += String.fromCharCode(c); return s; });
+  ok(a6.includes('(DOPE CARD)') && a6.includes('(Zero 100 m \\267 0 cm)') && a6.includes('(Tikka') === false && a6.includes('(Test rifle \\267 Test 140)'), '#19 A6 dope card has title and crossings');
+  await p.click('#dwPaper [data-p="A6"]'); await p.click('#dwSave'); await p.waitForTimeout(50);
+  const f = await p.evaluate(() => __bridge.files.slice(-1)[0]);
+  ok(f && f.mime === 'application/pdf' && /^SR-dope-card-A6-Test-rifle-Test-140-\d{4}-\d\d-\d\d\.pdf$/.test(f.name) && f.text.startsWith('%PDF'), '#19 Save PDF: ' + (f && f.name));
+  ok(await p.$eval('#dwMsg', e => e.textContent.startsWith('Saved')), '#19 save confirmed');
+  await p.click('#dwShare'); await p.click('#dwPaper [data-p="A5"]'); await p.click('#dwPrint');
+  const pd = await p.evaluate(() => __bridge.pdfs.map(x => x[0] + ':' + x[1].slice(0, 22) + ':' + (x[3] || '') + ':' + x[2].slice(0, 5)));
+  ok(pd.length === 2 && pd[0].startsWith('share:SR-dope-card-A6-') && pd[0].endsWith('::%PDF-') && pd[1].startsWith('print:SR-drop-table-A5-') && pd[1].endsWith(':A5:%PDF-'), '#19 share and print on the chosen paper: ' + pd.join(' '));
+  ok(JSON.parse(await p.evaluate(() => __bridge.db)).data['dw-paper'] === 'A5' || await p.evaluate(() => FKStore.get('dw-paper')) === 'A5', '#19 paper size remembered');
+  await p.evaluate(() => __setUnits(true)); await p.waitForTimeout(50);
+  const imp = await p.$$eval('#dwMain .tzl, #dwMain .tx', t => t.map(x => x.textContent).join('|'));
+  ok(/yd · 0 in/.test(imp) && /\d+ yd/.test(imp) && (await p.evaluate(() => __dwPdf('A4').length)) > 1000, '#20/#19 imperial display: yd and in');
+  await p.evaluate(() => __setUnits(false)); await p.waitForTimeout(50);
+  await p.click('#lkOff'); await p.waitForTimeout(50);
+  ok(!(await p.$('#srLink [data-mode]')) && !(await p.$eval('#bBC', e => e.disabled)) && await p.$eval('#bBC', e => e.value) === '0.222', '#18 not linked: no toggle, own load');
+  ok(p.errors.length === 0, 'no console errors ' + p.errors.join(' | '));
   await p.context().close();
 }
 // 3. data safety
