@@ -59,7 +59,7 @@
     for (let u = 0; u <= maxU + 1e-6; u += xs) { G.grid.push([sx(u), Tp, sx(u), Tp + PH]); G.xt.push({ x: sx(u), y: Tp + PH + fs * 1.25, t: String(u) }); }
     for (let v = Math.ceil(lo / ys) * ys; v <= hi; v += ys) { G.grid.push([L, sy(v), L + PW, sy(v)]); G.yt.push({ x: L - fs * 0.4, y: sy(v) + fs * 0.35, t: String(+v.toFixed(1)) }); }
     G.unitY = { x: 2, y: Tp - fs * 0.6, t: T.cu };
-    const lx = G.xt[G.xt.length - 1]; if (lx) { lx.t += ' ' + T.du; lx.end = true; lx.x = Math.min(lx.x + fs * 0.9, W - 1); }
+    G.unitX = { x: W - 1, y: Tp - fs * 0.6, t: T.du, end: true };
     G.path = use.map(p => [sx(p.u), sy(cv(p.rel))]);
     const b0 = use[0], b1 = use[use.length - 1];
     G.bore = [[sx(b0.u), sy(cv(b0.bore))], [sx(b1.u), sy(cv(b1.bore))]];
@@ -71,6 +71,7 @@
     T.cross.filter(c => c.u <= maxU + 1e-6).forEach((c, k) => G.zs.push({ x: sx(c.u), y: sy(0), ly: sy(0) - fs * 0.9 - (k % 2) * fs * 1.25,
       t: (c.zero ? 'Zero ' : '') + Math.round(c.u) + ' ' + T.du + ' · 0 ' + T.cu }));
     G.zs.forEach(z => { const half = z.t.length * fs * 0.27; if (z.x - half < 2) z.start = true; });
+    G.dots.forEach(d => { const half = d.t.length * fs * 0.3; if (d.x + half > W - 1) { d.end = true; d.lx = W - 1; } });
     if (zoom) { G.sh = [[sx(0), sy(0)], [sx(0), sy(cv(b0.bore))]]; G.shT = { x: sx(0) + fs * 0.4, y: sy(cv(b0.bore)) + fs * 1.3, t: 'Sight height ' + fx(cv(-b0.bore), T.I ? 1 : 1) + ' ' + T.cu }; }
     return G;
   }
@@ -83,8 +84,8 @@
       `<path class="tg" d="${G.grid.map(g => 'M' + g[0].toFixed(1) + ' ' + g[1].toFixed(1) + 'L' + g[2].toFixed(1) + ' ' + g[3].toFixed(1)).join('')}"/>` +
       `<path class="tb" d="${P(G.bore)}"/><path class="tl" d="${P(G.los)}"/><path class="tp" d="${P(G.path)}"/>` +
       (G.sh ? `<path class="ts" d="${P(G.sh)}"/>` + txt(G.shT, 'tt') : '') +
-      G.xt.map(t => txt(t, 'tx', t.end ? 'end' : 'middle')).join('') + G.yt.map(t => txt(t, 'tx', 'end')).join('') + txt(G.unitY, 'tu') +
-      G.dots.map(d => `<circle class="td" cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${(G.fs * 0.3).toFixed(1)}"/>` + txt({ x: d.x, y: d.ly, t: d.t }, 'tv', 'middle')).join('') +
+      G.xt.map(t => txt(t, 'tx', t.end ? 'end' : 'middle')).join('') + G.yt.map(t => txt(t, 'tx', 'end')).join('') + txt(G.unitY, 'tu') + txt(G.unitX, 'tu', 'end') +
+      G.dots.map(d => `<circle class="td" cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="${(G.fs * 0.3).toFixed(1)}"/>` + txt({ x: d.end ? d.lx : d.x, y: d.ly, t: d.t }, 'tv', d.end ? 'end' : 'middle')).join('') +
       G.zs.map(z => `<circle class="tz" cx="${z.x.toFixed(1)}" cy="${z.y.toFixed(1)}" r="${(G.fs * 0.48).toFixed(1)}"/>` + txt({ x: z.start ? 2 : z.x, y: z.ly, t: z.t }, 'tzl', z.start ? 'start' : 'middle')).join('') +
       `</svg>`;
   }
@@ -102,9 +103,9 @@
     try { T = trajectory(b); } catch (e) { box.hidden = true; return; }
     box.hidden = false; $('dwExport').hidden = false;
     const zm = zoomMax(T);
-    $('dwMain').innerHTML = svg(geom(T, T.maxU, 340, 236, { l: 38, r: 10, t: 16, b: 22 }, false, 10), 'Trajectory: bullet path, line of sight, bore line, crossings and drop');
+    $('dwMain').innerHTML = svg(geom(T, T.maxU, 340, 236, { l: 38, r: 16, t: 16, b: 22 }, false, 10), 'Trajectory: bullet path, line of sight, bore line, crossings and drop');
     $('dwZoomT').textContent = `Close range, 0 to ${zm} ${T.du} (height over bore)`;
-    $('dwZoom').innerHTML = svg(geom(T, zm, 340, 170, { l: 38, r: 10, t: 16, b: 22 }, true, 10), 'Close range: sight height, bore line and the crossings');
+    $('dwZoom').innerHTML = svg(geom(T, zm, 340, 170, { l: 38, r: 16, t: 16, b: 22 }, true, 10), 'Close range: sight height, bore line and the crossings');
     $('dwCross').textContent = crossText(T, b.o);
   }
   window.__afterBall = draw;
@@ -153,7 +154,8 @@
     G.xt.forEach(t => doc.text(ox + t.x, oy + t.y, t.t, { size: fs, color: COL.mute, align: t.end ? 'right' : 'center' }));
     G.yt.forEach(t => doc.text(ox + t.x, oy + t.y, t.t, { size: fs, color: COL.mute, align: 'right' }));
     doc.text(ox + G.unitY.x, oy + G.unitY.y, G.unitY.t, { size: fs, bold: true, color: COL.mute });
-    G.dots.forEach(d => { doc.circle(ox + d.x, oy + d.y, fs * 0.28, { fill: COL.path }); doc.text(ox + d.x, oy + d.ly, d.t, { size: fs, bold: true, align: 'center', halo: true }); });
+    doc.text(ox + G.unitX.x, oy + G.unitX.y, G.unitX.t, { size: fs, bold: true, color: COL.mute, align: 'right' });
+    G.dots.forEach(d => { doc.circle(ox + d.x, oy + d.y, fs * 0.28, { fill: COL.path }); doc.text(ox + (d.end ? d.lx : d.x), oy + d.ly, d.t, { size: fs, bold: true, align: d.end ? 'right' : 'center', halo: true }); });
     G.zs.forEach(z => { doc.circle(ox + z.x, oy + z.y, fs * 0.45, { stroke: COL.cross, w: 1.2 }); doc.text(ox + (z.start ? 2 : z.x), oy + z.ly, z.t, { size: fs, bold: true, color: COL.cross, align: z.start ? 'left' : 'center', halo: true }); });
   }
   function legend(doc, x, y, fs, maxW) {
