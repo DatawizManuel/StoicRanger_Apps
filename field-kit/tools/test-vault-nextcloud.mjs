@@ -90,10 +90,16 @@ console.log('   share:', JSON.stringify({ t: shares[0] && shares[0].share_type, 
 ok(shares.length === 1 && +shares[0].share_type === 3 && /\d{4}-\d\d-\d\d/.test(shares[0].expiration || '') && (+shares[0].permissions & 1) === 1 && !(+shares[0].permissions & 2), 'Nextcloud has one public read-only link with expiry ' + (shares[0] && shares[0].expiration));
 
 // receiver: decrypt page on the website, Nextcloud as https://cloud.test
-const page = await readFile(join(R, 'vault-page/index.html'));
+const VP = join(R, 'vault-page/vault');
+const serveVault = async r => {   // the website folder /vault/: index.html, vault.css, vault.js
+  const f = new URL(r.request().url()).pathname.split('/').pop() || 'index.html';
+  const type = { 'index.html': 'text/html', 'vault.css': 'text/css', 'vault.js': 'text/javascript' }[f];
+  if (!type) return r.fulfill({ status: 404, body: '' });
+  await r.fulfill({ status: 200, contentType: type, body: await readFile(join(VP, f)) });
+};
 const rctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const seen = [];
-await rctx.route('https://stoic-ranger.com/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: page }));
+await rctx.route('https://stoic-ranger.com/**', serveVault);
 await rctx.route('https://cloud.test/**', async r => {
   const q = r.request(), u = new URL(q.url());
   const h = Object.assign({}, q.headers()); delete h.host;
@@ -115,7 +121,7 @@ ok((await rp.getAttribute('#dSave', 'download')) === 'Range card.txt', 'Save fil
 
 // another website is not allowed
 const other = await rctx.newPage();
-await rctx.route('https://evil.example/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: page }));
+await rctx.route('https://evil.example/**', serveVault);
 seen.length = 0; await other.goto(link.replace('https://stoic-ranger.com/vault/', 'https://evil.example/x/'));
 await other.waitForSelector('#sManual:not([hidden]), #sPw:not([hidden])', { timeout: 20000 });
 const g2 = seen.find(s => s[0] === 'GET' && /public\.php\/dav/.test(s[1]));

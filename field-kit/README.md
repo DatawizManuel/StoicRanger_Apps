@@ -21,7 +21,7 @@ WebView itself stays offline (other web requests are blocked, only the Java side
     `vault/shared/`, a Nextcloud public link (read only) that expires after 1, 7 or 30 days. "Share link" and "Share
     password" open the phone's share menu separately (send them different ways, e.g. email and Signal). Cancel link
     deletes link and copy; expired copies are deleted at the next unlock. The link opens the decrypt page
-    (`vault-page/index.html`, for stoic-ranger.com/vault/) with `#<nextcloud host>/<token>`; the receiver needs no app
+    (folder `vault-page/vault/`: index.html, vault.css, vault.js, .htaccess, for stoic-ranger.com/vault/; website design) with `#<nextcloud host>/<token>`; the receiver needs no app
     and no account. One click needs the Nextcloud app WebAppPassword with stoic-ranger.com allowed (tested on Nextcloud
     35); without it the page offers download + pick.
   - Crypto: WebCrypto in the page, AES-256-GCM, PBKDF2-SHA256 600,000 rounds; formats in js/vault.js. Vault.java only
