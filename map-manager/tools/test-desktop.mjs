@@ -1,0 +1,31 @@
+/* Starts the real Map Manager (Electron, Linux build of the same code) and checks it opens, reads its state through
+   the bridge, saves settings and shows the Routes screen. Usage: xvfb-run -a node tools/test-desktop.mjs */
+import { createRequire } from 'module'; import fs from 'fs'; import os from 'os'; import path from 'path';
+const require = createRequire(import.meta.url);
+const { _electron } = require('playwright');
+const here = path.dirname(new URL(import.meta.url).pathname), app = path.join(here, '..');
+const exe = process.env.ELECTRON || '/home/user/tools/winapp/node_modules/electron/dist/electron';
+let fails = 0; const ok = (c, m) => { console.log((c ? 'ok  ' : 'FAIL') + ' ' + m); if (!c) fails++; };
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mmhome-'));
+fs.mkdirSync(path.join(home, 'Nextcloud', 'StoicRanger_Maps'), { recursive: true });
+const el = await _electron.launch({ executablePath: exe, args: [app, '--no-sandbox'], env: { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config') } });
+const win = await el.firstWindow(); const errors = [];
+win.on('pageerror', e => errors.push(e.message)); win.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+await win.waitForSelector('#mapRows tr', { timeout: 20000 });
+ok((await win.title()) === 'Stoic Ranger Map Manager', 'window opens');
+const st = await win.evaluate(() => mm.state());
+ok(st.ok && st.v.folder.folder.endsWith(path.join('Nextcloud', 'StoicRanger_Maps')) && st.v.folder.exists, 'finds the Nextcloud maps folder by itself: ' + (st.v && st.v.folder.folder));
+ok(st.v.regions.length > 20 && st.v.catalog.maps.length === 0, 'regions offered, no maps yet');
+await win.click('nav a[data-tab=settings]'); await win.fill('#sDecl', '4.5'); await win.click('#saveS'); await win.waitForTimeout(500);
+const cfg = JSON.parse(fs.readFileSync(path.join(home, '.config', 'Stoic Ranger Map Manager', 'config.json'), 'utf8'));
+ok(cfg.decl === 4.5, 'settings saved to the config file');
+await win.click('nav a[data-tab=routes]'); await win.waitForTimeout(2500);
+ok(await win.isVisible('#noMap'), 'Routes: says to download a region first');
+const saved = await win.evaluate(() => mm.saveRoute('Bridge test', '<gpx version="1.1"><rte><rtept lat="47.1" lon="11.1"/><rtept lat="47.2" lon="11.2"/></rte></gpx>', null));
+ok(saved.ok && fs.existsSync(path.join(home, 'Nextcloud', 'StoicRanger_Maps', 'Routes', 'Bridge test.gpx')), 'a route is written to the Routes folder');
+const bad = await win.evaluate(() => mm.mapRead('../../etc/passwd', 0, 10).then(() => 'read', e => e.message));
+ok(bad === 'bad file', 'map reads are limited to .pmtiles files in the maps folder');
+const real = errors.filter(e => !/Failed to load resource|AbortError|Electron Security Warning/.test(e));
+ok(real.length === 0, 'no script errors' + (real.length ? ': ' + real.slice(0, 3).join(' | ') : ''));
+await el.close(); fs.rmSync(home, { recursive: true, force: true });
+console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

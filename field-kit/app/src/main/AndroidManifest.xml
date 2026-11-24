@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Package id, versions and SDK levels are set in app/build.gradle (and by tools/build-debug.sh).
+     Internet only for the user's own Nextcloud (0.2.0 sync, 0.3.0 map and route downloads; off until set up): every
+     tool works offline, and nothing leaves the phone unless the user sets up their Nextcloud. Network state: for
+     "download maps on Wi-Fi only". Since 0.5.0 map files are fetched by Android's download service (no extra
+     permission), so a download keeps running with the app closed or the phone in standby. The flashlight (signal light) needs no camera permission.
+     Location only when the user taps "Use my position". The Stoic Ranger signature permission is declared in every
+     Stoic Ranger app (same signing key), so the install order does not matter; Field Kit uses it to read guns and
+     ammunition from Stoic Ranger, read-only and only after the user allowed it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <permission android:name="at.stoicranger.permission.LINK" android:protectionLevel="signature"
+        android:label="Link Stoic Ranger apps" />
+    <uses-permission android:name="at.stoicranger.permission.LINK" />
+
+    <!-- Android 11+: see whether Stoic Ranger is installed (for the link box in Drop & wind) -->
+    <queries>
+        <package android:name="at.rangebook.app" />
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 0.5.0 (#16): map downloads run in Android's download service; when one is complete, check and store it -->
+        <receiver android:name=".MapDl$Done" android:exported="true"
+            android:permission="android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".SharedFileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- Link between Stoic Ranger apps: storage setting (SHARED-DB-CONTRACT C); same signing key only -->
+        <provider
+            android:name=".LinkProvider"
+            android:authorities="${applicationId}.link"
+            android:exported="true"
+            android:readPermission="at.stoicranger.permission.LINK"
+            android:writePermission="at.stoicranger.permission.LINK" />
+    </application>
+</manifest>
