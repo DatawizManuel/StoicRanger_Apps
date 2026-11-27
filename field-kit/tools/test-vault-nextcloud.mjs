@@ -1,4 +1,4 @@
-// SR Field Kit 0.7.0: vault end to end against a real Nextcloud (needs Docker; see tools/test-vault-nextcloud.sh).
+// SR Field Kit 0.8.0: vault end to end against a real Nextcloud (needs Docker; see tools/test-vault-nextcloud.sh).
 //   NC=http://localhost:8080 NC_USER=admin NC_PASS=… node field-kit/tools/test-vault-nextcloud.mjs
 // The app page (real js/vault.js) talks to Nextcloud through a bridge that does what Vault.java does (WebDAV + share
 // API). Then a second browser opens the decrypt page as https://stoic-ranger.com/vault/ and loads the shared file
@@ -20,11 +20,13 @@ let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); 
 const dav = p => NC + '/remote.php/dav/files/' + USER + p.split('/').map(encodeURIComponent).join('/');
 
 // what Vault.java / NcClient do, over plain HTTP to the test container
-async function ncCall(kind, method, path, b64, ifMatch, form) {
+async function ncCall(kind, method, path, b64, ifMatch, form, extra) {
   try {
     let url, headers = { Authorization: AUTH, 'OCS-APIRequest': 'true' }, body;
     if (kind === 'share') { url = NC + '/ocs/v2.php/apps/files_sharing/api/v1/shares' + path + '?format=json'; headers.Accept = 'application/json'; if (method === 'POST') { headers['Content-Type'] = 'application/x-www-form-urlencoded'; body = form; } }
-    else { url = dav(path); if (b64 != null && method === 'PUT') body = Buffer.from(b64, 'base64'); if (ifMatch === '*new*') headers['If-None-Match'] = '*'; else if (ifMatch) headers['If-Match'] = ifMatch; }
+    else { url = dav(path); if (b64 != null && (method === 'PUT' || method === 'PROPFIND')) body = Buffer.from(b64, 'base64'); if (ifMatch === '*new*') headers['If-None-Match'] = '*'; else if (ifMatch) headers['If-Match'] = ifMatch; }
+    if (extra && extra.depth) headers.Depth = extra.depth;
+    if (extra && extra.to) { headers.Destination = dav(extra.to); headers.Overwrite = 'F'; }
     const r = await fetch(url, { method, headers, body });
     const buf = Buffer.from(await r.arrayBuffer());
     return { status: r.status, etag: r.headers.get('etag') || r.headers.get('oc-etag') || '', b64: buf.toString('base64'), text: buf.toString('utf8') };
@@ -40,7 +42,8 @@ const BRIDGE = () => {
     isNight: () => false, appInfo: () => JSON.stringify({ version: '0.7.0', code: 11 }), keepScreenOn: () => {}, hasLocation: () => false,
     srStatus: () => JSON.stringify({ installed: false }), srCall: () => '{}',
     syncGet: () => JSON.stringify({ mode: 'local', url: 'https://cloud.test', user: 'admin', folder: '/Stoic Ranger/', hasPassword: true }), syncSet: () => true,
-    ncRequest: (m, path, body, ifm, depth, id) => { window.ncCall('dav', m, path, null, '', '').then(r => cb(id, { status: r.status })); },
+    ncRequest: (m, path, body, ifm, depth, id) => { window.ncCall('dav', m, path, body || null, ifm || '', '', { depth }).then(r => cb(id, { status: r.status, body: r.b64 })); },
+    vaultMove: (from, to, id) => { window.ncCall('dav', 'MOVE', from, null, '', '', { to }).then(r => cb(id, { status: r.status, error: r.error })); },
     vaultBlobSize: () => st.blob.length, vaultBlobRead: (o, l) => b64(st.blob.subarray(o, o + l)),
     vaultBlobStart: () => { st.building = []; }, vaultBlobAppend: s => { st.building.push(unb64(s)); return true; },
     vaultBlobEnd: () => { const n = st.building.reduce((a, x) => a + x.length, 0), o = new Uint8Array(n); let p = 0; st.building.forEach(x => { o.set(x, p); p += x.length; }); st.blob = o; return n; },
@@ -54,6 +57,7 @@ const BRIDGE = () => {
 
 // start clean: no vault folder, no links
 await fetch(dav('/Stoic Ranger/vault/'), { method: 'DELETE', headers: { Authorization: AUTH } });
+await fetch(dav('/Private Test/'), { method: 'DELETE', headers: { Authorization: AUTH } });
 for (const sh of (JSON.parse((await ncCall('share', 'GET', '', null, '', '')).text).ocs.data || [])) await ncCall('share', 'DELETE', '/' + sh.id, null, '', '');
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 400, height: 860 } });
@@ -119,6 +123,20 @@ await rp.fill('#pw', SPW); await rp.click('#go'); await rp.waitForSelector('#sDo
 ok((await rp.textContent('#dName')) === 'Range card.txt' && (await rp.textContent('#dPrev pre')) === SECRET, 'right password: file name and content decrypted in the browser');
 ok((await rp.getAttribute('#dSave', 'download')) === 'Range card.txt', 'Save file offers the original name');
 
+// 0.8.0 #26: move the vault to another folder; the link already sent keeps working
+await p.click('#vtDone'); await p.click('#vtSet'); await W('#vtFolderC'); await p.click('#vtFolderC'); await W('#vtFIn');
+await p.fill('#vtFIn', '/Private Test/My Vault/'); await p.click('#vtFGo'); await W('#vtFMove');
+await p.click('#vtFMove'); await p.waitForFunction(() => !document.querySelector('#vtFIn'), null, { timeout: 30000 });
+const nk = await ncCall('dav', 'GET', '/Private Test/My Vault/keys.json'), ok2 = await ncCall('dav', 'GET', '/Stoic Ranger/vault/keys.json'), note = await ncCall('dav', 'GET', '/Stoic Ranger/vault/moved.json');
+ok(nk.status === 200 && ok2.status === 404 && note.status === 200 && note.text.includes('/Private Test/My Vault/'), 'real Nextcloud: vault moved (WebDAV MOVE), moved.json left in the old folder');
+const sh2 = JSON.parse((await ncCall('share', 'GET', '', null, '', '')).text).ocs.data;
+ok(sh2.length === 1 && /^\/Private Test\/My Vault\/shared\//.test(sh2[0].path), 'Nextcloud moved the link with the file: ' + (sh2[0] && sh2[0].path));
+const rp3 = await rctx.newPage(); await rp3.goto(link); await rp3.waitForSelector('#sPw:not([hidden])', { timeout: 20000 });
+await rp3.fill('#pw', SPW); await rp3.click('#go'); await rp3.waitForSelector('#sDone:not([hidden])', { timeout: 20000 });
+ok((await rp3.textContent('#dPrev pre')) === SECRET, 'the link sent before the move still opens and decrypts');
+await rp3.close();
+ok((await p.textContent('#vtFList')).includes('Range card.txt'), 'vault open with its file after the move');
+
 // another website is not allowed
 const other = await rctx.newPage();
 await rctx.route('https://evil.example/**', serveVault);
@@ -129,6 +147,7 @@ console.log('   other site:', JSON.stringify(g2));
 ok(g2 && !g2[3], 'Nextcloud gives a page on another website no CORS permission (a real browser then blocks the download)');
 
 // cancel → link dead
+await p.click('[data-vt="sent"]'); await p.click('#vtSList .vtrow'); await W('#vtCancel');
 await p.click('#vtCancel'); await p.waitForFunction(() => !document.querySelector('#vtCancel'), null, { timeout: 30000 });
 const after = JSON.parse((await ncCall('share', 'GET', '', null, '', '')).text).ocs.data;
 ok(after.length === 0, 'Cancel link removed the Nextcloud link');

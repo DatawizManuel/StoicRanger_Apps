@@ -799,6 +799,37 @@ public class MainActivity extends Activity {
             }});
         }
 
+        /** Move the vault folder (remark #26). → FKNativeCallback(cb, {status, error}) */
+        @JavascriptInterface
+        public void vaultMove(final String from, final String to, final String cb) {
+            new Thread(new Runnable() { @Override public void run() {
+                JSONObject r = Vault.move(SyncStore.get(MainActivity.this, true), from, to);
+                final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + r.toString() + ")";
+                runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+            } }).start();
+        }
+
+        // ---------- vault fingerprint unlock (0.8.0, remark #24) ----------
+        /** {avail, on, account, boot, bootNow}: nothing secret. */
+        @JavascriptInterface
+        public String vaultBioState() { return Bio.state(MainActivity.this); }
+        /** Turn on: fingerprint check, then the vault key is kept encrypted by a fingerprint-only Keystore key. */
+        @JavascriptInterface
+        public void vaultBioOn(final String account, final String keyB64, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                Bio.enroll(MainActivity.this, account, keyB64, new Bio.Done() { @Override public void done(boolean ok, String msg) { callback(cb, ok, msg); } });
+            }});
+        }
+        /** Unlock: fingerprint check → {ok, msg = vault key (base64) | "cancelled" | "off" | "changed" | error} */
+        @JavascriptInterface
+        public void vaultBioUnlock(final String account, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                Bio.unlock(MainActivity.this, account, new Bio.Done() { @Override public void done(boolean ok, String msg) { callback(cb, ok, msg); } });
+            }});
+        }
+        @JavascriptInterface
+        public void vaultBioOff() { Bio.forget(MainActivity.this); }
+
         /** While the vault is open: no screenshots and a blank preview in the recent-apps list. */
         @JavascriptInterface
         public void vaultSecure(final boolean on) {

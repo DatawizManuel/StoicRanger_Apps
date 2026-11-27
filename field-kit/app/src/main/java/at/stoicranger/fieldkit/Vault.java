@@ -163,5 +163,24 @@ final class Vault {
         return out;
     }
 
+    /** 0.8.0 (remark #26): move the whole vault folder on Nextcloud (WebDAV MOVE, never overwrites). Nextcloud keeps
+     *  the file ids, so links already sent keep working. → {status, error} (201 = moved, 412 = target exists) */
+    static JSONObject move(JSONObject cfg, String from, String to) {
+        JSONObject out = new JSONObject();
+        HttpURLConnection c = null;
+        try {
+            if (from == null || to == null || from.contains("..") || to.contains("..") || !from.startsWith("/") || !to.startsWith("/")) throw new Exception("bad path");
+            String user = cfg.optString("user");
+            c = open(cfg, NcClient.davUrl(base(cfg), user, from));
+            NcClient.setMethod(c, "MOVE");
+            c.setRequestProperty("Destination", NcClient.davUrl(base(cfg), user, to));
+            c.setRequestProperty("Overwrite", "F");
+            out.put("status", c.getResponseCode());
+        } catch (Exception e) {
+            try { out.put("status", 0).put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) { }
+        } finally { if (c != null) c.disconnect(); }
+        return out;
+    }
+
     static String enc(String s) { try { return URLEncoder.encode(s, "UTF-8"); } catch (Exception e) { return ""; } }
 }

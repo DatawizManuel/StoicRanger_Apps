@@ -18,13 +18,17 @@ app version opens read-only and is never written.
 | `sr-points` | saved points `[{name, lat, lon}]` |
 | `settings` | `{units: "metric"|"imp", theme: ""|"light"|"dark"}` |
 | `link` | Stoic Ranger link `{linked, dismissed, w, m}`; since 0.6.0 also `mode`: `"db"` (From my database, default) or `"own"` (Own load) |
-| `sr-vault` | since 0.7.0: vault settings `{lockMin: 1|5|15, page: decrypt page address}` (nothing secret; vault keys and files live only on Nextcloud, encrypted) |
+| `sr-vault` | since 0.7.0: vault settings `{lockMin: 1|5|15, page: decrypt page address}`; since 0.8.0 also `folder` (vault folder on Nextcloud, `""` = default `<data folder>/vault/`) (nothing secret; vault keys and files live only on Nextcloud, encrypted) |
 | `dw-paper` | since 0.6.0: paper size last used for the Drop & wind PDF, `"A4"`, `"A5"` or `"A6"` |
 
 Unknown keys are kept unchanged.
 
 ## Changes
 
+- 0.8.0 (format 1, add-only): `sr-vault.folder` is new (missing = default, so 0.7.0 vaults open unchanged). Fingerprint
+  unlock keeps its encrypted copy of the vault key in the app's private preferences `fk-vault-bio` (not in db.json,
+  never synced), locked by the Keystore key `fk-vault-bio`. On Nextcloud a moved vault leaves `moved.json`
+  `{movedTo, at}` in its old folder. Nothing is converted.
 - 0.7.0 (format 1, add-only): `sr-vault` is new; `sr-ball.bMax` may now be any typed number (was 300/500/800/1000).
   Nothing is converted. The vault's own files are on Nextcloud in `<folder>/vault/` (keys.json, index.bin, <id>.bin,
   shared/), all written by the vault itself; nothing in db.json or database.xlsx changes.

@@ -1,9 +1,11 @@
-/* SR Field Kit 0.7.0 — Vault: encrypted files on the user's own Nextcloud, and "Send encrypted" (a separate encrypted
+/* SR Field Kit 0.8.0 — Vault: encrypted files on the user's own Nextcloud, and "Send encrypted" (a separate encrypted
    copy, a Nextcloud public link that expires, and a password the user sends another way).
    All encryption happens here in the page with WebCrypto: AES-256-GCM, keys from passwords with PBKDF2-SHA256
    (600,000 rounds). The phone side (Vault.java) only moves bytes; Nextcloud only ever stores scrambled data.
 
-   On Nextcloud, in <folder>/vault/ (folder from ⋯ › Where your data is stored, default /Stoic Ranger/):
+   On Nextcloud, in the vault folder: since 0.8.0 (remark #26) chosen in the vault settings; default as in 0.7.0
+   <folder>/vault/ (folder from ⋯ › Where your data is stored, default /Stoic Ranger/). A vault moved to another
+   folder leaves moved.json {movedTo} behind so other phones find it. 0.8.0 (#24): fingerprint unlock (Bio.java).
      keys.json   {format:"SR-Vault-1", kdf, iter, salt, wrapPw, recSalt, wrapRec}: the random vault key, wrapped once
                  with the vault password and once with the recovery key. Nothing in it is readable without one of them.
      index.bin   "SRV1" + iv + AES-GCM(vault key, JSON {files:[{id,name,type,size,added}], shares:[…]})
@@ -64,7 +66,7 @@
 
   // ---------- settings (not secret, in db.json) ----------
   const DEF_PAGE = "https://stoic-ranger.com/vault/";
-  const set = Object.assign({ lockMin: 5, page: DEF_PAGE }, store.get("sr-vault", {}));
+  const set = Object.assign({ lockMin: 5, page: DEF_PAGE, folder: "" }, store.get("sr-vault", {}));
   const saveSet = () => store.set("sr-vault", set);
 
   // ---------- Nextcloud ----------
@@ -73,7 +75,17 @@
     if (!N || !N.vaultNc) return "The vault works in the Android app. The iPhone web version can't reach Nextcloud directly.";
     const C = cfg(); return C.url && C.user && C.hasPassword ? "" : "The vault keeps its files on your Nextcloud. Set it up first: ⋯ › Where your data is stored (address, user name, app password).";
   };
-  const dir = () => { let f = cfg().folder || "/Stoic Ranger/"; if (!f.endsWith("/")) f += "/"; return f + "vault/"; };
+  const defDir = () => { let f = cfg().folder || "/Stoic Ranger/"; if (!f.endsWith("/")) f += "/"; return f + "vault/"; };
+  const dir = () => set.folder || defDir();
+  /** "/Private/Vault/" from what the user typed; null when it can't be a vault folder. */
+  function normFolder(t) {
+    let f = String(t || "").trim().replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+    if (!f) return null;
+    if (!f.startsWith("/")) f = "/" + f; if (!f.endsWith("/")) f += "/";
+    const segs = f.split("/").filter(Boolean);
+    if (!segs.length || segs.some(x => x === "." || x === ".." || /[\u0000-\u001f*?"<>|:]/.test(x))) return null;
+    return f;
+  }
   function toNative(u8) { N.vaultBlobStart(); for (let i = 0; i < u8.length; i += CHUNK) if (!N.vaultBlobAppend(b64(u8.subarray(i, i + CHUNK)))) throw new Error("The file is larger than 100 MB."); if (!u8.length) N.vaultBlobAppend(""); return N.vaultBlobEnd(); }
   function fromNative() { const n = N.vaultBlobSize(), out = new Uint8Array(n); for (let i = 0; i < n; i += CHUNK * 2) out.set(unb64(N.vaultBlobRead(i, CHUNK * 2)), i); return out; }
   const netErr = r => r.status === 0 ? "No connection to your Nextcloud (" + (r.error || "offline") + ")." : r.status === 401 ? "Nextcloud did not accept the login. Check the app password under ⋯ › Where your data is stored." : "Nextcloud answered " + r.status + ".";
@@ -91,7 +103,7 @@
   }
 
   // ---------- state ----------
-  const S = { keys: null, keysEtag: "", master: null, index: null, indexEtag: "", left: 0, timer: 0, awayOk: 0, awaySince: 0, urls: [], phase: "" };
+  const S = { keys: null, keysEtag: "", master: null, index: null, indexEtag: "", left: 0, timer: 0, awayOk: 0, awaySince: 0, urls: [], phase: "", lastSend: null, bioAsked: false, bioPending: false };
   const isOpen = () => !!S.master;
   let rawBox = null, rawKey = null;   // the raw vault key, sealed with a one-time key while open (only to re-wrap it)
   async function loadKeys() { const r = await ncGet(dir() + "keys.json"); if (!r) { S.keys = null; return false; } S.keys = JSON.parse(td.decode(r.bytes)); S.keysEtag = r.etag; return true; }
@@ -135,8 +147,8 @@
   }
   // leaving the app locks it, except for a share menu or file picker the vault opened itself (up to 2 minutes)
   const away = () => { S.awayOk = Date.now(); };
-  { const prev = window.FK && FK.pause; if (window.FK) FK.pause = () => { if (isOpen()) { if (Date.now() - S.awayOk < 8000) S.awaySince = Date.now(); else lock("The vault locked when you left the app."); } if (prev) prev(); }; }
-  { const prev = window.FK && FK.resume; if (window.FK) FK.resume = () => { if (isOpen() && S.awaySince && Date.now() - S.awaySince > 120000) lock("The vault locked because you were away for more than 2 minutes."); S.awaySince = 0; if (prev) prev(); }; }
+  { const prev = window.FK && FK.pause; if (window.FK) FK.pause = () => { S.paused = true; if (isOpen()) { if (Date.now() - S.awayOk < 8000) S.awaySince = Date.now(); else lock("The vault locked when you left the app."); } if (prev) prev(); }; }
+  { const prev = window.FK && FK.resume; if (window.FK) FK.resume = () => { S.paused = false; if (isOpen() && S.awaySince && Date.now() - S.awaySince > 120000) lock("The vault locked because you were away for more than 2 minutes."); S.awaySince = 0; if (!isOpen() && S.bioPending && location.hash === "#vault" && bioReady()) { S.bioPending = false; setTimeout(bioUnlock, 250); } if (prev) prev(); }; }
   window.addEventListener("hashchange", () => { if (location.hash !== "#vault" && isOpen()) lock("The vault locked when you left it."); });
 
   // ---------- overlays (sheets, viewer): phone Back closes them first (js/fk.js, .fkover) ----------
@@ -171,7 +183,13 @@
     if (w) { v.innerHTML = '<h2>Vault</h2><p class="lede">Encrypted files on your own Nextcloud. Send one with a link that expires and a password.</p><div class="vtbox">' + esc(w) + '</div>'; return; }
     if (isOpen()) return renderOpen();
     v.innerHTML = '<h2>Vault</h2><p class="note" id="vtLoad">Checking your Nextcloud …</p>';
-    loadKeys().then(has => { if (location.hash !== "#vault" || isOpen()) return; has ? renderLocked() : renderSetup(); },
+    loadKeys().then(async has => {
+      if (location.hash !== "#vault" || isOpen()) return;
+      if (has) return renderLocked();
+      const mv = await movedTo(dir());
+      if (location.hash !== "#vault" || isOpen()) return;
+      mv ? renderMoved(mv) : renderSetup();
+    },
       e => { v.innerHTML = '<h2>Vault</h2><div class="vtbox">' + esc(e.message) + '</div><div class="actions start"><button type="button" class="button" id="vtRetry">Try again</button></div>'; $("vtRetry").onclick = render; });
   }
 
@@ -183,10 +201,12 @@
       <div class="vtmeter" aria-hidden="true"><i id="vtMeter"></i></div><p class="note" id="vtHint">At least 12 characters.</p>
       <div class="field"><label for="vtP2">Repeat password</label><input id="vtP2" type="password" autocomplete="new-password"></div>
       <div class="field"><label for="vtLockSel">Lock the vault after</label><select id="vtLockSel"><option value="1">1 minute without use</option><option value="5">5 minutes without use</option><option value="15">15 minutes without use</option></select></div>
-      <p class="note">It also locks as soon as you leave the app. Folder on Nextcloud: <span class="mono">${esc(dir())}</span></p>
+      <p class="note">It also locks as soon as you leave the app.</p>
+      ${folderLine()}
       <p class="note bad" id="vtSetMsg" aria-live="polite"></p>
       <div class="actions start"><button type="button" class="button" id="vtCreate">Create vault</button></div>`;
     $("vtLockSel").value = String(set.lockMin);
+    $("vtFolderC").onclick = folderSheet;
     $("vtP1").oninput = () => { const s = strength($("vtP1").value), m = $("vtMeter"); m.style.width = s + "%"; m.dataset.l = s < 60 ? "bad" : s < 85 ? "mid" : "ok"; $("vtHint").textContent = $("vtP1").value.length < 12 ? "At least 12 characters." : s < 85 ? "OK. Longer is stronger." : "Strong."; };
     $("vtCreate").onclick = async () => {
       const p1 = $("vtP1").value, p2 = $("vtP2").value, m = $("vtSetMsg"), btn = $("vtCreate");
@@ -221,12 +241,22 @@
   }
 
   function renderLocked() {
+    const fp = bioReady(), stale = bioStale();
     V().innerHTML = `<h2>Vault locked</h2>
-      <p class="lede">${esc(S.lockMsg || "Type your vault password to open it.")}</p>
+      <p class="lede">${esc(S.lockMsg || (fp ? "Use your fingerprint or type your vault password to open it." : "Type your vault password to open it."))}</p>
+      ${fp ? '<div class="actions start"><button type="button" class="button" id="vtBio">Unlock with fingerprint</button></div>' : ""}
+      ${stale ? '<p class="note">The phone was restarted, so the vault password is needed once. Fingerprint unlock works again after that.</p>' : ""}
       <div class="field"><label for="vtPw">Vault password</label><input id="vtPw" type="password" autocomplete="current-password"></div>
       <p class="note bad" id="vtLkMsg" aria-live="polite"></p>
-      <div class="actions start"><button type="button" class="button" id="vtUnlock">Unlock</button><button type="button" class="button ghost" id="vtForgot">Forgot password?</button></div>`;
+      <div class="actions start"><button type="button" class="button${fp ? " ghost" : ""}" id="vtUnlock">Unlock</button><button type="button" class="button ghost" id="vtForgot">Forgot password?</button></div>
+      ${folderLine()}`;
     S.lockMsg = "";
+    $("vtFolderC").onclick = folderSheet;
+    if (fp) {
+      $("vtBio").onclick = bioUnlock;
+      // ask for the fingerprint by itself once: right away when the app is in front, else when it comes back
+      if (!S.bioAsked) { S.bioAsked = true; if (!S.paused && document.visibilityState === "visible") setTimeout(bioUnlock, 250); else S.bioPending = true; }
+    }
     $("vtPw").onkeydown = e => { if (e.key === "Enter") $("vtUnlock").click(); };
     $("vtUnlock").onclick = async () => {
       const m = $("vtLkMsg"), btn = $("vtUnlock"); btn.disabled = true; m.classList.remove("bad"); m.textContent = "Checking …";
@@ -241,10 +271,142 @@
     let raw;
     try { raw = await unseal(await kdf(useRec ? normRec(secret).replace(/-/g, "") : secret, unb64(useRec ? K.recSalt : K.salt), K.iter), unb64(useRec ? K.wrapRec : K.wrapPw)); }
     catch (e) { const x = new Error("wrong"); x.wrong = true; throw x; }
+    await openWith(raw);
+    if (useRec) newPasswordSheet(true); else afterOpen(true);
+  }
+  async function openWith(raw) {
     S.master = await importKey(raw); await keepRaw(raw); raw.fill(0);
-    try { await loadIndex(); } catch (e) { S.master = null; throw e; }
+    try { await loadIndex(); } catch (e) { S.master = null; rawBox = null; rawKey = null; throw e; }
+    S.bioAsked = false; S.bioPending = false;
     startOpen(); tidyShares();
-    if (useRec) newPasswordSheet(true); else renderOpen();
+  }
+  /** After unlocking: back to the link you were sending (#24c), and re-arm fingerprint unlock after a restart. */
+  function afterOpen(byPassword) {
+    renderOpen();
+    const L = S.lastSend, s = L && Date.now() - L.t < 15 * 60000 && S.index.shares.find(x => x.sid === L.sid && active(x));
+    if (s) { const b = V().querySelector('[data-vt="sent"]'); if (b) b.click(); resultSheet(s, false, true); }
+    if (byPassword && bioStale()) bioOn(true);
+  }
+
+  // ---------- fingerprint unlock (0.8.0, remark #24; Bio.java) ----------
+  const account = () => String(cfg().url || "") + "|" + String(cfg().user || "");
+  function bio() { try { return N && N.vaultBioState ? JSON.parse(N.vaultBioState()) : {}; } catch (e) { return {}; } }
+  const bioMine = b => b.on && b.account === account();
+  const bioReady = () => { const b = bio(); return !!(b.avail && bioMine(b) && b.boot === b.bootNow); };
+  const bioStale = () => { const b = bio(); return !!(b.avail && bioMine(b) && b.boot !== b.bootNow); };
+  async function bioUnlock() {
+    if (isOpen() || !bioReady()) return;
+    const m = $("vtLkMsg"), say = (t, bad) => { if (m) { m.textContent = t; m.classList.toggle("bad", !!bad); } };
+    const r = await call(id => N.vaultBioUnlock(account(), id));
+    if (isOpen()) return;
+    if (!r.ok) {
+      if (r.msg === "cancelled") return say("");
+      if (r.msg === "changed") { say("A fingerprint was added or removed on this phone, so fingerprint unlock turned itself off. Unlock with your password, then turn it on again under ⚙.", true); const b = $("vtBio"); if (b) b.parentNode.remove(); return; }
+      if (r.msg === "off") return render();
+      return say(r.msg, true);
+    }
+    say("Opening …");
+    try {
+      if (!S.keys) await loadKeys();
+      const raw = unb64(r.msg); r.msg = "";
+      await openWith(raw);
+      afterOpen(false);
+    } catch (e) {
+      if (!S.master && /operation|decrypt|vault file/i.test(String(e && (e.name + " " + e.message)))) {
+        N.vaultBioOff(); say("Fingerprint unlock belonged to another vault and was turned off. Use your vault password.", true);
+      } else say(e.message, true);
+    }
+  }
+  /** Turn fingerprint unlock on (needs the vault open). again = re-arm after a restart. */
+  async function bioOn(again) {
+    let raw;
+    try { raw = await currentRaw(); } catch (e) { toast(e.message); return false; }
+    away();
+    const r = await call(id => N.vaultBioOn(account(), b64(raw), id)); raw.fill(0);
+    if (r.ok) toast(again ? "Fingerprint unlock works again" : "Fingerprint unlock is on");
+    else if (r.msg !== "cancelled") toast(r.msg);
+    return r.ok;
+  }
+
+  // ---------- vault folder (0.8.0, remark #26) ----------
+  function folderLine() {
+    return `<p class="note vtfolder">Vault folder on Nextcloud: <span class="mono">${esc(dir())}</span> <button type="button" class="linkbtn" id="vtFolderC">Change</button></p>`;
+  }
+  async function peekKeys(d) { return !!(await ncGet(d + "keys.json")); }
+  async function movedTo(d) { try { const r = await ncGet(d + "moved.json"); if (!r) return ""; const j = JSON.parse(td.decode(r.bytes)); return normFolder(j.movedTo) || ""; } catch (e) { return ""; } }
+  function renderMoved(to) {
+    V().innerHTML = `<h2>The vault has moved</h2>
+      <p class="lede">The vault that was in <span class="mono">${esc(dir())}</span> is now in <span class="mono">${esc(to)}</span> (moved from another phone).</p>
+      <div class="actions start"><button type="button" class="button" id="vtMvUse">Use the new folder</button></div>
+      ${folderLine()}`;
+    $("vtMvUse").onclick = () => { set.folder = to; saveSet(); render(); };
+    $("vtFolderC").onclick = folderSheet;
+  }
+  /** Is there anything in this folder besides the folder itself? (PROPFIND depth 1) */
+  async function folderEmpty(d) {
+    const r = await call(id => N.ncRequest("PROPFIND", d, b64(te.encode('<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>')), "", "1", id));
+    if (r.status === 404) return true;
+    if (r.status !== 207) throw new Error(netErr(r));
+    return (td.decode(unb64(r.body || "")).match(/<d:response>/g) || []).length <= 1;
+  }
+  async function moveVault(from, to) {
+    const parent = to.replace(/[^/]+\/$/, "");
+    if (parent.length > 1) await ncMkdirs(parent);
+    let r = await call(id => N.vaultMove(from, to, id));
+    if (r.status === 412 || r.status === 405 || r.status === 409) {
+      if (!(await folderEmpty(to))) throw new Error("The folder " + to + " already has files in it. Pick a new folder name, or empty it in Nextcloud first.");
+      await ncDel(to);
+      r = await call(id => N.vaultMove(from, to, id));
+    }
+    if (r.status !== 201 && r.status !== 204) throw new Error(r.status === 0 ? netErr(r) : "Nextcloud could not move the vault (" + r.status + ").");
+    // leave a note in the old place, so other phones find the vault (and never start a second one there)
+    try { await ncMkdirs(from); await ncPut(from + "moved.json", te.encode(JSON.stringify({ movedTo: to, at: new Date().toISOString() })), ""); } catch (e) { }
+  }
+  function folderSheet() {
+    const bg = sheet(`<h3>Vault folder on Nextcloud</h3>
+      <p>Where the vault keeps its encrypted files on your Nextcloud. Only scrambled data with random names is stored there.</p>
+      <div class="field"><label for="vtFIn">Folder</label><input id="vtFIn" class="mono" autocomplete="off" spellcheck="false" value="${esc(dir())}"></div>
+      <p class="note">Default: <span class="mono">${esc(defDir())}</span> (next to the app's data, ⋯ › Where your data is stored).</p>
+      <p class="note bad" id="vtFMsg2" aria-live="polite"></p>
+      <div class="confirm" id="vtFAsk" hidden></div>
+      <div class="actions start" id="vtFAct"><button type="button" class="button" id="vtFGo">Use this folder</button><button type="button" class="button ghost" id="vtFDef">Default</button><button type="button" class="button ghost" id="vtFNo">Cancel</button></div>`);
+    const m = q(bg, "#vtFMsg2"), ask = q(bg, "#vtFAsk"), say = t => { m.classList.add("bad"); m.textContent = t; };
+    q(bg, "#vtFNo").onclick = () => bg.remove();
+    q(bg, "#vtFDef").onclick = () => { q(bg, "#vtFIn").value = defDir(); };
+    const done = (to, msg) => { set.folder = to === defDir() ? "" : to; saveSet(); bg.remove(); if (msg) toast(msg); };
+    q(bg, "#vtFGo").onclick = async () => {
+      const to = normFolder(q(bg, "#vtFIn").value), from = dir();
+      if (!to) return say("Type a folder like /Private/Vault/ (not the top folder, no special characters).");
+      if (to === from) return bg.remove();
+      if (to.startsWith(from) || from.startsWith(to)) return say("The new folder can't be inside the current vault folder, or contain it.");
+      busy(bg, true); m.classList.remove("bad"); m.textContent = "Checking " + to + " …";
+      try {
+        const there = await peekKeys(to), here = isOpen() || await peekKeys(from);
+        busy(bg, false); m.textContent = "";
+        if (there) {
+          ask.hidden = false; q(bg, "#vtFAct").hidden = true;
+          ask.innerHTML = `<p>A vault already exists in <span class="mono">${esc(to)}</span>. Switch to it? You open it with its own password.${here ? ` The vault in <span class="mono">${esc(from)}</span> stays where it is.` : ""}</p><div class="actions start"><button type="button" class="button" id="vtFSw">Switch to that vault</button><button type="button" class="button ghost" id="vtFBack">Back</button></div>`;
+          q(bg, "#vtFBack").onclick = () => { ask.hidden = true; q(bg, "#vtFAct").hidden = false; };
+          q(bg, "#vtFSw").onclick = () => { if (N && N.vaultBioOff && bioMine(bio())) N.vaultBioOff(); S.lastSend = null; const was = isOpen(); done(to, "Vault folder changed"); if (was) lock("You switched to the vault in " + to + ". Unlock it with its password."); else render(); };
+          return;
+        }
+        if (!here) { done(to, "Vault folder changed"); render(); return; }
+        ask.hidden = false; q(bg, "#vtFAct").hidden = true;
+        ask.innerHTML = `<p>Your vault is in <span class="mono">${esc(from)}</span>. What should happen?</p>
+          <div class="vtbtns"><button type="button" class="button" id="vtFMove">Move the vault there</button><button type="button" class="button ghost" id="vtFNew">Start a new empty vault there</button><button type="button" class="button ghost" id="vtFBack">Back</button></div>
+          <p class="note">Moving keeps all files and links you already sent; Nextcloud moves the folder in one go. A new empty vault leaves the current one untouched in its folder.</p>`;
+        q(bg, "#vtFBack").onclick = () => { ask.hidden = true; q(bg, "#vtFAct").hidden = false; };
+        q(bg, "#vtFNew").onclick = () => { if (N && N.vaultBioOff && bioMine(bio())) N.vaultBioOff(); S.lastSend = null; const was = isOpen(); done(to, "Vault folder changed"); if (was) lock("New vault folder " + to + ". Set up the new vault there."); else render(); };
+        q(bg, "#vtFMove").onclick = async () => {
+          busy(bg, true); m.classList.remove("bad"); m.textContent = "Moving the vault …";
+          try {
+            await moveVault(from, to);
+            done(to, "Vault moved to " + to);
+            if (isOpen()) { await loadKeys(); await loadIndex(); renderOpen(); } else render();
+          } catch (e) { busy(bg, false); say(e.message); }
+        };
+      } catch (e) { busy(bg, false); say(e.message); }
+    };
   }
   function recoverySheet() {
     const bg = sheet(`<h3>Use your recovery key</h3><p>Type the key from your paper. Then choose a new vault password.</p>
@@ -296,7 +458,7 @@
         <p class="note">Any file type, up to 100 MB each. Each file is encrypted on this phone, then uploaded.</p>
         <p class="note" id="vtMsg" aria-live="polite"></p></div>
       <div id="vtSent" hidden><ul class="vtlist" id="vtSList"></ul>
-        <p class="note">A link stops working when it expires or when you cancel it. The app then deletes the shared copy from Nextcloud. The file stays in your vault.</p></div>`;
+        <p class="note">Tap a link to see or share it and its password again. A link stops working when it expires or when you cancel it. The app then deletes the shared copy from Nextcloud. The file stays in your vault.</p></div>`;
     { const c = $("vtCount"); if (c) c.textContent = Math.floor(S.left / 60) + ":" + String(S.left % 60).padStart(2, "0"); }
     const tab = t => { V().querySelectorAll("[data-vt]").forEach(b => b.setAttribute("aria-pressed", b.dataset.vt === t)); $("vtFiles").hidden = t !== "files"; $("vtSent").hidden = t !== "sent"; S.tab = t; };
     V().querySelectorAll("[data-vt]").forEach(b => b.onclick = () => tab(b.dataset.vt));
@@ -442,19 +604,23 @@
       q(bg, "#vtPMsg").textContent = e.message; q(bg, "#vtPAct").hidden = false; q(bg, "#vtPClose").onclick = () => bg.remove();
     }
   }
-  function resultSheet(s, fresh) {
+  function resultSheet(s, fresh, back) {
     const on = active(s), link = linkFor(s);
+    const L = S.lastSend && S.lastSend.sid === s.sid ? S.lastSend : null;
+    if (on) S.lastSend = { sid: s.sid, t: Date.now(), link: L ? L.link : false, pw: L ? L.pw : false };
     const bg = sheet(`<h3>${fresh ? "Link ready" : esc(s.name)}</h3>
+      ${back ? '<p class="note">Back where you left off.</p>' : ""}
       ${on ? `<p class="note">Expires ${day(s.exp)}. Send the link and the password in two different ways, for example the link by email and the password via Signal or Threema.</p>` : `<p class="note bad">This link ${s.cancelled ? "was cancelled" : "has expired"}. The shared copy was deleted from Nextcloud.</p>`}
       <div class="vtlink"><small>Link</small><code id="vtLk">${esc(link)}</code></div>
       <div class="vtlink"><small>Password</small><code id="vtLp">${esc(s.pw)}</code></div>
-      ${on ? '<div class="vtbtns"><button type="button" class="button" id="vtShL">Share link</button><button type="button" class="button" id="vtShP">Share password</button></div>' : ""}
+      ${on ? `<div class="vtbtns"><button type="button" class="button${S.lastSend.link ? " ghost" : ""}" id="vtShL">${S.lastSend.link ? "Share link again" : "Share link"}</button><button type="button" class="button${S.lastSend.pw ? " ghost" : ""}" id="vtShP">${S.lastSend.pw ? "Share password again" : "Share password"}</button></div>` : ""}
       <p class="note" id="vtRMsg" aria-live="polite"></p>
       <div class="vtbtns">${on ? '<button type="button" class="button ghost" id="vtCancel">Cancel link now</button>' : ""}<button type="button" class="button ghost" id="vtDone">Done</button></div>`);
-    q(bg, "#vtDone").onclick = () => { bg.remove(); renderOpen(); };
+    q(bg, "#vtDone").onclick = () => { S.lastSend = null; bg.remove(); renderOpen(); };
     if (!on) return;
-    q(bg, "#vtShL").onclick = () => { away(); N.vaultShareText(link, "Share link"); q(bg, "#vtRMsg").textContent = "Now send the password a different way."; };
-    q(bg, "#vtShP").onclick = () => { away(); N.vaultShareText(s.pw, "Share password"); q(bg, "#vtRMsg").textContent = "Use a different app than for the link, for example Signal or Threema."; };
+    const mark = (k, b, t) => { S.lastSend = Object.assign({}, S.lastSend, { t: Date.now() }); S.lastSend[k] = true; b.classList.add("ghost"); b.textContent = t; };
+    q(bg, "#vtShL").onclick = e => { away(); mark("link", e.currentTarget, "Share link again"); N.vaultShareText(link, "Share link"); q(bg, "#vtRMsg").textContent = "Now send the password a different way."; };
+    q(bg, "#vtShP").onclick = e => { away(); mark("pw", e.currentTarget, "Share password again"); N.vaultShareText(s.pw, "Share password"); q(bg, "#vtRMsg").textContent = "Use a different app than for the link, for example Signal or Threema."; };
     q(bg, "#vtCancel").onclick = async () => {
       busy(bg, true); q(bg, "#vtRMsg").textContent = "Cancelling …";
       try { await cancelShare(s); busy(bg, false); bg.remove(); toast("Link cancelled"); renderOpen(); }
@@ -483,10 +649,19 @@
     const bg = sheet(`<h3>Vault settings</h3>
       <div class="field"><label for="vtSLock">Lock the vault after</label><select id="vtSLock"><option value="1">1 minute without use</option><option value="5">5 minutes without use</option><option value="15">15 minutes without use</option></select></div>
       <div class="field"><label for="vtSPage">Decrypt page (where receivers open links)</label><input id="vtSPage" type="url" class="mono" autocomplete="off" spellcheck="false"></div>
-      <p class="note">The page from the release folder (vault-page/index.html), put on your website. Default ${esc(DEF_PAGE)}</p>
+      <p class="note">The page from the release folder (folder vault), put on your website. Default ${esc(DEF_PAGE)}</p>
+      ${bio().avail ? `<label class="check setrow"><input type="checkbox" id="vtSBio"${bioMine(bio()) ? " checked" : ""}> Unlock with fingerprint</label>
+      <p class="note">The vault key is then also kept on this phone, locked by the fingerprint sensor (Android Keystore). After a phone restart, or when a fingerprint is added on the phone, the vault password is needed again.</p>` : (N && N.vaultBioState ? '<p class="note">Fingerprint unlock: set up a fingerprint and a screen lock on this phone (Android 9 or newer) to use it.</p>' : "")}
+      ${folderLine()}
       <div class="vtbtns"><button type="button" class="button" id="vtSSave">Save</button><button type="button" class="button ghost" id="vtSPwC">Change vault password</button><button type="button" class="button ghost" id="vtSRec">Make a new recovery key</button></div>
       <p class="note" id="vtSetMsg2" aria-live="polite"></p>`);
     q(bg, "#vtSLock").value = String(set.lockMin); q(bg, "#vtSPage").value = set.page || DEF_PAGE;
+    q(bg, "#vtFolderC").onclick = folderSheet;
+    const fpBox = q(bg, "#vtSBio");
+    if (fpBox) fpBox.onchange = async () => {
+      if (fpBox.checked) { fpBox.disabled = true; const ok = await bioOn(false); fpBox.disabled = false; fpBox.checked = ok; }
+      else { N.vaultBioOff(); toast("Fingerprint unlock is off"); }
+    };
     q(bg, "#vtSSave").onclick = () => {
       const p = q(bg, "#vtSPage").value.trim() || DEF_PAGE;
       if (!/^https:\/\/[^\s#]+$/.test(p)) { q(bg, "#vtSetMsg2").textContent = "The page address must start with https:// and have no # in it."; return; }

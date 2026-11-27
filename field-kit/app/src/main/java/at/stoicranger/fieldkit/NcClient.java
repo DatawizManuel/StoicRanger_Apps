@@ -114,7 +114,7 @@ final class NcClient {
         return r;
     }
 
-    private static void setMethod(HttpURLConnection c, String m) throws Exception {
+    static void setMethod(HttpURLConnection c, String m) throws Exception {
         try { c.setRequestMethod(m); return; } catch (java.net.ProtocolException ignored) { }
         Field f = HttpURLConnection.class.getDeclaredField("method");
         f.setAccessible(true);
