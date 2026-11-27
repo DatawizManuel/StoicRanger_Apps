@@ -86,6 +86,7 @@ public class MainActivity extends Activity {
         s.setTextZoom(100);
         WebView.setWebContentsDebuggingEnabled((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);
 
+        Vault.wipeShared(this);   // decrypted copies from an earlier run (0.7.0 vault) never survive a restart
         web.addJavascriptInterface(new Bridge(), "FKNative");
         web.setWebViewClient(new AssetClient());
         web.setWebChromeClient(new WebChromeClient() {
@@ -208,6 +209,16 @@ public class MainActivity extends Activity {
     private void readPicked(Uri u, String kind, String cb) {
         String name = displayName(u);
         try (InputStream is = getContentResolver().openInputStream(u)) {
+            if ("vault".equals(kind)) {      // 0.7.0: a file for the vault goes into the blob, the page reads it in chunks
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] buf = new byte[131072]; int n; long tot = 0;
+                while ((n = is.read(buf)) > 0) { tot += n; if (tot > Vault.MAX) throw new IOException("The file is larger than 100 MB."); bo.write(buf, 0, n); }
+                Vault.set(bo.toByteArray());
+                String type = getContentResolver().getType(u);
+                JSONObject o = new JSONObject().put("name", name == null ? "file" : name).put("type", type == null ? mime(name == null ? "" : name) : type).put("size", Vault.size());
+                callback(cb, true, o.toString());
+                return;
+            }
             if ("gpx".equals(kind)) {
                 ByteArrayOutputStream bo = new ByteArrayOutputStream();
                 byte[] buf = new byte[65536]; int n; long tot = 0;
@@ -704,6 +715,127 @@ public class MainActivity extends Activity {
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
                 try { startActivityForResult(i, REQ_OPEN); } catch (Exception e) { callback(cb, false, e.getMessage()); }
+            }});
+        }
+
+        // ---------- vault (0.7.0): encryption happens in the page; here only bytes, Nextcloud and sharing ----------
+        /** Pick any file for the vault. → FKNativeCallback(cb, {ok, msg: {name, type, size}}); the bytes wait in the blob. */
+        @JavascriptInterface
+        public void vaultPick(final String cb) { pickFile("vault", cb); }
+        @JavascriptInterface
+        public int vaultBlobSize() { return Vault.size(); }
+        @JavascriptInterface
+        public String vaultBlobRead(double offset, int len) { return Vault.read(offset, len); }
+        @JavascriptInterface
+        public void vaultBlobStart() { Vault.start(); }
+        @JavascriptInterface
+        public boolean vaultBlobAppend(String b64) { return Vault.append(b64); }
+        @JavascriptInterface
+        public int vaultBlobEnd() { return Vault.end(); }
+        /** Clear the blob and delete decrypted copies given to other apps (called whenever the vault locks). */
+        @JavascriptInterface
+        public void vaultWipe() { Vault.clear(); Vault.wipeShared(MainActivity.this); }
+
+        /** WebDAV GET (into the blob) or PUT (the blob) of one file. → FKNativeCallback(cb, {status, etag, size, error}) */
+        @JavascriptInterface
+        public void vaultNc(final String method, final String path, final String ifMatch, final String cb) {
+            new Thread(new Runnable() { @Override public void run() {
+                JSONObject r = Vault.dav(SyncStore.get(MainActivity.this, true), method, path, ifMatch);
+                final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + r.toString() + ")";
+                runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+            } }).start();
+        }
+
+        /** Nextcloud public links (create / delete). → FKNativeCallback(cb, {status, body, error}) */
+        @JavascriptInterface
+        public void vaultShare(final String method, final String sub, final String form, final String cb) {
+            new Thread(new Runnable() { @Override public void run() {
+                JSONObject r = Vault.share(SyncStore.get(MainActivity.this, true), method, sub, form);
+                final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + r.toString() + ")";
+                runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+            } }).start();
+        }
+
+        /** The phone's normal share menu with a line of text (the link, or the password). The app sends nothing itself. */
+        @JavascriptInterface
+        public void vaultShareText(final String text, final String title) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                try {
+                    Intent i = new Intent(Intent.ACTION_SEND);
+                    i.setType("text/plain");
+                    i.putExtra(Intent.EXTRA_TEXT, text);
+                    startActivity(Intent.createChooser(i, title == null || title.isEmpty() ? "Share" : title));
+                } catch (Exception ignored) { }
+            }});
+        }
+
+        /** Open the decrypted blob with another app (PDF viewer, …). The copy is deleted when the vault locks. */
+        @JavascriptInterface
+        public void vaultOpen(final String name, final String type, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                try {
+                    File f = Vault.openFile(MainActivity.this, name);
+                    try (FileOutputStream os = new FileOutputStream(f)) { os.write(Vault.get()); }
+                    Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setDataAndType(SharedFileProvider.uriFor(f), type == null || type.isEmpty() ? mime(f.getName()) : type);
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(i, "Open with"));
+                    callback(cb, true, "");
+                } catch (Exception e) { callback(cb, false, "No app on this phone can open this file type."); }
+            }});
+        }
+
+        /** Save the decrypted blob where the user picks (Downloads, …): a plain copy outside the vault, on purpose. */
+        @JavascriptInterface
+        public void vaultSave(final String name, final String type, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                pendingCb = cb;
+                pendingBytes = Vault.get().clone();
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType(type == null || type.isEmpty() ? "application/octet-stream" : type);
+                i.putExtra(Intent.EXTRA_TITLE, name);
+                try { startActivityForResult(i, REQ_CREATE); } catch (Exception e) { callback(cb, false, e.getMessage()); }
+            }});
+        }
+
+        /** Move the vault folder (remark #26). → FKNativeCallback(cb, {status, error}) */
+        @JavascriptInterface
+        public void vaultMove(final String from, final String to, final String cb) {
+            new Thread(new Runnable() { @Override public void run() {
+                JSONObject r = Vault.move(SyncStore.get(MainActivity.this, true), from, to);
+                final String js = "window.FKNativeCallback && FKNativeCallback(" + JSONObject.quote(cb) + "," + r.toString() + ")";
+                runOnUiThread(new Runnable() { @Override public void run() { web.evaluateJavascript(js, null); } });
+            } }).start();
+        }
+
+        // ---------- vault fingerprint unlock (0.8.0, remark #24) ----------
+        /** {avail, on, account, boot, bootNow}: nothing secret. */
+        @JavascriptInterface
+        public String vaultBioState() { return Bio.state(MainActivity.this); }
+        /** Turn on: fingerprint check, then the vault key is kept encrypted by a fingerprint-only Keystore key. */
+        @JavascriptInterface
+        public void vaultBioOn(final String account, final String keyB64, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                Bio.enroll(MainActivity.this, account, keyB64, new Bio.Done() { @Override public void done(boolean ok, String msg) { callback(cb, ok, msg); } });
+            }});
+        }
+        /** Unlock: fingerprint check → {ok, msg = vault key (base64) | "cancelled" | "off" | "changed" | error} */
+        @JavascriptInterface
+        public void vaultBioUnlock(final String account, final String cb) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                Bio.unlock(MainActivity.this, account, new Bio.Done() { @Override public void done(boolean ok, String msg) { callback(cb, ok, msg); } });
+            }});
+        }
+        @JavascriptInterface
+        public void vaultBioOff() { Bio.forget(MainActivity.this); }
+
+        /** While the vault is open: no screenshots and a blank preview in the recent-apps list. */
+        @JavascriptInterface
+        public void vaultSecure(final boolean on) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
             }});
         }
 

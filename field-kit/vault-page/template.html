@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https:; img-src 'self' blob: data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1D1E1A">
+<title>Stoic Ranger · Encrypted file</title>
+<!-- SR Field Kit vault decrypt page. Folder /vault/ on the website: index.html, vault.css, vault.js (+ .htaccess).
+     No outside scripts or fonts, nothing stored, nothing sent except the download of the encrypted file from the
+     sender's Nextcloud. Link: <this page>#<nextcloud host>/<share token>. The part after # never reaches this web
+     server. The password is used only in this browser. -->
+<link rel="stylesheet" href="vault.css">
+</head>
+<body>
+<svg class="sr-defs" width="0" height="0" aria-hidden="true"><defs>__SYMBOL__</defs></svg>
+<div class="sr-wm" aria-hidden="true"><svg width="1" height="1" viewBox="40 40 432 432"><use href="#sr-seal"/></svg></div>
+<div class="sr-page">
+<header class="sr-nav">
+  <a class="sr-home" href="/"><svg class="sr-mark" width="34" height="34" viewBox="40 40 432 432" role="img" aria-label="Stoic Ranger"><use href="#sr-seal"/></svg><span class="sr-brand">Stoic Ranger</span></a>
+  <span class="sr-tag">Vault</span>
+</header>
+<main>
+  <div class="sr-eyebrow">Encrypted file</div>
+  <section id="sLoad"><p class="note">Loading the encrypted file …</p></section>
+  <section id="sNoLink" hidden>
+    <h1>Open an encrypted file</h1>
+    <p>This page opens files sent with the SR Field Kit vault. Open the link you were sent, or pick the downloaded file below.</p>
+  </section>
+  <section id="sGone" hidden>
+    <h1>This link no longer works</h1>
+    <p>It has expired or the sender cancelled it, and the file was deleted. Ask the sender for a new link.</p>
+  </section>
+  <section id="sManual" hidden>
+    <div class="card"><p id="manualWhy">This page could not load the file directly from the sender's Nextcloud.</p>
+      <p id="dlRow" hidden>1. Download it: <a id="dlLink" href="#" rel="noopener noreferrer" target="_blank">download the encrypted file</a></p>
+      <p id="pickRow">2. Pick the downloaded file here:</p></div>
+    <div class="drop"><input type="file" id="pick" aria-label="Encrypted file"></div>
+  </section>
+  <section id="sPw" hidden>
+    <h1>Someone sent you an encrypted file</h1>
+    <div class="card"><span class="note" id="fileInfo"></span></div>
+    <p>The sender gave you a password another way. Type it here. It is checked in this browser only and never sent anywhere.</p>
+    <div><label for="pw">Password</label><input id="pw" type="text" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+    <p class="msg" id="msg" aria-live="polite"></p>
+    <button type="button" id="go">Decrypt</button>
+  </section>
+  <section id="sDone" hidden>
+    <h1>File decrypted</h1>
+    <div class="card"><b id="dName"></b><span class="note" id="dSize"></span></div>
+    <div id="dPrev"></div>
+    <div class="row"><a class="btn" id="dSave" href="#" download>Save file</a></div>
+    <p class="note">The decrypted file exists only in this browser until you save it.</p>
+  </section>
+  <p class="note facts">Works in any current browser on iPhone, Android or PC. No app and no account needed. Encryption: AES-256-GCM, key from the password with PBKDF2-SHA256.</p>
+</main>
+<footer class="sr-footer"><span>© 2026 Stoic Ranger</span><span><a href="/impressum.html">Impressum</a> · <a href="/datenschutz.html">Datenschutz</a></span></footer>
+</div>
+<script src="vault.js"></script>
+</body>
+</html>

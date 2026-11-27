@@ -248,6 +248,7 @@
   const download = (bytes, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000); };
   async function act(kind) {
+    if (window.__ballFlush) window.__ballFlush();   // 0.7.0 (#21): export the values on screen, calculated
     const bytes = build(paper); if (!bytes) { msg('Fill in the load first.'); return; }
     const name = fileName(), b64 = FKPdf.b64(bytes);
     if (kind === 'save') {
@@ -272,5 +273,5 @@
   $('dwShare').addEventListener('click', () => act('share'));
   $('dwPrint').addEventListener('click', () => act('print'));
   showPaper();
-  if (window.__ball) window.__ball();
+  if (window.__ballNow) window.__ballNow(); else if (window.__ball) window.__ball();
 })();

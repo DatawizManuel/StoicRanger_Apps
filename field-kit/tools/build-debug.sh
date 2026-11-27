@@ -22,12 +22,15 @@ case "$AJAR" in *android-23*) sed -i '/android:roundIcon=/d; /android:dataExtrac
    --version-code "${VERSION_CODE:-1}" --version-name "${VERSION_NAME:-0.1.0}" --debug-mode \
    -0 woff2 -0 png -0 jpg "$OUT/res/res.zip"
 # Eclipse compiler: D8 builds trip over some javac 21 class files
-"${ECJ[@]}" -nowarn -8 -proc:none -cp "$AJAR" -d "$OUT/classes" \
+# API 28+ classes the API 23 android.jar lacks (BiometricPrompt): compile against stubs, never pack them into the APK
+mkdir -p "$OUT/stubs"
+"${ECJ[@]}" -nowarn -8 -proc:none -cp "$AJAR" -d "$OUT/stubs" $(find "$ROOT/tools/stubs" -name '*.java')
+"${ECJ[@]}" -nowarn -8 -proc:none -cp "$AJAR:$OUT/stubs" -d "$OUT/classes" \
    $(find "$M/java" "$OUT/gen" -name '*.java')
 test -f "$OUT/classes/at/stoicranger/fieldkit/MainActivity.class"
 if [ -f "$TOOLS/d8.jar" ]; then
   java -cp "$TOOLS/d8.jar" com.android.tools.r8.D8 --debug --min-api 26 --lib "$AJAR" \
-     --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+     --lib "$OUT/stubs" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 else
   (cd "$OUT/classes" && dalvik-exchange --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" .)
 fi

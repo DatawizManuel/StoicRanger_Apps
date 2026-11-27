@@ -1,4 +1,4 @@
-# SR Field Kit (Android) — 0.6.0
+# SR Field Kit (Android) — 0.8.0
 
 "Stoic Ranger - Field Kit", launcher name **SR_Field Kit**, package `at.stoicranger.fieldkit`.
 Android port of the web Field Kit (stoic-ranger.com, Release 1.5) plus the Shooting helpers spec, in the
@@ -8,6 +8,45 @@ WebView itself stays offline (other web requests are blocked, only the Java side
 
 ## Versions
 
+- **0.8.0** (versionCode 12, 2026-11-27): vault remarks #24 and #26, as Manuel chose on 2026-11-25/27.
+  - **Fingerprint unlock** (#24b): ⚙ › "Unlock with fingerprint". The vault key is then also kept on the phone,
+    encrypted with an Android Keystore key that works only right after a fingerprint check (Bio.java,
+    BiometricPrompt, Android 9+). When the vault locks, the fingerprint prompt comes up by itself (when you come back
+    to the app, not while it is in the background); "Use password" falls back. After a phone restart the vault
+    password is needed once, then fingerprint unlock is armed again with one touch. Adding a fingerprint on the phone
+    destroys the Keystore key, so fingerprint unlock switches itself off. Typical case: Samsung Secure Folder, where
+    switching apps locks the vault.
+  - **Back to the link** (#24c): link and password were already kept (encrypted) under Sent links. New: after
+    unlocking, the link you were sending in the last 15 minutes opens again, with "Share link again" / "Share
+    password" showing what you already sent.
+  - **Vault folder** (#26): ⚙ (and the locked / setup screens) › Vault folder on Nextcloud › Change. Default as
+    before (`<data folder>/vault/`). With a vault already there: "Move the vault there" (one WebDAV MOVE, never
+    overwrites; Nextcloud keeps sent links working, tested) or "Start a new empty vault there"; a folder that already
+    holds a vault: "Switch to that vault" (own password). A moved vault leaves `moved.json` in the old folder, so other
+    phones show "The vault has moved" instead of offering a new vault there.
+  - Cloud build: BiometricPrompt is compiled against a stub (tools/stubs/, never packed into the APK) because the
+    cloud has only an API 23 android.jar. No iPhone web zip any more (Manuel 2026-11-24).
+- **0.7.0** (versionCode 11, 2026-11-24): the **Vault** (new home row), plus backlog #21 and #22, as discussed with
+  Manuel on 2026-11-22/24 (ideas file 00_docs/ideas/ENCRYPTION-IDEAS.md, mockup 07_field-kit/vault-mockup/).
+  - **Vault:** any file (up to 100 MB) is encrypted on the phone and stored in `<Nextcloud folder>/vault/` with a random
+    name, so Nextcloud only sees scrambled data. Vault password (separate from Nextcloud) plus a recovery key on paper;
+    no reset without one of them. Locks after 1/5/15 minutes without use, when you leave the app (a share menu or file
+    picker the vault opened itself may take up to 2 minutes) and when you leave the Vault page. While open: no
+    screenshots, blank preview in recent apps. Open shows photos and text inside the app; other types "Open with
+    another app" (temporary copy, wiped on lock and on every app start); "Save a copy" saves an unencrypted copy only
+    after a warning. Settings: lock time, decrypt page address, change password, new recovery key.
+  - **Send encrypted:** a separate copy encrypted with its own generated password (six words and a number), uploaded to
+    `vault/shared/`, a Nextcloud public link (read only) that expires after 1, 7 or 30 days. "Share link" and "Share
+    password" open the phone's share menu separately (send them different ways, e.g. email and Signal). Cancel link
+    deletes link and copy; expired copies are deleted at the next unlock. The link opens the decrypt page
+    (folder `vault-page/vault/`: index.html, vault.css, vault.js, .htaccess, for stoic-ranger.com/vault/; website design) with `#<nextcloud host>/<token>`; the receiver needs no app
+    and no account. One click needs the Nextcloud app WebAppPassword with stoic-ranger.com allowed (tested on Nextcloud
+    35); without it the page offers download + pick.
+  - Crypto: WebCrypto in the page, AES-256-GCM, PBKDF2-SHA256 600,000 rounds; formats in js/vault.js. Vault.java only
+    moves bytes (chunked bridge, no single huge strings), talks WebDAV and the share API. Web app (iPhone): the Vault row
+    says it works in the Android app.
+  - **#21** Drop & wind: "Update" button; changing values only marks the table/graph as out of date (Export PDF
+    calculates first). **#22** "Out to" is a number field (100 to 3000 m).
 - **0.6.0** (versionCode 10, 2026-11-24): backlog #18, #19 and #20 (Shooting helpers › Drop & wind), as in the
   mockup Manuel approved on 2026-11-24.
   - **From my database | Own load** (#18): when linked with SR Shooting, a toggle at the top. "From my database":

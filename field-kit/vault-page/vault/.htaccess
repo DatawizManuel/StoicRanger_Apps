@@ -1,0 +1,10 @@
+# Stoic Ranger vault decrypt page (/vault/). This folder needs its own security header so the page may download
+# the encrypted file from the sender's Nextcloud (any https address). Everything else stays locked down.
+# Set in both header tables so it replaces the site's main rule whichever way that one is written.
+<IfModule mod_headers.c>
+  Header always set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; connect-src https:; img-src 'self' blob: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  Header set Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; connect-src https:; img-src 'self' blob: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Cache-Control "no-cache"
+</IfModule>

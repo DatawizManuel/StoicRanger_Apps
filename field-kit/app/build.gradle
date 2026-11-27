@@ -10,8 +10,8 @@ android {
         applicationId 'at.stoicranger.fieldkit'
         minSdk 26
         targetSdk 35                  // Google Play's current minimum for new apps and updates
-        versionCode 10
-        versionName '0.6.0'
+        versionCode 12
+        versionName '0.8.0'
     }
 
     signingConfigs {

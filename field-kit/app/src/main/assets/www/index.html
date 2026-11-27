@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="map/lib/maplibre-gl.css">
 <link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/vault.css">
 </head>
 <body>
 <div class="phone" id="app">
@@ -34,6 +35,8 @@
       <p>Range cards, training datasheet, wind cheat sheet: print or save as PDF</p><p class="mono">3 sheets · A4, A5, A6</p></div></a>
     <a class="choice srpart ng" href="#night"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M22 5a12 12 0 1 0 7 17A10 10 0 0 1 22 5z"/><path d="M5 30l5-5M9 31l2-2"/></svg></div><div><h3>Night &amp; signal</h3>
       <p>Dim red screen for night vision, red night mode, flashlight with SOS and Morse</p><p class="mono" id="hNg"></p></div></a>
+    <a class="choice srpart vt" href="#vault"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><rect x="5" y="15" width="24" height="16"/><path d="M10 15v-4a7 7 0 0 1 14 0v4"/><circle cx="17" cy="22" r="2.2"/><path d="M17 24v3"/></svg></div><div><h3>Vault</h3>
+      <p>Encrypted files on your Nextcloud. Send one with a link that expires and a separate password</p><p class="mono" id="hVt"></p></div></a>
     <div class="choice srpart soon"><div class="ic"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 8v18M8 17h18"/></svg></div><div><h3>More to come</h3>
       <p>Room for the next tools. Each new tool gets its own row here.</p></div></div>
     <p class="note">Everything stays on this phone. Nothing is sent anywhere unless you set up your own Nextcloud (⋯).</p>
@@ -112,10 +115,11 @@
         <div class="field"><label for="bClock">Wind from</label><select id="bClock"><option value="3" selected>3 / 9 o'clock</option><option value="2">2 / 4 / 8 / 10</option><option value="1">1 / 5 / 7 / 11</option><option value="0">12 / 6 o'clock</option></select></div>
         <div class="field"><label for="bAlt">Altitude (m)</label><input id="bAlt" type="number" step="10" value="400"></div>
         <div class="field"><label for="bTemp">Temperature (°C)</label><input id="bTemp" type="number" step="1" value="10"></div>
-        <div class="field"><label for="bMax">Out to (m)</label><select id="bMax"><option>300</option><option>500</option><option selected>800</option><option>1000</option></select></div>
+        <div class="field"><label for="bMax">Out to (m)</label><input id="bMax" type="number" inputmode="numeric" min="100" max="3000" step="50" value="800"></div>
         <div class="field"><label for="bStep">Step (m)</label><select id="bStep"><option>25</option><option selected>50</option><option>100</option></select></div>
         <div class="field"><label for="bMove">Target speed (km/h)</label><input id="bMove" type="number" step="0.5" value="5"></div>
       </div>
+      <div class="updbar"><button type="button" class="button" id="bUpd">Update</button><span class="note" id="bUpdMsg">Table and graph match the values above.</span></div>
       <div class="sensbar"><button type="button" class="button ghost" id="bSens">Use sensors</button><span class="note" id="bSensMsg">Fills altitude (air pressure) and temperature from the phone. Typed values stay until you tap.</span></div>
       <div class="results" id="bSum"></div>
       <div class="subhead"><h3 class="m0">Come-ups</h3><span class="note">Highlighted: zero distance. <span class="warn">Bronze rows: bullet below 1.2× speed of sound, less predictable.</span></span></div>
@@ -263,6 +267,7 @@
 
   <!-- NIGHT & SIGNAL -->
   <section id="v-night" hidden></section>
+  <section id="v-vault" hidden></section>
 
   <!-- FIELD CARDS -->
   <section id="v-cards" hidden>
@@ -318,7 +323,7 @@
   <div class="aboutscr" id="about" hidden>
     <div class="viewbar"><button type="button" class="vback" id="aboutClose">‹ Back</button></div>
     <h2>About and settings</h2>
-    <p>SR Field Kit: shooting helpers, navigation, breathing, field cards and printables for the Stoic Ranger. Works fully offline. No accounts and no tracking. Everything you enter stays on this phone; the app only goes online to reach your own Nextcloud, and only once you set it up (data sync, maps and routes).</p>
+    <p>SR Field Kit: shooting helpers, navigation, breathing, field cards and printables for the Stoic Ranger. Works fully offline. No accounts and no tracking. Everything you enter stays on this phone; the app only goes online to reach your own Nextcloud, and only once you set it up (data sync, maps and routes, the vault). Vault files are encrypted on this phone before upload.</p>
     <dl class="kv"><dt>Version</dt><dd id="aboutVer">0.1.0</dd><dt>Permissions</dt><dd>Location, only when you tap "Use my position" or follow GPS on the map. Internet, only for your own Nextcloud. Flashlight, only for the signal light.</dd><dt>Map data</dt><dd><a href="https://openstreetmap.org/copyright">© OpenStreetMap contributors</a> (ODbL), basemap layout Protomaps; terrain Mapterhorn (Copernicus GLO-30 © DLR/Airbus/ESA, BEV, swisstopo and other open data)</dd><dt>Fonts</dt><dd>Barlow and JetBrains Mono, SIL Open Font License 1.1</dd><dt>Data file</dt><dd id="aboutData">db.json on this phone</dd><dt>Linked apps</dt><dd id="aboutLink">None</dd><dt>Website</dt><dd>stoic-ranger.com</dd></dl>
     <h3>Settings</h3>
     <div class="setrow2"><span>Look</span><div class="seg" role="group" aria-label="Look"><button type="button" data-th="" aria-pressed="true">Phone</button><button type="button" data-th="light" aria-pressed="false">Light</button><button type="button" data-th="dark" aria-pressed="false">Dark</button></div></div>
@@ -367,5 +372,6 @@
 <script src="map/gpx.js"></script>
 <script src="js/nav3.js"></script>
 <script src="js/tools3.js"></script>
+<script src="js/vault.js"></script>
 </body>
 </html>
